@@ -8,7 +8,6 @@ import {
   Col,
   Divider,
   Input,
-  Modal,
   Row,
   Space,
   Tabs,
@@ -21,7 +20,6 @@ import {
   EyeOutlined,
   FileTextOutlined,
 } from "@ant-design/icons";
-import OnlyOfficeEditor from "@/app/components/OnlyOfficeEditor";
 import { useAnswerApprovals } from "@/app/hooks/use-answer-approvals";
 import { useAnswerQuestions } from "@/app/hooks/use-answer-questions";
 import { useQuestionBases } from "@/app/hooks/use-question-bases";
@@ -35,9 +33,9 @@ import type {
 import { useGenerateCvAi } from "@/app/hooks/use-generate-cv-ai";
 import axios from "axios";
 import { useDocumentUpload } from "@/app/hooks/use-document-uploads";
+import { useGeneratedCvAiDocuments } from "@/app/hooks/use-generated-cv-ai-documents";
 import { useUser } from "@/app/hooks/use-users";
-import { useDocuments } from "@/app/hooks/use-documents-management";
-import { useAnswerDocuments } from "@/app/hooks/use-answer-documents";
+import { useRouter } from "next/navigation";
 
 type CVComponentsProps = {
   student_id: string;
@@ -86,6 +84,7 @@ const CV_TEMPLATE_PUBLIC_PATH =
   (typeof process !== "undefined" &&
     process.env?.NEXT_PUBLIC_CV_TEMPLATE_PUBLIC_PATH) ||
   "/assets/file/Template CV.docx";
+const GENERATED_CV_FOLDER = "generate-cv-ai";
 
 const WORD_DOCUMENT_MIME_TYPE =
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -93,11 +92,6 @@ const ONLYOFFICE_URL =
   (typeof process !== "undefined" &&
     process.env?.NEXT_PUBLIC_ONLYOFFICE_URL?.trim()) ||
   "";
-const ONLYOFFICE_CALLBACK_BASE_URL =
-  (typeof process !== "undefined" &&
-    process.env?.NEXT_PUBLIC_ONLYOFFICE_CALLBACK_BASE_URL?.trim()) ||
-  "";
-
 const formatAnswerValue = (
   answer: AnswerQuestionDataModel,
   optionLabelMap: Map<string, string>,
@@ -218,24 +212,8 @@ const arrayBufferToBase64 = (buffer: ArrayBuffer) => {
   return btoa(binary);
 };
 
-const isWordDocument = (
-  fileUrl?: string | null,
-  fileName?: string | null,
-  mimeType?: string | null,
-) => {
-  const normalizedMimeType = String(mimeType ?? "").toLowerCase();
-  if (
-    normalizedMimeType.includes("wordprocessingml") ||
-    normalizedMimeType.includes("msword")
-  ) {
-    return true;
-  }
-
-  const candidate = String(fileName || fileUrl || "").toLowerCase();
-  return /\.(docx|doc)(?:[?#].*)?$/i.test(candidate);
-};
-
 export default function CVComponents({ student_id }: CVComponentsProps) {
+  const router = useRouter();
   const { notification } = App.useApp();
   const { user_id } = useAuth();
 
@@ -247,23 +225,20 @@ export default function CVComponents({ student_id }: CVComponentsProps) {
 
   const [generatedCvUrl, setGeneratedCvUrl] = useState<string | null>(null);
   const [generatedCvPath, setGeneratedCvPath] = useState<string | null>(null);
-  const [generatedCvFileName, setGeneratedCvFileName] = useState<string | null>(
-    null,
-  );
-  const [generatedCvMimeType, setGeneratedCvMimeType] = useState<string | null>(
-    null,
-  );
   const [generatedCvContent, setGeneratedCvContent] = useState<string | null>(
     null,
   );
-  const [isOnlyOfficeOpen, setIsOnlyOfficeOpen] = useState(false);
   const objectUrlRef = useRef<string | null>(null);
 
   const { data: studentData } = useUser({ id: student_id });
   const { data: questionBases } = useQuestionBases({});
   const { onGenerateCvAi, onGenerateCvAiLoading } = useGenerateCvAi();
   const { uploadDocument } = useDocumentUpload();
-  const { data: documents = [] } = useDocuments({});
+  const { data: generatedCvDocuments = [], onUpsert: onUpsertGeneratedCvAi } =
+    useGeneratedCvAiDocuments({
+      studentId: student_id,
+      enabled: Boolean(student_id),
+    });
   const { data: questions } = useQuestions({});
   const { data: answerQuestions, fetchLoading } = useAnswerQuestions({
     queryString: student_id ? `student_id=${student_id}` : undefined,
@@ -275,15 +250,6 @@ export default function CVComponents({ student_id }: CVComponentsProps) {
       queryString: student_id ? `student_id=${student_id}` : undefined,
       enabled: Boolean(student_id),
     });
-  const {
-    data: answerDocuments = [],
-    onCreate: onCreateAnswerDocuments,
-    onUpdate: onUpdateAnswerDocument,
-  } = useAnswerDocuments({
-    queryString: student_id ? `student_id=${student_id}` : undefined,
-    enabled: Boolean(student_id),
-  });
-
   useEffect(() => {
     return () => {
       if (objectUrlRef.current) {
@@ -317,26 +283,22 @@ export default function CVComponents({ student_id }: CVComponentsProps) {
     return map;
   }, [answerApprovals]);
 
-  const cvDocument = useMemo(() => {
-    return documents.find((doc) => {
-      const label = String(doc.label ?? "").toLowerCase();
-      const code = String(doc.internal_code ?? "").toLowerCase();
-      return (
-        label === "cv" ||
-        label.includes("curriculum vitae") ||
-        label.includes("resume") ||
-        code === "cv" ||
-        code.includes("curriculum")
-      );
-    });
-  }, [documents]);
-
-  const existingCvAnswerDocument = useMemo(() => {
-    if (!cvDocument?.id) return undefined;
-    return answerDocuments.find(
-      (doc) => String(doc.document_id) === String(cvDocument.id),
-    );
-  }, [answerDocuments, cvDocument?.id]);
+  const persistedCvDocument = useMemo(() => {
+    const generatedPrefix = `${GENERATED_CV_FOLDER}/${student_id}/`;
+    return [...generatedCvDocuments]
+      .filter((doc) => {
+        const filePath = String(doc.file_path ?? "");
+        return (
+          filePath.startsWith(generatedPrefix) ||
+          String(doc.file_name ?? "").toLowerCase().includes("_cv.")
+        );
+      })
+      .sort((a, b) => {
+        const aTime = new Date(a.updated_at ?? a.created_at).getTime();
+        const bTime = new Date(b.updated_at ?? b.created_at).getTime();
+        return bTime - aTime;
+      })[0];
+  }, [generatedCvDocuments, student_id]);
 
   const answerGroupsMap = useMemo(() => {
     const groups = new Map<
@@ -419,23 +381,49 @@ export default function CVComponents({ student_id }: CVComponentsProps) {
     ];
   }, [answerGroupsMap, questionBases]);
 
+  const reviewableAnswerIds = useMemo(
+    () =>
+      Array.from(answerGroupsMap.values()).flatMap((group) =>
+        group.items.map((item) => item.id),
+      ),
+    [answerGroupsMap],
+  );
+
+  const approvalProgress = useMemo(() => {
+    let approvedCount = 0;
+    let rejectedCount = 0;
+
+    reviewableAnswerIds.forEach((answerId) => {
+      const status = (approvalMap.get(answerId)?.status ?? "").toLowerCase();
+      if (status === "approved") approvedCount += 1;
+      if (status === "rejected") rejectedCount += 1;
+    });
+
+    return {
+      total: reviewableAnswerIds.length,
+      approvedCount,
+      rejectedCount,
+      pendingCount: Math.max(
+        reviewableAnswerIds.length - approvedCount - rejectedCount,
+        0,
+      ),
+    };
+  }, [approvalMap, reviewableAnswerIds]);
+
+  const isReadyToGenerateCv =
+    approvalProgress.total > 0 &&
+    approvalProgress.approvedCount === approvalProgress.total &&
+    approvalProgress.rejectedCount === 0;
+
   const cvStatus = useMemo(() => {
-    const approvals = Array.from(approvalMap.values());
-    if (
-      approvals.some((item) => (item.status ?? "").toLowerCase() === "rejected")
-    ) {
+    if (approvalProgress.rejectedCount > 0) {
       return { label: "Revision Needed", color: "red" as const };
     }
-    if (
-      approvals.length > 0 &&
-      approvals.every(
-        (item) => (item.status ?? "").toLowerCase() === "approved",
-      )
-    ) {
+    if (isReadyToGenerateCv) {
       return { label: "Ready for Director", color: "green" as const };
     }
     return { label: "Pending Admission", color: "gold" as const };
-  }, [approvalMap]);
+  }, [approvalProgress.rejectedCount, isReadyToGenerateCv]);
 
   const timeline = useMemo(() => {
     const submitted = (answerQuestions ?? [])
@@ -459,30 +447,10 @@ export default function CVComponents({ student_id }: CVComponentsProps) {
     };
   }, [answerQuestions, approvalMap]);
 
-  const previewCvUrl = generatedCvUrl ?? existingCvAnswerDocument?.file_url ?? null;
+  const previewCvUrl = generatedCvUrl ?? persistedCvDocument?.file_url ?? null;
   const previewCvPath =
-    generatedCvPath ?? existingCvAnswerDocument?.file_path ?? null;
-  const previewCvFileName =
-    generatedCvFileName ?? existingCvAnswerDocument?.file_name ?? null;
-  const previewCvMimeType =
-    generatedCvMimeType ?? existingCvAnswerDocument?.file_type ?? null;
+    generatedCvPath ?? persistedCvDocument?.file_path ?? null;
   const onlyOfficeEnabled = Boolean(ONLYOFFICE_URL);
-  const previewOnlyOfficeCallbackUrl = useMemo(() => {
-    if (!previewCvPath) {
-      return "";
-    }
-
-    const baseUrl =
-      ONLYOFFICE_CALLBACK_BASE_URL ||
-      (typeof window !== "undefined" ? window.location.origin : "");
-    if (!baseUrl) {
-      return "";
-    }
-
-    return `${baseUrl.replace(/\/+$/, "")}/api/generate-cv-ai/onlyoffice/callback?path=${encodeURIComponent(
-      previewCvPath,
-    )}&bucket=student-portal`;
-  }, [previewCvPath]);
   const hasGeneratedCv = Boolean(previewCvUrl || generatedCvContent);
 
   const generateAnswersPayload = useMemo<GeneratePayloadAnswer[]>(() => {
@@ -578,6 +546,17 @@ export default function CVComponents({ student_id }: CVComponentsProps) {
       return;
     }
 
+    if (!isReadyToGenerateCv) {
+      notification.warning({
+        message: "Approval belum lengkap",
+        description:
+          approvalProgress.rejectedCount > 0
+            ? "Masih ada jawaban yang ditolak. Perbaiki dan approve semua jawaban sebelum generate CV."
+            : `Masih ada ${approvalProgress.pendingCount} jawaban yang belum di-approve. Generate CV hanya bisa dilakukan setelah semua jawaban approved.`,
+      });
+      return;
+    }
+
     try {
       const templatePath = CV_TEMPLATE_PUBLIC_PATH;
       const templateUrl =
@@ -626,17 +605,25 @@ export default function CVComponents({ student_id }: CVComponentsProps) {
         generatedFileName,
         generatedMimeType,
       );
-      const uploadPath = `generate-cv-ai/${student_id}/${generatedFileName}`;
-      const uploaded = await uploadDocument({
-        file: wordFile,
-        path: uploadPath,
-        content_type: generatedMimeType,
-      });
+      if (objectUrlRef.current && objectUrlRef.current.startsWith("blob:")) {
+        URL.revokeObjectURL(objectUrlRef.current);
+      }
+      const localPreviewUrl = URL.createObjectURL(wordFile);
+      objectUrlRef.current = localPreviewUrl;
+      setGeneratedCvUrl(localPreviewUrl);
+      setGeneratedCvPath(null);
+      setGeneratedCvContent(generatedResponse);
 
-      if (cvDocument?.id) {
+      try {
+        const uploadPath = `${GENERATED_CV_FOLDER}/${student_id}/${Date.now()}-${generatedFileName}`;
+        const uploaded = await uploadDocument({
+          file: wordFile,
+          path: uploadPath,
+          content_type: generatedMimeType,
+        });
+
         const payload = {
           student_id,
-          document_id: String(cvDocument.id),
           file_url: uploaded.url,
           file_path: uploaded.path,
           file_name: generatedFileName,
@@ -644,32 +631,25 @@ export default function CVComponents({ student_id }: CVComponentsProps) {
           status: "generated",
         };
 
-        if (existingCvAnswerDocument?.id) {
-          await onUpdateAnswerDocument({
-            id: existingCvAnswerDocument.id,
-            payload,
-          });
-        } else {
-          await onCreateAnswerDocuments([payload]);
-        }
-      }
+        await onUpsertGeneratedCvAi(payload);
 
-      if (objectUrlRef.current && objectUrlRef.current.startsWith("blob:")) {
-        URL.revokeObjectURL(objectUrlRef.current);
-      }
-      objectUrlRef.current = uploaded.url;
-      setGeneratedCvUrl(uploaded.url);
-      setGeneratedCvPath(uploaded.path);
-      setGeneratedCvFileName(generatedFileName);
-      setGeneratedCvMimeType(generatedMimeType);
-      setGeneratedCvContent(generatedResponse);
+        objectUrlRef.current = localPreviewUrl;
+        setGeneratedCvUrl(uploaded.url);
+        setGeneratedCvPath(uploaded.path);
 
-      notification.success({
-        message: "Generate CV AI berhasil",
-        description: cvDocument?.id
-          ? "Word CV berhasil dibuat, diupload ke Supabase, dan tersimpan di data dokumen."
-          : "Word CV berhasil dibuat dan diupload ke Supabase.",
-      });
+        notification.success({
+          message: "Generate CV AI berhasil",
+          description:
+            "Word CV berhasil dibuat, diupload ke Supabase, dan tersimpan di data dokumen.",
+        });
+      } catch (persistError) {
+        notification.warning({
+          message: "Generate CV AI berhasil, tetapi file belum tersimpan",
+          description:
+            extractGenerateErrorMessage(persistError) ||
+            "Preview lokal tersedia, tetapi upload atau penyimpanan metadata gagal.",
+        });
+      }
     } catch (error) {
       notification.error({
         message: "Generate CV AI gagal",
@@ -677,14 +657,14 @@ export default function CVComponents({ student_id }: CVComponentsProps) {
       });
     }
   }, [
+    approvalProgress.pendingCount,
+    approvalProgress.rejectedCount,
     cvStatus.label,
     generateAnswersPayload,
-    existingCvAnswerDocument?.id,
-    cvDocument?.id,
+    isReadyToGenerateCv,
     notification,
     onGenerateCvAi,
-    onCreateAnswerDocuments,
-    onUpdateAnswerDocument,
+    onUpsertGeneratedCvAi,
     student_id,
     studentData?.name,
     tabItems,
@@ -709,10 +689,10 @@ export default function CVComponents({ student_id }: CVComponentsProps) {
       return;
     }
 
-    const absoluteUrl = new URL(
-      previewCvUrl,
-      window.location.origin,
-    ).toString();
+    if (!previewCvPath && previewCvUrl.startsWith("blob:")) {
+      window.open(previewCvUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
 
     if (!onlyOfficeEnabled) {
       notification.info({
@@ -723,24 +703,26 @@ export default function CVComponents({ student_id }: CVComponentsProps) {
       return;
     }
 
-    if (!previewCvPath || !isWordDocument(absoluteUrl, previewCvFileName, previewCvMimeType)) {
+    if (!previewCvPath) {
       notification.warning({
         message: "Dokumen belum siap diedit",
         description:
-          "File Word atau path penyimpanan belum lengkap untuk dibuka di editor browser.",
+          "File aktif belum tersimpan ke Supabase sehingga editor browser belum bisa dibuka.",
       });
       return;
     }
 
-    setIsOnlyOfficeOpen(true);
+    router.push(
+      `/admission/dashboard/students-management/detail/${student_id}/cv/editor`,
+    );
   }, [
     generatedCvContent,
     notification,
     onlyOfficeEnabled,
-    previewCvFileName,
-    previewCvMimeType,
     previewCvPath,
     previewCvUrl,
+    router,
+    student_id,
   ]);
 
   const handleSubmitForReview = useCallback(() => {
@@ -972,6 +954,14 @@ export default function CVComponents({ student_id }: CVComponentsProps) {
               {cvStatus.label}
             </Tag>
 
+            {!isReadyToGenerateCv && approvalProgress.total > 0 && (
+              <Typography.Text type="secondary">
+                {approvalProgress.rejectedCount > 0
+                  ? "Masih ada jawaban yang ditolak. Semua jawaban harus approved sebelum CV bisa digenerate."
+                  : `${approvalProgress.pendingCount} jawaban masih menunggu approval. Generate CV akan aktif setelah semua approved.`}
+              </Typography.Text>
+            )}
+
             <Divider style={{ margin: "4px 0 8px" }} />
 
             <Space direction="vertical" size={10} style={{ width: "100%" }}>
@@ -1076,6 +1066,7 @@ export default function CVComponents({ student_id }: CVComponentsProps) {
                 block
                 icon={<FileTextOutlined />}
                 loading={onGenerateCvAiLoading}
+                disabled={!isReadyToGenerateCv}
                 style={{ borderRadius: 999, height: 44 }}
                 onClick={handleGenerateCv}
               >
@@ -1123,28 +1114,6 @@ export default function CVComponents({ student_id }: CVComponentsProps) {
           </Space>
         </Card>
       </Col>
-      <Modal
-        open={isOnlyOfficeOpen}
-        onCancel={() => setIsOnlyOfficeOpen(false)}
-        footer={null}
-        destroyOnHidden
-        width="95vw"
-        style={{ top: 16 }}
-        styles={{ body: { padding: 0, height: "85vh" } }}
-        title={previewCvFileName ?? "Editor Word"}
-      >
-        {previewCvUrl &&
-        previewCvPath &&
-        onlyOfficeEnabled &&
-        previewOnlyOfficeCallbackUrl ? (
-          <OnlyOfficeEditor
-            callbackUrl={previewOnlyOfficeCallbackUrl}
-            documentTitle={previewCvFileName ?? "CV.docx"}
-            documentUrl={previewCvUrl}
-            editorUrl={ONLYOFFICE_URL}
-          />
-        ) : null}
-      </Modal>
     </Row>
   );
 }

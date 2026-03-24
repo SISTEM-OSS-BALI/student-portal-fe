@@ -21,6 +21,18 @@ type OnlyOfficeEditorProps = {
   documentTitle: string;
   callbackUrl: string;
   editorUrl: string;
+  onDocumentStateChange?: (isDirty: boolean) => void;
+};
+
+const buildStableDocumentKey = (value: string) => {
+  let hash = 2166136261;
+
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return `doc_${(hash >>> 0).toString(16)}`;
 };
 
 const loadOnlyOfficeScript = (editorUrl: string) =>
@@ -57,21 +69,23 @@ export default function OnlyOfficeEditor({
   documentTitle,
   callbackUrl,
   editorUrl,
+  onDocumentStateChange,
 }: OnlyOfficeEditorProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const editorInstanceRef = useRef<{ destroyEditor?: () => void } | null>(null);
+  const onDocumentStateChangeRef = useRef(onDocumentStateChange);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const containerId = useId().replace(/:/g, "_");
 
+  useEffect(() => {
+    onDocumentStateChangeRef.current = onDocumentStateChange;
+  }, [onDocumentStateChange]);
+
   const documentKey = useMemo(() => {
-    const raw = `${documentTitle}:${documentUrl}`;
-    return (
-      btoa(unescape(encodeURIComponent(raw)))
-        .replace(/[^a-zA-Z0-9]/g, "")
-        .slice(0, 120) || "cvdoc"
-    );
-  }, [documentTitle, documentUrl]);
+    const raw = `${documentTitle}:${documentUrl}:${callbackUrl}`;
+    return buildStableDocumentKey(raw);
+  }, [callbackUrl, documentTitle, documentUrl]);
 
   useEffect(() => {
     let mounted = true;
@@ -105,6 +119,11 @@ export default function OnlyOfficeEditor({
           height: "100%",
           width: "100%",
           type: "desktop",
+          events: {
+            onDocumentStateChange: (event: { data?: boolean }) => {
+              onDocumentStateChangeRef.current?.(Boolean(event?.data));
+            },
+          },
         });
 
         if (mounted) {
@@ -129,7 +148,14 @@ export default function OnlyOfficeEditor({
       editorInstanceRef.current?.destroyEditor?.();
       editorInstanceRef.current = null;
     };
-  }, [callbackUrl, containerId, documentKey, documentTitle, documentUrl, editorUrl]);
+  }, [
+    callbackUrl,
+    containerId,
+    documentKey,
+    documentTitle,
+    documentUrl,
+    editorUrl,
+  ]);
 
   if (error) {
     return <Alert showIcon type="error" message={error} />;

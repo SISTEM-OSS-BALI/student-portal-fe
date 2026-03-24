@@ -24,6 +24,9 @@ import LoadingSplash from "@/app/components/common/loading";
 import DocumentsComponent from "./tab-layout/DocumentsComponent";
 import TranslationComponent from "./tab-layout/TranslationComponent";
 import CVComponents from "./tab-layout/CVComponents";
+import LetterComponent from "./tab-layout/LetterComponent";
+import ChatComponent from "./tab-layout/ChatComponent";
+import ActivityLogComponent from "./tab-layout/ActivityLogComponent";
 
 export default function StudentDetailContentPage() {
   const params = useParams();
@@ -176,17 +179,17 @@ export default function StudentDetailContentPage() {
     {
       key: "letter",
       label: "Letter",
-      children: <div>Letter content will appear here.</div>,
+      children: <LetterComponent />,
     },
     {
       key: "chat",
       label: "Chat",
-      children: <div>Chat content will appear here.</div>,
+      children: <ChatComponent />,
     },
     {
       key: "activity-log",
       label: "Activity Log",
-      children: <div>Activity log content will appear here.</div>,
+      children: <ActivityLogComponent />,
     },
   ];
 
