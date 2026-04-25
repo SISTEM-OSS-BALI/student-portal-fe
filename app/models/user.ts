@@ -8,13 +8,31 @@ export interface UserDataModel {
   email: string;
   role?: string;
   stage_id?: string | null;
+  current_step_id?: string | null;
+  visa_status?: string;
   status?: string;
+  student_status?: string;
+
   name_campus?: string;
   degree?: string;
   name_degree?: string;
   visa_type?: string;
   translation_quota?: number;
   no_phone?: string | null;
+
+  visa_granted_at?: string | null;
+  visa_grant_duration_days?: number | null;
+  visa_grant_duration_label?: string | null;
+
+  joined_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+
+  student_status_updated_by_id?: string | number | null;
+  student_status_updated_by_name?: string | null;
+  student_status_updated_at?: string | null;
+  student_status_updated_at_label?: string | null;
+
   notes?: NoteStudentDataModel[];
   stage?: {
     id: string;
@@ -25,17 +43,18 @@ export interface UserDataModel {
     created_at?: string;
     updated_at?: string;
   };
-
-  created_at?: string;
-  updated_at?: string;
 }
 
 export interface UserPayloadCreateModel {
   name: string;
   email: string;
   password: string;
+  role?: string;
   stage_id?: string | null;
-  status?: string;
+  current_step_id?: string | null;
+  visa_status?: string;
+  student_status?: string;
+  name_consultant?: string | null;
   name_campus?: string;
   degree?: string;
   name_degree?: string;
@@ -47,8 +66,12 @@ export interface UserPayloadCreateModel {
 export interface UserPayloadUpdateModel {
   name?: string;
   email?: string;
+  role?: string;
   stage_id?: string | null;
-  status?: string;
+  current_step_id?: string | null;
+  visa_status?: string;
+  student_status?: string;
+  name_consultant?: string | null;
   name_campus?: string;
   degree?: string;
   name_degree?: string;

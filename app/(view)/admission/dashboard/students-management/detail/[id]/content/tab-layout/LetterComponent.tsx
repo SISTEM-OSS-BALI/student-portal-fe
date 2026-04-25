@@ -2,55 +2,97 @@
 
 import { useAnswerQuestions } from "@/app/hooks/use-answer-questions";
 import { useDocumentUpload } from "@/app/hooks/use-document-uploads";
+import { useGenerateSponsorLetterAi } from "@/app/hooks/use-generate-sponsor-letter-ai";
 import { useGenerateStatementLetterAi } from "@/app/hooks/use-generate-statement-letter-ai";
+import { useGeneratedSponsorLetterAiDocuments } from "@/app/hooks/use-generated-sponsor-letter-ai-documents";
 import { useGeneratedStatementLetterAiDocuments } from "@/app/hooks/use-generated-statement-letter-ai-documents";
 import { useQuestionBases } from "@/app/hooks/use-question-bases";
 import { useQuestions } from "@/app/hooks/use-questions";
 import { useUser } from "@/app/hooks/use-users";
-import type { AnswerQuestionDataModel, QuestionDataModel } from "@/app/models/question";
+import type {
+  AnswerQuestionDataModel,
+  QuestionDataModel,
+} from "@/app/models/question";
 import {
   CheckOutlined,
+  CloseOutlined,
+  DownloadOutlined,
   EditOutlined,
   EyeOutlined,
   FileTextOutlined,
   RobotOutlined,
   SolutionOutlined,
 } from "@ant-design/icons";
-import { App, Button, Card, Col, Divider, Progress, Row, Space, Tag, Typography } from "antd";
+import {
+  App,
+  Button,
+  Card,
+  Col,
+  Divider,
+  Progress,
+  Row,
+  Space,
+  Tag,
+  Typography,
+} from "antd";
 import axios from "axios";
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MutableRefObject,
+} from "react";
 
 const { Paragraph, Text, Title } = Typography;
 const STATEMENT_LETTER_CHECKLIST_PUBLIC_PATH =
   "/assets/file/Kerangka GS 2026.pdf";
+const SPONSOR_LETTER_CHECKLIST_PUBLIC_PATH =
+  "/assets/file/Sponsor Letter Checklist.pdf";
+const STATEMENT_LETTER_WORD_TEMPLATE_PUBLIC_PATH =
+  "/assets/file/Statement-Letter-Manual-Template.docx";
+const SPONSOR_LETTER_WORD_TEMPLATE_PUBLIC_PATH =
+  "/assets/file/Sponsor-Letter-Manual-Template.docx";
 const GENERATED_STATEMENT_LETTER_FOLDER = "generate-statement-letter-ai";
-const DEFAULT_STATEMENT_PREVIEW_LINES = [
-  "Statement letter akan digenerate berdasarkan jawaban form student.",
-  "Setelah berhasil, file Word akan diupload ke Supabase.",
-  "Preview full letter akan terbuka di OnlyOffice.",
-];
+const GENERATED_SPONSOR_LETTER_FOLDER = "generate-sponsor-letter-ai";
 const WORD_DOCUMENT_MIME_TYPE =
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const PDF_MIME_TYPE = "application/pdf";
 
 type LetterCardProps = {
   title: string;
   tone: "blue" | "green";
   status: string;
   statusColor: string;
-  previewLabel: string;
-  previewContent: string[];
-  footerLabel?: string;
-  footerValue?: string;
   progress?: number;
   activity: Array<{
     title: string;
     meta: string;
   }>;
   onGenerate?: () => void | Promise<void>;
+  onManualCreate?: () => void;
+  onViewTemplate?: () => void;
   onPreview?: () => void;
+  onDownload?: () => void;
+  onSubmit?: () => void | Promise<void>;
+  onCancelSubmit?: () => void | Promise<void>;
   generateLoading?: boolean;
+  manualCreateLoading?: boolean;
   previewDisabled?: boolean;
+  downloadDisabled?: boolean;
+  submitLoading?: boolean;
+  submitDisabled?: boolean;
+  submitLabel?: string;
+  cancelSubmitLoading?: boolean;
+  cancelSubmitDisabled?: boolean;
+  showCancelSubmit?: boolean;
+  cancelSubmitLabel?: string;
+  showGenerate?: boolean;
+  showManualCreate?: boolean;
+  showTemplate?: boolean;
+  showDownload?: boolean;
 };
 
 type GeneratePayloadAnswer = {
@@ -84,6 +126,32 @@ type GenerateResultCandidate = {
     generated_mime_type?: string;
     checklist_version?: string;
   };
+};
+
+type PersistLetterFileParams = {
+  file: File;
+  folder: string;
+  objectUrlRef: MutableRefObject<string | null>;
+  setUrl: (value: string | null) => void;
+  setPath: (value: string | null) => void;
+  setFileName: (value: string | null) => void;
+  setMimeType: (value: string | null) => void;
+  onUpsert: (payload: {
+    student_id: string;
+    file_url: string;
+    file_path?: string | null;
+    file_name?: string | null;
+    file_type?: string | null;
+    word_file_url?: string | null;
+    word_file_path?: string | null;
+    word_file_name?: string | null;
+    word_file_type?: string | null;
+    source?: string | null;
+    status?: string | null;
+  }) => Promise<unknown>;
+  source: "AI" | "MANUAL";
+  successMessage: string;
+  successDescription: string;
 };
 
 const toneStyles = {
@@ -203,6 +271,14 @@ const base64ToFile = (
   return new File([bytes], fileName, { type: mimeType });
 };
 
+const inferMimeTypeFromName = (fileName?: string | null) => {
+  const candidate = String(fileName ?? "").toLowerCase();
+  if (candidate.endsWith(".pdf")) return PDF_MIME_TYPE;
+  if (candidate.endsWith(".docx")) return WORD_DOCUMENT_MIME_TYPE;
+  if (candidate.endsWith(".doc")) return "application/msword";
+  return "application/octet-stream";
+};
+
 const isWordDocument = (
   fileUrl?: string | null,
   fileName?: string | null,
@@ -220,21 +296,71 @@ const isWordDocument = (
   return /\.(docx|doc)(?:[?#].*)?$/i.test(candidate);
 };
 
+const isPdfDocument = (
+  fileUrl?: string | null,
+  fileName?: string | null,
+  mimeType?: string | null,
+) => {
+  const normalizedMimeType = String(mimeType ?? "").toLowerCase();
+  if (normalizedMimeType.includes("pdf")) {
+    return true;
+  }
+
+  const candidate = String(fileName || fileUrl || "").toLowerCase();
+  return /\.pdf(?:[?#].*)?$/i.test(candidate);
+};
+
+const getLetterStatusMeta = (status?: string | null) => {
+  switch (String(status ?? "").toUpperCase()) {
+    case "SUBMITTED_TO_DIRECTOR":
+      return { label: "Submitted To Director", color: "processing" };
+    case "REVISION_REQUESTED":
+      return { label: "Revision Requested", color: "orange" };
+    case "APPROVED":
+      return { label: "Approved", color: "green" };
+    default:
+      return { label: "Draft", color: "gold" };
+  }
+};
+
+const toAbsoluteBrowserUrl = (value?: string | null) => {
+  if (!value) return null;
+  if (/^https?:\/\//i.test(value) || value.startsWith("blob:")) {
+    return value;
+  }
+  if (typeof window === "undefined") return value;
+  return new URL(value, window.location.origin).toString();
+};
+
 function LetterCard({
   title,
   tone,
   status,
   statusColor,
-  previewLabel,
-  previewContent,
-  footerLabel,
-  footerValue,
   progress,
   activity,
   onGenerate,
+  onManualCreate,
+  onViewTemplate,
   onPreview,
+  onDownload,
+  onSubmit,
+  onCancelSubmit,
   generateLoading,
+  manualCreateLoading,
   previewDisabled,
+  downloadDisabled,
+  submitLoading,
+  submitDisabled,
+  submitLabel = "Submit To Director",
+  cancelSubmitLoading,
+  cancelSubmitDisabled,
+  showCancelSubmit,
+  cancelSubmitLabel = "Cancel Submit To Director",
+  showGenerate = true,
+  showManualCreate = true,
+  showTemplate = true,
+  showDownload = false,
 }: LetterCardProps) {
   const palette = toneStyles[tone];
 
@@ -291,35 +417,6 @@ function LetterCard({
 
       <div style={{ padding: 16 }}>
         <Space direction="vertical" size={14} style={{ width: "100%" }}>
-          <Space direction="vertical" size={4} style={{ width: "100%" }}>
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              {previewLabel}
-            </Text>
-            <div
-              style={{
-                minHeight: 82,
-                borderRadius: 14,
-                border: "1px solid #dde5ef",
-                background: "#f8fafc",
-                padding: 14,
-              }}
-            >
-              {previewContent.map((line) => (
-                <Text
-                  key={line}
-                  style={{
-                    display: "block",
-                    color: "#334155",
-                    lineHeight: 1.55,
-                    fontSize: 12.5,
-                  }}
-                >
-                  {line}
-                </Text>
-              ))}
-            </div>
-          </Space>
-
           {typeof progress === "number" ? (
             <div>
               <Progress
@@ -330,44 +427,59 @@ function LetterCard({
                 strokeWidth={6}
               />
             </div>
-          ) : (
-            <div>
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  {footerLabel}
-                </Text>
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  {footerValue}
-                </Text>
-              </div>
-              <div
-                style={{
-                  height: 40,
-                  borderRadius: 14,
-                  border: "1px solid #e5e7eb",
-                  background: "#fff",
-                  marginTop: 8,
-                }}
-              />
-            </div>
-          )}
+          ) : null}
 
           <Space direction="vertical" size={10} style={{ width: "100%" }}>
-            <Button
-              block
-              type="primary"
-              icon={<RobotOutlined />}
-              loading={generateLoading}
-              style={{
-                borderRadius: 999,
-                height: 42,
-                border: "none",
-                background: palette.actionBg,
-              }}
-              onClick={onGenerate}
-            >
-              Generate with AI
-            </Button>
+            {showGenerate && onGenerate ? (
+              <Button
+                block
+                type="primary"
+                icon={<RobotOutlined />}
+                loading={generateLoading}
+                style={{
+                  borderRadius: 999,
+                  height: 42,
+                  border: "none",
+                  background: palette.actionBg,
+                }}
+                onClick={onGenerate}
+              >
+                Generate with AI
+              </Button>
+            ) : null}
+            {showManualCreate && onManualCreate ? (
+              <Button
+                block
+                icon={<EditOutlined />}
+                loading={manualCreateLoading}
+                style={{
+                  borderRadius: 999,
+                  height: 42,
+                  borderColor: "#7c3aed",
+                  color: "#7c3aed",
+                  background: "#fff",
+                }}
+                onClick={onManualCreate}
+              >
+                Buat Manual
+              </Button>
+            ) : null}
+            {showTemplate && onViewTemplate ? (
+              <Button
+                block
+                icon={<FileTextOutlined />}
+                style={{
+                  borderRadius: 999,
+                  height: 42,
+                  borderColor: "#0f766e",
+                  color: "#0f766e",
+                  background: "#fff",
+                }}
+                onClick={onViewTemplate}
+              >
+                Lihat Kerangka
+              </Button>
+            ) : null}
             <Button
               block
               type="primary"
@@ -383,19 +495,58 @@ function LetterCard({
             >
               Preview Full Letter
             </Button>
-            <Button
-              block
-              type="primary"
-              icon={<CheckOutlined />}
-              style={{
-                borderRadius: 999,
-                height: 42,
-                background: "#16a34a",
-                borderColor: "#16a34a",
-              }}
-            >
-              Submit To Director
-            </Button>
+            {showDownload && onDownload ? (
+              <Button
+                block
+                icon={<DownloadOutlined />}
+                disabled={downloadDisabled}
+                style={{
+                  borderRadius: 999,
+                  height: 42,
+                  borderColor: "#16a34a",
+                  color: "#16a34a",
+                  background: "#fff",
+                }}
+                onClick={onDownload}
+              >
+                Download PDF
+              </Button>
+            ) : null}
+            {showCancelSubmit && onCancelSubmit ? (
+              <Button
+                block
+                icon={<CloseOutlined />}
+                loading={cancelSubmitLoading}
+                disabled={cancelSubmitDisabled}
+                onClick={onCancelSubmit}
+                style={{
+                  borderRadius: 999,
+                  height: 42,
+                  borderColor: "#ef4444",
+                  color: "#ef4444",
+                  background: "#fff",
+                }}
+              >
+                {cancelSubmitLabel}
+              </Button>
+            ) : onSubmit ? (
+              <Button
+                block
+                type="primary"
+                icon={<CheckOutlined />}
+                loading={submitLoading}
+                disabled={submitDisabled}
+                onClick={onSubmit}
+                style={{
+                  borderRadius: 999,
+                  height: 42,
+                  background: "#16a34a",
+                  borderColor: "#16a34a",
+                }}
+              >
+                {submitLabel}
+              </Button>
+            ) : null}
           </Space>
 
           <div>
@@ -403,12 +554,20 @@ function LetterCard({
             <Title level={5} style={{ margin: 0, fontSize: 14 }}>
               Activity Log
             </Title>
-            <Space direction="vertical" size={10} style={{ width: "100%", marginTop: 12 }}>
+            <Space
+              direction="vertical"
+              size={10}
+              style={{ width: "100%", marginTop: 12 }}
+            >
               {activity.map((item) => (
-                <Space key={item.title} align="start" size={10}>
-                  <SolutionOutlined style={{ color: "#94a3b8", marginTop: 3 }} />
+                <Space key={`${item.title}-${item.meta}`} align="start" size={10}>
+                  <SolutionOutlined
+                    style={{ color: "#94a3b8", marginTop: 3 }}
+                  />
                   <div>
-                    <Paragraph style={{ margin: 0, color: "#334155", fontSize: 12.5 }}>
+                    <Paragraph
+                      style={{ margin: 0, color: "#334155", fontSize: 12.5 }}
+                    >
                       {item.title}
                     </Paragraph>
                     <Text type="secondary" style={{ fontSize: 12 }}>
@@ -431,6 +590,7 @@ export default function LetterComponent() {
   const params = useParams();
   const rawId = params.id;
   const studentId = Array.isArray(rawId) ? rawId[0] : rawId;
+
   const { data: studentData } = useUser({ id: studentId as string });
   const { data: questionBases } = useQuestionBases({});
   const { data: questions } = useQuestions({});
@@ -439,33 +599,81 @@ export default function LetterComponent() {
     enabled: Boolean(studentId),
     withNotification: false,
   });
-  const {
-    onGenerateStatementLetterAi,
-    onGenerateStatementLetterAiLoading,
-  } = useGenerateStatementLetterAi();
+
+  const { onGenerateStatementLetterAi, onGenerateStatementLetterAiLoading } =
+    useGenerateStatementLetterAi();
+  const { onGenerateSponsorLetterAi, onGenerateSponsorLetterAiLoading } =
+    useGenerateSponsorLetterAi();
   const { uploadDocument } = useDocumentUpload();
+
   const {
     data: generatedStatementLetterDocuments = [],
+    templateData: statementLetterTemplate,
     onUpsert: onUpsertGeneratedStatementLetterAi,
+    onSubmitToDirector: onSubmitStatementLetterToDirector,
+    onSubmitToDirectorLoading: onSubmitStatementLetterToDirectorLoading,
+    onCancelSubmitToDirector: onCancelSubmitStatementLetterToDirector,
+    onCancelSubmitToDirectorLoading:
+      onCancelSubmitStatementLetterToDirectorLoading,
   } = useGeneratedStatementLetterAiDocuments({
     studentId: studentId as string,
     enabled: Boolean(studentId),
   });
+  const {
+    data: generatedSponsorLetterDocuments = [],
+    templateData: sponsorLetterTemplate,
+    onUpsert: onUpsertGeneratedSponsorLetterAi,
+    onSubmitToDirector: onSubmitSponsorLetterToDirector,
+    onSubmitToDirectorLoading: onSubmitSponsorLetterToDirectorLoading,
+    onCancelSubmitToDirector: onCancelSubmitSponsorLetterToDirector,
+    onCancelSubmitToDirectorLoading:
+      onCancelSubmitSponsorLetterToDirectorLoading,
+  } = useGeneratedSponsorLetterAiDocuments({
+    studentId: studentId as string,
+    enabled: Boolean(studentId),
+  });
 
-  const [statementPreviewLines, setStatementPreviewLines] = useState(
-    DEFAULT_STATEMENT_PREVIEW_LINES,
-  );
-  const [statementWordCount, setStatementWordCount] = useState("0 / generated");
-  const [generatedLetterUrl, setGeneratedLetterUrl] = useState<string | null>(null);
-  const [generatedLetterPath, setGeneratedLetterPath] = useState<string | null>(null);
-  const [generatedLetterFileName, setGeneratedLetterFileName] = useState<string | null>(null);
-  const [generatedLetterMimeType, setGeneratedLetterMimeType] = useState<string | null>(null);
-  const objectUrlRef = useRef<string | null>(null);
+  const persistedStatementLetterDocument =
+    generatedStatementLetterDocuments[0] ?? null;
+  const persistedSponsorLetterDocument =
+    generatedSponsorLetterDocuments[0] ?? null;
+
+  const [generatedStatementLetterUrl, setGeneratedStatementLetterUrl] =
+    useState<string | null>(null);
+  const [generatedStatementLetterPath, setGeneratedStatementLetterPath] =
+    useState<string | null>(null);
+  const [generatedStatementLetterFileName, setGeneratedStatementLetterFileName] =
+    useState<string | null>(null);
+  const [generatedStatementLetterMimeType, setGeneratedStatementLetterMimeType] =
+    useState<string | null>(null);
+
+  const [generatedSponsorLetterUrl, setGeneratedSponsorLetterUrl] = useState<
+    string | null
+  >(null);
+  const [generatedSponsorLetterPath, setGeneratedSponsorLetterPath] = useState<
+    string | null
+  >(null);
+  const [generatedSponsorLetterFileName, setGeneratedSponsorLetterFileName] =
+    useState<string | null>(null);
+  const [generatedSponsorLetterMimeType, setGeneratedSponsorLetterMimeType] =
+    useState<string | null>(null);
+  const [manualUploadingLetter, setManualUploadingLetter] = useState<
+    "statement" | "sponsor" | null
+  >(null);
+
+  const statementObjectUrlRef = useRef<string | null>(null);
+  const sponsorObjectUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
+    const statementUrl = statementObjectUrlRef.current;
+    const sponsorUrl = sponsorObjectUrlRef.current;
+
     return () => {
-      if (objectUrlRef.current?.startsWith("blob:")) {
-        URL.revokeObjectURL(objectUrlRef.current);
+      if (statementUrl?.startsWith("blob:")) {
+        URL.revokeObjectURL(statementUrl);
+      }
+      if (sponsorUrl?.startsWith("blob:")) {
+        URL.revokeObjectURL(sponsorUrl);
       }
     };
   }, []);
@@ -578,22 +786,173 @@ export default function LetterComponent() {
     return rows;
   }, [answerQuestions, baseMap, questionMap]);
 
-  const persistedStatementLetterDocument =
-    generatedStatementLetterDocuments[0] ?? null;
-  const previewLetterUrl =
-    generatedLetterUrl ?? persistedStatementLetterDocument?.file_url ?? null;
-  const previewLetterPath =
-    generatedLetterPath ?? persistedStatementLetterDocument?.file_path ?? null;
-  const previewLetterFileName =
-    generatedLetterFileName ??
+  const previewStatementLetterUrl =
+    generatedStatementLetterUrl ??
+    persistedStatementLetterDocument?.file_url ??
+    null;
+  const previewStatementLetterPath =
+    generatedStatementLetterPath ??
+    persistedStatementLetterDocument?.file_path ??
+    null;
+  const previewStatementLetterFileName =
+    generatedStatementLetterFileName ??
     persistedStatementLetterDocument?.file_name ??
     null;
-  const previewLetterMimeType =
-    generatedLetterMimeType ??
+  const previewStatementLetterMimeType =
+    generatedStatementLetterMimeType ??
     persistedStatementLetterDocument?.file_type ??
     null;
 
-  const handleGenerateLetter = useCallback(async () => {
+  const previewSponsorLetterUrl =
+    generatedSponsorLetterUrl ?? persistedSponsorLetterDocument?.file_url ?? null;
+  const previewSponsorLetterPath =
+    generatedSponsorLetterPath ?? persistedSponsorLetterDocument?.file_path ?? null;
+  const previewSponsorLetterFileName =
+    generatedSponsorLetterFileName ??
+    persistedSponsorLetterDocument?.file_name ??
+    null;
+  const previewSponsorLetterMimeType =
+    generatedSponsorLetterMimeType ??
+    persistedSponsorLetterDocument?.file_type ??
+    null;
+
+  const statementStatusMeta = getLetterStatusMeta(
+    persistedStatementLetterDocument?.status,
+  );
+  const sponsorStatusMeta = getLetterStatusMeta(
+    persistedSponsorLetterDocument?.status,
+  );
+
+  const statementTemplateSource =
+    persistedStatementLetterDocument?.checklist_source ??
+    statementLetterTemplate?.checklist_source ??
+    STATEMENT_LETTER_CHECKLIST_PUBLIC_PATH;
+  const sponsorTemplateSource =
+    persistedSponsorLetterDocument?.checklist_source ??
+    sponsorLetterTemplate?.checklist_source ??
+    SPONSOR_LETTER_CHECKLIST_PUBLIC_PATH;
+
+  const canDownloadStatementPdf = Boolean(
+    persistedStatementLetterDocument?.can_download_pdf &&
+      persistedStatementLetterDocument?.download_pdf_url,
+  );
+  const canDownloadSponsorPdf = Boolean(
+    persistedSponsorLetterDocument?.can_download_pdf &&
+      persistedSponsorLetterDocument?.download_pdf_url,
+  );
+
+  const statementSupportsManual =
+    persistedStatementLetterDocument?.supports_manual_creation ??
+    statementLetterTemplate?.supports_manual_creation ??
+    true;
+  const sponsorSupportsManual =
+    persistedSponsorLetterDocument?.supports_manual_creation ??
+    sponsorLetterTemplate?.supports_manual_creation ??
+    true;
+  const statementSupportsAI =
+    persistedStatementLetterDocument?.supports_ai_generation ??
+    statementLetterTemplate?.supports_ai_generation ??
+    true;
+  const sponsorSupportsAI =
+    persistedSponsorLetterDocument?.supports_ai_generation ??
+    sponsorLetterTemplate?.supports_ai_generation ??
+    true;
+
+  const persistLetterFile = useCallback(
+    async ({
+      file,
+      folder,
+      objectUrlRef,
+      setUrl,
+      setPath,
+      setFileName,
+      setMimeType,
+      onUpsert,
+      source,
+      successMessage,
+      successDescription,
+    }: PersistLetterFileParams) => {
+      const resolvedMimeType = file.type || inferMimeTypeFromName(file.name);
+
+      if (objectUrlRef.current?.startsWith("blob:")) {
+        URL.revokeObjectURL(objectUrlRef.current);
+      }
+
+      const localPreviewUrl = URL.createObjectURL(file);
+      objectUrlRef.current = localPreviewUrl;
+      setUrl(localPreviewUrl);
+      setPath(null);
+      setFileName(file.name);
+      setMimeType(resolvedMimeType);
+
+      const uploadPath = `${folder}/${studentId}/${Date.now()}-${file.name}`;
+      const uploaded = await uploadDocument({
+        file,
+        path: uploadPath,
+        content_type: resolvedMimeType,
+      });
+
+      const isWord = isWordDocument(uploaded.url, file.name, resolvedMimeType);
+
+      await onUpsert({
+        student_id: String(studentId),
+        file_url: uploaded.url,
+        file_path: uploaded.path,
+        file_name: file.name,
+        file_type: resolvedMimeType,
+        word_file_url: isWord ? uploaded.url : null,
+        word_file_path: isWord ? uploaded.path : null,
+        word_file_name: isWord ? file.name : null,
+        word_file_type: isWord ? resolvedMimeType : null,
+        source,
+        status: "DRAFT",
+      });
+
+      setUrl(uploaded.url);
+      setPath(uploaded.path);
+      notification.success({
+        message: successMessage,
+        description: successDescription,
+      });
+    },
+    [notification, studentId, uploadDocument],
+  );
+
+  const buildLetterPayload = useCallback(
+    (checklistPath: string) => {
+      const checklistUrl =
+        typeof window !== "undefined"
+          ? new URL(checklistPath, window.location.origin).toString()
+          : checklistPath;
+
+      return {
+        student_id: String(studentId),
+        student_name: studentData?.name ?? undefined,
+        student_country: studentData?.stage?.country?.name ?? undefined,
+        campus_name: studentData?.name_campus ?? undefined,
+        degree: studentData?.name_degree ?? studentData?.degree ?? undefined,
+        checklist_path: checklistPath,
+        checklist_url: checklistUrl,
+        answers: generateAnswersPayload,
+        sections: sectionsPayload,
+        meta: {
+          letter_status: "Draft",
+        },
+      };
+    },
+    [
+      generateAnswersPayload,
+      sectionsPayload,
+      studentData?.degree,
+      studentData?.name,
+      studentData?.name_campus,
+      studentData?.name_degree,
+      studentData?.stage?.country?.name,
+      studentId,
+    ],
+  );
+
+  const handleGenerateStatementLetter = useCallback(async () => {
     if (!studentId) {
       notification.warning({
         message: "Student ID kosong",
@@ -612,30 +971,9 @@ export default function LetterComponent() {
     }
 
     try {
-      const checklistPath = STATEMENT_LETTER_CHECKLIST_PUBLIC_PATH;
-      const checklistUrl =
-        typeof window !== "undefined"
-          ? new URL(checklistPath, window.location.origin).toString()
-          : checklistPath;
-
-      const result = await onGenerateStatementLetterAi({
-        student_id: String(studentId),
-        student_name: studentData?.name ?? undefined,
-        student_country: studentData?.stage?.country?.name ?? undefined,
-        campus_name: studentData?.name_campus ?? undefined,
-        degree:
-          studentData?.name_degree ??
-          studentData?.degree ??
-          undefined,
-        checklist_path: checklistPath,
-        checklist_url: checklistUrl,
-        answers: generateAnswersPayload,
-        sections: sectionsPayload,
-        meta: {
-          letter_status: "Draft",
-        },
-      });
-
+      const result = await onGenerateStatementLetterAi(
+        buildLetterPayload(STATEMENT_LETTER_CHECKLIST_PUBLIC_PATH),
+      );
       const response = pickGeneratedResponse(result);
       const fileBase64 = pickGeneratedFileBase64(result);
       const generatedFileName =
@@ -650,198 +988,588 @@ export default function LetterComponent() {
         );
       }
 
-      const previewLines = response
-        .split(/\n+/)
-        .map((line) => line.trim())
-        .filter(Boolean)
-        .slice(0, 3);
-      const wordCount = response.split(/\s+/).filter(Boolean).length;
-      setStatementPreviewLines(
-        previewLines.length > 0
-          ? previewLines
-          : DEFAULT_STATEMENT_PREVIEW_LINES,
-      );
-      setStatementWordCount(`${wordCount} / generated`);
-
-      const wordFile = base64ToFile(
-        fileBase64,
-        generatedFileName,
-        generatedMimeType,
-      );
-      if (objectUrlRef.current?.startsWith("blob:")) {
-        URL.revokeObjectURL(objectUrlRef.current);
-      }
-      const localPreviewUrl = URL.createObjectURL(wordFile);
-      objectUrlRef.current = localPreviewUrl;
-      setGeneratedLetterUrl(localPreviewUrl);
-      setGeneratedLetterPath(null);
-      setGeneratedLetterFileName(generatedFileName);
-      setGeneratedLetterMimeType(generatedMimeType);
-      const generatedAt = Date.now();
-
-      try {
-        const uploadPath = `${GENERATED_STATEMENT_LETTER_FOLDER}/${studentId}/${generatedAt}-${generatedFileName}`;
-        const uploaded = await uploadDocument({
-          file: wordFile,
-          path: uploadPath,
-          content_type: generatedMimeType,
-        });
-
-        await onUpsertGeneratedStatementLetterAi({
-          student_id: String(studentId),
-          file_url: uploaded.url,
-          file_path: uploaded.path,
-          file_name: generatedFileName,
-          file_type: generatedMimeType,
-          status: "generated",
-        });
-
-        setGeneratedLetterUrl(uploaded.url);
-        setGeneratedLetterPath(uploaded.path);
-
-        notification.success({
-          message: "Generate Statement Letter AI berhasil",
-          description:
-            "Word statement letter berhasil dibuat, diupload ke Supabase, dan tersimpan.",
-        });
-      } catch (persistError) {
-        notification.warning({
-          message:
-            "Generate Statement Letter AI berhasil, tetapi file belum tersimpan",
-          description:
-            extractGenerateErrorMessage(persistError) ||
-            "Preview lokal tersedia, tetapi upload atau penyimpanan metadata gagal.",
-        });
-      }
+      await persistLetterFile({
+        file: base64ToFile(fileBase64, generatedFileName, generatedMimeType),
+        folder: GENERATED_STATEMENT_LETTER_FOLDER,
+        objectUrlRef: statementObjectUrlRef,
+        setUrl: setGeneratedStatementLetterUrl,
+        setPath: setGeneratedStatementLetterPath,
+        setFileName: setGeneratedStatementLetterFileName,
+        setMimeType: setGeneratedStatementLetterMimeType,
+        onUpsert: onUpsertGeneratedStatementLetterAi,
+        source: "AI",
+        successMessage: "Generate Statement Letter berhasil",
+        successDescription: "Statement letter berhasil dibuat dan siap ditinjau.",
+      });
     } catch (error) {
       notification.error({
-        message: "Generate Statement Letter AI gagal",
+        message: "Generate Statement Letter gagal",
         description: extractGenerateErrorMessage(error),
       });
     }
   }, [
-    generateAnswersPayload,
+    buildLetterPayload,
+    generateAnswersPayload.length,
     notification,
     onGenerateStatementLetterAi,
     onUpsertGeneratedStatementLetterAi,
-    sectionsPayload,
+    persistLetterFile,
     studentData?.name,
     studentId,
-    uploadDocument,
   ]);
 
-  const handlePreviewLetter = useCallback(() => {
-    if (!previewLetterUrl) {
-      notification.info({
-        message: "Belum ada statement letter",
-        description: "Silakan generate statement letter terlebih dahulu.",
-      });
-      return;
-    }
-
-    if (!previewLetterPath && previewLetterUrl.startsWith("blob:")) {
-      window.open(previewLetterUrl, "_blank", "noopener,noreferrer");
-      return;
-    }
-
-    if (
-      !previewLetterPath ||
-      !isWordDocument(previewLetterUrl, previewLetterFileName, previewLetterMimeType)
-    ) {
+  const handleGenerateSponsorLetter = useCallback(async () => {
+    if (!studentId) {
       notification.warning({
-        message: "Dokumen belum siap diedit",
-        description:
-          "File Word atau path penyimpanan belum lengkap untuk dibuka di editor browser.",
+        message: "Student ID kosong",
+        description: "Sponsor letter tidak bisa digenerate tanpa student_id.",
       });
       return;
     }
 
-    router.push(
-      `/admission/dashboard/students-management/detail/${studentId}/statement-letter/editor`,
-    );
+    if (generateAnswersPayload.length === 0) {
+      notification.warning({
+        message: "Belum ada data",
+        description:
+          "Isi jawaban form student terlebih dahulu sebelum generate sponsor letter.",
+      });
+      return;
+    }
+
+    try {
+      const result = await onGenerateSponsorLetterAi(
+        buildLetterPayload(SPONSOR_LETTER_CHECKLIST_PUBLIC_PATH),
+      );
+      const response = pickGeneratedResponse(result);
+      const fileBase64 = pickGeneratedFileBase64(result);
+      const generatedFileName =
+        pickGeneratedFileName(result) ??
+        `${(studentData?.name ?? "student").replace(/\s+/g, "_")}_Sponsor_Letter.docx`;
+      const generatedMimeType =
+        pickGeneratedMimeType(result) ?? WORD_DOCUMENT_MIME_TYPE;
+
+      if (!response || !fileBase64) {
+        throw new Error(
+          "Response generate sponsor letter tidak berisi konten atau file Word.",
+        );
+      }
+
+      await persistLetterFile({
+        file: base64ToFile(fileBase64, generatedFileName, generatedMimeType),
+        folder: GENERATED_SPONSOR_LETTER_FOLDER,
+        objectUrlRef: sponsorObjectUrlRef,
+        setUrl: setGeneratedSponsorLetterUrl,
+        setPath: setGeneratedSponsorLetterPath,
+        setFileName: setGeneratedSponsorLetterFileName,
+        setMimeType: setGeneratedSponsorLetterMimeType,
+        onUpsert: onUpsertGeneratedSponsorLetterAi,
+        source: "AI",
+        successMessage: "Generate Sponsor Letter berhasil",
+        successDescription: "Sponsor letter berhasil dibuat dan siap ditinjau.",
+      });
+    } catch (error) {
+      notification.error({
+        message: "Generate Sponsor Letter gagal",
+        description: extractGenerateErrorMessage(error),
+      });
+    }
   }, [
+    buildLetterPayload,
+    generateAnswersPayload.length,
     notification,
-    previewLetterFileName,
-    previewLetterMimeType,
-    previewLetterPath,
-    previewLetterUrl,
-    router,
+    onGenerateSponsorLetterAi,
+    onUpsertGeneratedSponsorLetterAi,
+    persistLetterFile,
+    studentData?.name,
     studentId,
   ]);
+
+  const handleManualCreate = useCallback(
+    async (kind: "statement" | "sponsor") => {
+      if (!studentId) {
+        notification.warning({
+          message: "Student ID kosong",
+          description: "Dokumen manual tidak bisa dibuat tanpa student_id.",
+        });
+        return;
+      }
+
+      const isStatement = kind === "statement";
+      const editorRoute = isStatement
+        ? `/admission/dashboard/students-management/detail/${studentId}/statement-letter/editor`
+        : `/admission/dashboard/students-management/detail/${studentId}/sponsor-letter/editor`;
+      const existingPreviewUrl = isStatement
+        ? previewStatementLetterUrl
+        : previewSponsorLetterUrl;
+      const existingPreviewPath = isStatement
+        ? previewStatementLetterPath
+        : previewSponsorLetterPath;
+      const existingPreviewFileName = isStatement
+        ? previewStatementLetterFileName
+        : previewSponsorLetterFileName;
+      const existingPreviewMimeType = isStatement
+        ? previewStatementLetterMimeType
+        : previewSponsorLetterMimeType;
+
+      if (
+        existingPreviewUrl &&
+        existingPreviewPath &&
+        isWordDocument(
+          existingPreviewUrl,
+          existingPreviewFileName,
+          existingPreviewMimeType,
+        )
+      ) {
+        router.push(editorRoute);
+        return;
+      }
+
+      setManualUploadingLetter(kind);
+      try {
+        const templatePath = isStatement
+          ? STATEMENT_LETTER_WORD_TEMPLATE_PUBLIC_PATH
+          : SPONSOR_LETTER_WORD_TEMPLATE_PUBLIC_PATH;
+        const templateUrl =
+          typeof window !== "undefined"
+            ? new URL(templatePath, window.location.origin).toString()
+            : templatePath;
+        const templateRes = await fetch(templateUrl, { cache: "no-store" });
+        if (!templateRes.ok) {
+          throw new Error("Template Word manual tidak dapat diunduh.");
+        }
+
+        const templateBlob = await templateRes.blob();
+        const fileName = `${(studentData?.name ?? "student")
+          .trim()
+          .replace(/\s+/g, "_")}_${isStatement ? "Statement_Letter" : "Sponsor_Letter"}_Manual.docx`;
+        const templateFile = new File([templateBlob], fileName, {
+          type: WORD_DOCUMENT_MIME_TYPE,
+        });
+
+        if (isStatement) {
+          await persistLetterFile({
+            file: templateFile,
+            folder: GENERATED_STATEMENT_LETTER_FOLDER,
+            objectUrlRef: statementObjectUrlRef,
+            setUrl: setGeneratedStatementLetterUrl,
+            setPath: setGeneratedStatementLetterPath,
+            setFileName: setGeneratedStatementLetterFileName,
+            setMimeType: setGeneratedStatementLetterMimeType,
+            onUpsert: onUpsertGeneratedStatementLetterAi,
+            source: "MANUAL",
+            successMessage: "Statement Letter manual siap diedit",
+            successDescription:
+              "Draft Word dibuat dari template manual dan dibuka di OnlyOffice.",
+          });
+        } else {
+          await persistLetterFile({
+            file: templateFile,
+            folder: GENERATED_SPONSOR_LETTER_FOLDER,
+            objectUrlRef: sponsorObjectUrlRef,
+            setUrl: setGeneratedSponsorLetterUrl,
+            setPath: setGeneratedSponsorLetterPath,
+            setFileName: setGeneratedSponsorLetterFileName,
+            setMimeType: setGeneratedSponsorLetterMimeType,
+            onUpsert: onUpsertGeneratedSponsorLetterAi,
+            source: "MANUAL",
+            successMessage: "Sponsor Letter manual siap diedit",
+            successDescription:
+              "Draft Word dibuat dari template manual dan dibuka di OnlyOffice.",
+          });
+        }
+
+        router.push(editorRoute);
+      } catch (error) {
+        notification.error({
+          message:
+            kind === "statement"
+              ? "Buat manual Statement Letter gagal"
+              : "Buat manual Sponsor Letter gagal",
+          description: extractGenerateErrorMessage(error),
+        });
+      } finally {
+        setManualUploadingLetter(null);
+      }
+    },
+    [
+      notification,
+      onUpsertGeneratedSponsorLetterAi,
+      onUpsertGeneratedStatementLetterAi,
+      persistLetterFile,
+      previewSponsorLetterFileName,
+      previewSponsorLetterMimeType,
+      previewSponsorLetterPath,
+      previewSponsorLetterUrl,
+      previewStatementLetterFileName,
+      previewStatementLetterMimeType,
+      previewStatementLetterPath,
+      previewStatementLetterUrl,
+      router,
+      studentData?.name,
+      studentId,
+    ],
+  );
+
+  const openEditor = useCallback(
+    (
+      kind: "statement-letter" | "sponsor-letter",
+      previewUrl: string | null,
+      previewPath: string | null,
+      previewFileName: string | null,
+      previewMimeType: string | null,
+    ) => {
+      if (!previewUrl) {
+        notification.info({
+          message: "Dokumen belum tersedia",
+          description: "Silakan generate atau upload manual letter terlebih dahulu.",
+        });
+        return;
+      }
+
+      const absolutePreviewUrl = toAbsoluteBrowserUrl(previewUrl) ?? previewUrl;
+
+      if (previewUrl.startsWith("blob:")) {
+        window.open(absolutePreviewUrl, "_blank", "noopener,noreferrer");
+        return;
+      }
+
+      if (isPdfDocument(previewUrl, previewFileName, previewMimeType)) {
+        window.open(absolutePreviewUrl, "_blank", "noopener,noreferrer");
+        return;
+      }
+
+      if (
+        !previewPath ||
+        !isWordDocument(previewUrl, previewFileName, previewMimeType)
+      ) {
+        window.open(absolutePreviewUrl, "_blank", "noopener,noreferrer");
+        return;
+      }
+
+      router.push(
+        `/admission/dashboard/students-management/detail/${studentId}/${kind}/editor`,
+      );
+    },
+    [notification, router, studentId],
+  );
+
+  const openExternalResource = useCallback(
+    (url?: string | null, emptyMessage?: string) => {
+      const normalized = toAbsoluteBrowserUrl(url);
+      if (!normalized) {
+        notification.info({
+          message: emptyMessage ?? "Dokumen belum tersedia",
+          description: "Resource belum tersedia saat ini.",
+        });
+        return;
+      }
+      window.open(normalized, "_blank", "noopener,noreferrer");
+    },
+    [notification],
+  );
+
+  const handlePreviewStatementLetter = useCallback(() => {
+    openEditor(
+      "statement-letter",
+      previewStatementLetterUrl,
+      previewStatementLetterPath,
+      previewStatementLetterFileName,
+      previewStatementLetterMimeType,
+    );
+  }, [
+    openEditor,
+    previewStatementLetterFileName,
+    previewStatementLetterMimeType,
+    previewStatementLetterPath,
+    previewStatementLetterUrl,
+  ]);
+
+  const handlePreviewSponsorLetter = useCallback(() => {
+    openEditor(
+      "sponsor-letter",
+      previewSponsorLetterUrl,
+      previewSponsorLetterPath,
+      previewSponsorLetterFileName,
+      previewSponsorLetterMimeType,
+    );
+  }, [
+    openEditor,
+    previewSponsorLetterFileName,
+    previewSponsorLetterMimeType,
+    previewSponsorLetterPath,
+    previewSponsorLetterUrl,
+  ]);
+
+  const handleViewStatementTemplate = useCallback(() => {
+    openExternalResource(
+      statementTemplateSource,
+      "Kerangka Statement Letter belum tersedia",
+    );
+  }, [openExternalResource, statementTemplateSource]);
+
+  const handleViewSponsorTemplate = useCallback(() => {
+    openExternalResource(
+      sponsorTemplateSource,
+      "Kerangka Sponsor Letter belum tersedia",
+    );
+  }, [openExternalResource, sponsorTemplateSource]);
+
+  const handleDownloadStatementPdf = useCallback(() => {
+    openExternalResource(
+      persistedStatementLetterDocument?.download_pdf_url,
+      "PDF Statement Letter belum tersedia",
+    );
+  }, [openExternalResource, persistedStatementLetterDocument?.download_pdf_url]);
+
+  const handleDownloadSponsorPdf = useCallback(() => {
+    openExternalResource(
+      persistedSponsorLetterDocument?.download_pdf_url,
+      "PDF Sponsor Letter belum tersedia",
+    );
+  }, [openExternalResource, persistedSponsorLetterDocument?.download_pdf_url]);
+
+  const handleSubmitStatementLetter = useCallback(async () => {
+    if (!persistedStatementLetterDocument?.id) {
+      notification.info({
+        message: "Dokumen belum tersedia",
+        description:
+          "Generate atau upload manual statement letter terlebih dahulu sebelum dikirim.",
+      });
+      return;
+    }
+
+    try {
+      await onSubmitStatementLetterToDirector({
+        id: persistedStatementLetterDocument.id,
+      });
+      notification.success({
+        message: "Statement letter dikirim",
+        description: "Dokumen siap ditinjau oleh director.",
+      });
+    } catch (error) {
+      notification.error({
+        message: "Gagal mengirim statement letter",
+        description: extractGenerateErrorMessage(error),
+      });
+    }
+  }, [
+    onSubmitStatementLetterToDirector,
+    notification,
+    persistedStatementLetterDocument?.id,
+  ]);
+
+  const handleSubmitSponsorLetter = useCallback(async () => {
+    if (!persistedSponsorLetterDocument?.id) {
+      notification.info({
+        message: "Dokumen belum tersedia",
+        description:
+          "Generate atau upload manual sponsor letter terlebih dahulu sebelum dikirim.",
+      });
+      return;
+    }
+
+    try {
+      await onSubmitSponsorLetterToDirector({
+        id: persistedSponsorLetterDocument.id,
+      });
+      notification.success({
+        message: "Sponsor letter dikirim",
+        description: "Dokumen siap ditinjau oleh director.",
+      });
+    } catch (error) {
+      notification.error({
+        message: "Gagal mengirim sponsor letter",
+        description: extractGenerateErrorMessage(error),
+      });
+    }
+  }, [
+    notification,
+    onSubmitSponsorLetterToDirector,
+    persistedSponsorLetterDocument?.id,
+  ]);
+
+  const handleCancelSubmitStatementLetter = useCallback(async () => {
+    if (!persistedStatementLetterDocument?.id) {
+      notification.info({
+        message: "Dokumen belum tersedia",
+        description: "Statement letter belum bisa dibatalkan pengirimannya.",
+      });
+      return;
+    }
+
+    try {
+      await onCancelSubmitStatementLetterToDirector({
+        id: persistedStatementLetterDocument.id,
+      });
+      notification.success({
+        message: "Pengiriman statement letter dibatalkan",
+        description: "Dokumen kembali ke draft dan bisa diedit lagi.",
+      });
+    } catch (error) {
+      notification.error({
+        message: "Gagal membatalkan pengiriman statement letter",
+        description: extractGenerateErrorMessage(error),
+      });
+    }
+  }, [
+    notification,
+    onCancelSubmitStatementLetterToDirector,
+    persistedStatementLetterDocument?.id,
+  ]);
+
+  const handleCancelSubmitSponsorLetter = useCallback(async () => {
+    if (!persistedSponsorLetterDocument?.id) {
+      notification.info({
+        message: "Dokumen belum tersedia",
+        description: "Sponsor letter belum bisa dibatalkan pengirimannya.",
+      });
+      return;
+    }
+
+    try {
+      await onCancelSubmitSponsorLetterToDirector({
+        id: persistedSponsorLetterDocument.id,
+      });
+      notification.success({
+        message: "Pengiriman sponsor letter dibatalkan",
+        description: "Dokumen kembali ke draft dan bisa diedit lagi.",
+      });
+    } catch (error) {
+      notification.error({
+        message: "Gagal membatalkan pengiriman sponsor letter",
+        description: extractGenerateErrorMessage(error),
+      });
+    }
+  }, [
+    notification,
+    onCancelSubmitSponsorLetterToDirector,
+    persistedSponsorLetterDocument?.id,
+  ]);
+
+  const statementSourceLabel =
+    String(persistedStatementLetterDocument?.source ?? "AI").toUpperCase() ===
+    "MANUAL"
+      ? "Created manually in OnlyOffice"
+      : "Generated with AI";
+  const sponsorSourceLabel =
+    String(persistedSponsorLetterDocument?.source ?? "AI").toUpperCase() ===
+    "MANUAL"
+      ? "Created manually in OnlyOffice"
+      : "Generated with AI";
+
+  const statementActivity = [
+    {
+      title: statementSourceLabel,
+      meta: "System",
+    },
+    {
+      title: "Kerangka dokumen tersedia",
+      meta:
+        persistedStatementLetterDocument?.checklist_version ??
+        statementLetterTemplate?.checklist_version ??
+        "GS 2026",
+    },
+    {
+      title: "Saved as active document",
+      meta: "System",
+    },
+  ];
+
+  const sponsorActivity = [
+    {
+      title: sponsorSourceLabel,
+      meta: "System",
+    },
+    {
+      title: "Kerangka dokumen tersedia",
+      meta:
+        persistedSponsorLetterDocument?.checklist_version ??
+        sponsorLetterTemplate?.checklist_version ??
+        "Sponsor Letter Checklist",
+    },
+    {
+      title: "Saved as active document",
+      meta: "System",
+    },
+  ];
+
+  const isStatementSubmitDisabled =
+    !persistedStatementLetterDocument?.id ||
+    persistedStatementLetterDocument.status === "SUBMITTED_TO_DIRECTOR" ||
+    persistedStatementLetterDocument.status === "APPROVED";
+
+  const canCancelStatementSubmit =
+    persistedStatementLetterDocument?.status === "SUBMITTED_TO_DIRECTOR";
+
+  const isSponsorSubmitDisabled =
+    !persistedSponsorLetterDocument?.id ||
+    persistedSponsorLetterDocument.status === "SUBMITTED_TO_DIRECTOR" ||
+    persistedSponsorLetterDocument.status === "APPROVED";
+
+  const canCancelSponsorSubmit =
+    persistedSponsorLetterDocument?.status === "SUBMITTED_TO_DIRECTOR";
 
   return (
     <Row gutter={[16, 16]}>
-      <Col xs={24} xl={12}>
-        <LetterCard
-          title="Statement Letter"
-          tone="blue"
-          status="Draft"
-          statusColor="gold"
-          previewLabel="Letter Preview"
-          previewContent={statementPreviewLines}
-          footerLabel="Word Count"
-          footerValue={statementWordCount}
-          onGenerate={handleGenerateLetter}
-          onPreview={handlePreviewLetter}
-          previewDisabled={!previewLetterUrl}
-          generateLoading={onGenerateStatementLetterAiLoading}
-          activity={[
-            {
-              title: "Generated from student answers",
-              meta: "System",
-            },
-            {
-              title: "Stored to Supabase after successful upload",
-              meta: "System",
-            },
-          ]}
-        />
-      </Col>
+        <Col xs={24} xl={12}>
+          <LetterCard
+            title="Statement Letter"
+            tone="blue"
+            status={statementStatusMeta.label}
+            statusColor={statementStatusMeta.color}
+            onGenerate={handleGenerateStatementLetter}
+            onManualCreate={() => handleManualCreate("statement")}
+            onViewTemplate={handleViewStatementTemplate}
+            onPreview={handlePreviewStatementLetter}
+            onDownload={handleDownloadStatementPdf}
+            onSubmit={handleSubmitStatementLetter}
+            onCancelSubmit={handleCancelSubmitStatementLetter}
+            previewDisabled={!previewStatementLetterUrl}
+            downloadDisabled={!canDownloadStatementPdf}
+            showDownload={canDownloadStatementPdf}
+            showGenerate={statementSupportsAI}
+            showManualCreate={statementSupportsManual}
+            showTemplate={Boolean(statementTemplateSource)}
+            manualCreateLoading={manualUploadingLetter === "statement"}
+            generateLoading={onGenerateStatementLetterAiLoading}
+            submitLoading={onSubmitStatementLetterToDirectorLoading}
+            submitDisabled={isStatementSubmitDisabled}
+            cancelSubmitLoading={onCancelSubmitStatementLetterToDirectorLoading}
+            cancelSubmitDisabled={!canCancelStatementSubmit}
+            showCancelSubmit={canCancelStatementSubmit}
+            activity={statementActivity}
+          />
+        </Col>
 
-      <Col xs={24} xl={12}>
-        <LetterCard
-          title="Sponsor Letter"
-          tone="green"
-          status="Draft"
-          statusColor="default"
-          previewLabel=""
-          previewContent={[
-            "Sponsor Name",
-            "Ketut Made Nyoman",
-            "Relationship",
-            "Father",
-            "Occupation",
-            "Business Owner",
-          ]}
-          progress={82}
-          activity={[
-            {
-              title: "Initial data entered",
-              meta: "3 days ago • You",
-            },
-            {
-              title: "Generated with AI assistance",
-              meta: "3 days ago • System",
-            },
-          ]}
-          previewDisabled
-        />
-      </Col>
-
-      <Col span={24}>
-        <Card
-          style={{ borderRadius: 18, borderColor: "#d8dee9" }}
-          bodyStyle={{ padding: 20 }}
-        >
-          <Space direction="vertical" size={8} style={{ width: "100%" }}>
-            {previewLetterUrl ? (
-              <Typography.Text type="secondary" style={{ wordBreak: "break-all" }}>
-                Generated Word: {previewLetterUrl}
-              </Typography.Text>
-            ) : null}
-          </Space>
-        </Card>
-      </Col>
-    </Row>
+        <Col xs={24} xl={12}>
+          <LetterCard
+            title="Sponsor Letter"
+            tone="green"
+            status={sponsorStatusMeta.label}
+            statusColor={sponsorStatusMeta.color}
+            onGenerate={handleGenerateSponsorLetter}
+            onManualCreate={() => handleManualCreate("sponsor")}
+            onViewTemplate={handleViewSponsorTemplate}
+            onPreview={handlePreviewSponsorLetter}
+            onDownload={handleDownloadSponsorPdf}
+            onSubmit={handleSubmitSponsorLetter}
+            onCancelSubmit={handleCancelSubmitSponsorLetter}
+            previewDisabled={!previewSponsorLetterUrl}
+            downloadDisabled={!canDownloadSponsorPdf}
+            showDownload={canDownloadSponsorPdf}
+            showGenerate={sponsorSupportsAI}
+            showManualCreate={sponsorSupportsManual}
+            showTemplate={Boolean(sponsorTemplateSource)}
+            manualCreateLoading={manualUploadingLetter === "sponsor"}
+            generateLoading={onGenerateSponsorLetterAiLoading}
+            submitLoading={onSubmitSponsorLetterToDirectorLoading}
+            submitDisabled={isSponsorSubmitDisabled}
+            cancelSubmitLoading={onCancelSubmitSponsorLetterToDirectorLoading}
+            cancelSubmitDisabled={!canCancelSponsorSubmit}
+            showCancelSubmit={canCancelSponsorSubmit}
+            activity={sponsorActivity}
+          />
+        </Col>
+      </Row>
   );
 }

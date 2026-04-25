@@ -26,6 +26,7 @@ import { useDocuments } from "@/app/hooks/use-documents-management";
 import { useAnswerDocumentApprovals } from "@/app/hooks/use-answer-document-approvals";
 import { useAuth } from "@/app/utils/use-auth";
 import type { AnswerDocumentApprovalsDataModel } from "@/app/models/answer-document-approvals";
+import { buildFilePreviewUrl } from "@/app/utils/file-preview";
 
 type DocumentsComponentProps = {
   student_id: string;
@@ -230,7 +231,14 @@ export default function DocumentsComponent({
                 shape="circle"
                 icon={<EyeOutlined />}
                 disabled={!hasUrl}
-                href={hasUrl ? record.file_url ?? undefined : undefined}
+                href={
+                  hasUrl
+                    ? buildFilePreviewUrl(
+                        record.file_url,
+                        record.file_name ?? `${record.label ?? "document"}.pdf`,
+                      )
+                    : undefined
+                }
                 target={hasUrl ? "_blank" : undefined}
               />
               <Button

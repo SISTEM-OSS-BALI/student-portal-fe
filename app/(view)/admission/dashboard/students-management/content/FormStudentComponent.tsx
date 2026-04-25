@@ -175,6 +175,14 @@ export default function FormStudentComponent({
       )}
 
       <Form.Item
+        name="name_consultant"
+        label="Nama Konsultan"
+        rules={[{ required: true, message: "Nama Konsultan wajib diisi" }]}
+      >
+        <Input placeholder="Masukkan nama konsultan" />
+      </Form.Item>
+
+      <Form.Item
         name="stage_id"
         label="Negara"
         rules={[{ required: true, message: "Pilih negara" }]}
@@ -188,9 +196,9 @@ export default function FormStudentComponent({
         </Select>
       </Form.Item>
 
-      <Form.Item label="Role">
+      {/* <Form.Item label="Role">
         <Input value="Student" disabled />
-      </Form.Item>
+      </Form.Item> */}
 
       <Space style={{ width: "100%", justifyContent: "flex-end" }}>
         <Button onClick={onCancel}>Batal</Button>

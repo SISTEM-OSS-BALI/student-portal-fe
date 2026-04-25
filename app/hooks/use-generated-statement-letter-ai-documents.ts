@@ -1,36 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 
-export type GeneratedStatementLetterAiDocument = {
-  id: string;
-  student_id: string;
-  file_url: string;
-  file_path?: string | null;
-  file_name?: string | null;
-  file_type?: string | null;
-  word_file_url?: string | null;
-  word_file_path?: string | null;
-  word_file_name?: string | null;
-  word_file_type?: string | null;
-  status?: string | null;
-  created_at: string;
-  updated_at: string;
-};
+import type {
+  GeneratedStatementLetterAiDocumentDataModel,
+  GeneratedStatementLetterAiDocumentPayloadModel,
+  GeneratedStatementLetterAiTemplateDataModel,
+} from "../models/statement-letter-ai-approvals";
 
-export type GeneratedStatementLetterAiDocumentPayload = {
-  student_id: string;
-  file_url: string;
-  file_path?: string | null;
-  file_name?: string | null;
-  file_type?: string | null;
-  word_file_url?: string | null;
-  word_file_path?: string | null;
-  word_file_name?: string | null;
-  word_file_type?: string | null;
-  status?: string | null;
-};
+export type {
+  GeneratedStatementLetterAiDocumentDataModel as GeneratedStatementLetterAiDocument,
+  GeneratedStatementLetterAiDocumentPayloadModel as GeneratedStatementLetterAiDocumentPayload,
+  GeneratedStatementLetterAiTemplateDataModel as GeneratedStatementLetterAiTemplate,
+} from "../models/statement-letter-ai-approvals";
 
 const baseUrl = "/api/generate-statement-letter-ai/documents";
+const templateUrl = "/api/generate-statement-letter-ai/template";
 const queryKey = "generated-statement-letter-ai-documents";
 
 export const useGeneratedStatementLetterAiDocuments = ({
@@ -49,15 +33,24 @@ export const useGeneratedStatementLetterAiDocuments = ({
     queryFn: async () => {
       const result = await api.get(`${baseUrl}?student_id=${studentId}`);
       const payload = (result.data?.result ??
-        result.data) as GeneratedStatementLetterAiDocument[];
+        result.data) as GeneratedStatementLetterAiDocumentDataModel[];
       return Array.isArray(payload) ? payload : [];
     },
     enabled: enabled && Boolean(studentId),
     refetchInterval,
   });
 
+  const { data: templateData, isLoading: templateLoading } = useQuery({
+    queryKey: [queryKey, "template"],
+    queryFn: async () => {
+      const result = await api.get(templateUrl);
+      return (result.data?.result ??
+        result.data) as GeneratedStatementLetterAiTemplateDataModel;
+    },
+  });
+
   const { mutateAsync: onUpsert, isPending: onUpsertLoading } = useMutation({
-    mutationFn: async (payload: GeneratedStatementLetterAiDocumentPayload) =>
+    mutationFn: async (payload: GeneratedStatementLetterAiDocumentPayloadModel) =>
       api.post(baseUrl, payload),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: [queryKey] });
@@ -67,10 +60,73 @@ export const useGeneratedStatementLetterAiDocuments = ({
     },
   });
 
+  const { mutateAsync: onSubmitToDirector, isPending: onSubmitToDirectorLoading } =
+    useMutation({
+      mutationFn: async ({
+        id,
+        note,
+      }: {
+        id: string;
+        note?: string | null;
+      }) => {
+        const result = await api.post(`${baseUrl}/${id}/submit-to-director`, {
+          note,
+        });
+        return (result.data?.result ??
+          result.data) as GeneratedStatementLetterAiDocumentDataModel;
+      },
+      onSuccess: (_, variables) => {
+        queryClient.invalidateQueries({ queryKey: [queryKey] });
+        queryClient.invalidateQueries({
+          queryKey: [queryKey, studentId],
+        });
+        queryClient.invalidateQueries({
+          queryKey: [queryKey, variables.id],
+        });
+      },
+    });
+
+  const {
+    mutateAsync: onCancelSubmitToDirector,
+    isPending: onCancelSubmitToDirectorLoading,
+  } = useMutation({
+    mutationFn: async ({
+      id,
+      note,
+    }: {
+      id: string;
+      note?: string | null;
+    }) => {
+      const result = await api.post(
+        `${baseUrl}/${id}/cancel-submit-to-director`,
+        {
+          note,
+        },
+      );
+      return (result.data?.result ??
+        result.data) as GeneratedStatementLetterAiDocumentDataModel;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: [queryKey] });
+      queryClient.invalidateQueries({
+        queryKey: [queryKey, studentId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: [queryKey, variables.id],
+      });
+    },
+  });
+
   return {
     data,
     fetchLoading,
+    templateData,
+    templateLoading,
     onUpsert,
     onUpsertLoading,
+    onSubmitToDirector,
+    onSubmitToDirectorLoading,
+    onCancelSubmitToDirector,
+    onCancelSubmitToDirectorLoading,
   };
 };

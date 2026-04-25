@@ -52,10 +52,20 @@ async function fetchName(url: string) {
 }
 
 const resolvers: Record<string, Resolver> = {
+  "admission/dashboard/students-management/detail": (id) =>
+    fetchName(`/api/users/${id}`),
+  "director/dashboard/students-management/detail": (id) =>
+    fetchName(`/api/users/${id}`),
+  "student/dashboard/students-management/detail": (id) =>
+    fetchName(`/api/users/${id}`),
   "admission/students-management/detail": (id) =>
+    fetchName(`/api/users/${id}`),
+  "director/students-management/detail": (id) =>
     fetchName(`/api/users/${id}`),
 
   "admission/dashboard/stages-management": (id) =>
+    fetchName(`/api/countries/${id}`),
+  "director/dashboard/stages-management": (id) =>
     fetchName(`/api/countries/${id}`),
   "dashboard/stages-management": (id) => fetchName(`/api/countries/${id}`),
   "stages-management": (id) => fetchName(`/api/countries/${id}`),
@@ -139,8 +149,8 @@ function useResolvedLabels(segments: string[]) {
         } catch {
           /* ignore */
         }
-        // ultimate fallback → tampilkan ID apa adanya
-        return t.seg;
+        // jika tidak bisa di-resolve, jangan tampilkan ID mentah
+        return undefined;
       },
       staleTime: 1000 * 60 * 5,
     })),
@@ -189,8 +199,13 @@ export const MainBreadcrumb = () => {
       const rawHref = "/" + segments.slice(0, idx + 1).join("/");
       const href = PATH_REDIRECTS[rawHref] ?? rawHref;
 
-      const label =
-        resolved.get(seg) ?? (looksLikeId(seg) ? seg : toCapitalized(seg));
+      const resolvedLabel = resolved.get(seg);
+      const isIdSegment = looksLikeId(seg);
+      const label = resolvedLabel ?? (isIdSegment ? undefined : toCapitalized(seg));
+
+      if (!label) {
+        return;
+      }
 
       arr.push({
         title: isLast ? (

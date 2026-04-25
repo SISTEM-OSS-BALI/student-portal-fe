@@ -159,6 +159,25 @@ export default function StatementLetterEditorPage() {
         paddingBottom: 12,
       }}
     >
+      <Button
+        icon={<ArrowLeftOutlined />}
+        size="large"
+        onClick={() =>
+          router.push(
+            `/admission/dashboard/students-management/detail/${studentId}`,
+          )
+        }
+        style={{
+          alignSelf: "flex-start",
+          borderRadius: 999,
+          paddingInline: 18,
+          height: 46,
+          fontWeight: 600,
+          boxShadow: "0 8px 24px rgba(15, 23, 42, 0.08)",
+        }}
+      >
+        Back to Student Detail
+      </Button>
       <Card
         bodyStyle={{ padding: 24 }}
         style={{
@@ -173,7 +192,6 @@ export default function StatementLetterEditorPage() {
         <Row gutter={[20, 20]} align="middle">
           <Col xs={24} xl={16}>
             <Space direction="vertical" size={12} style={{ width: "100%" }}>
-
               <div>
                 <Typography.Title
                   level={2}
@@ -190,7 +208,8 @@ export default function StatementLetterEditorPage() {
                   type="secondary"
                   style={{ display: "block", marginTop: 8, fontSize: 17 }}
                 >
-                  Edit letter hasil generate AI untuk {studentData?.name ?? "student"}.
+                  Edit letter untuk{" "}
+                  {studentData?.name ?? "student"}.
                 </Typography.Text>
               </div>
 
@@ -243,14 +262,17 @@ export default function StatementLetterEditorPage() {
             >
               <Space direction="vertical" size={14} style={{ width: "100%" }}>
                 <div>
-                  <Typography.Text type="secondary">Current File</Typography.Text>
+                  <Typography.Text type="secondary">
+                    Current File
+                  </Typography.Text>
                   <Typography.Title level={5} style={{ margin: "6px 0 0" }}>
                     {documentTitle}
                   </Typography.Title>
                 </div>
 
                 <Typography.Text type="secondary">
-                  Hasil edit akan tersimpan kembali ke file statement letter student yang aktif.
+                  Hasil edit akan tersimpan kembali ke file statement letter
+                  student yang aktif.
                 </Typography.Text>
 
                 <div
@@ -302,19 +324,6 @@ export default function StatementLetterEditorPage() {
                     </Button>
                   ) : null}
 
-                  <Button
-                    icon={<ArrowLeftOutlined />}
-                    size="large"
-                    block
-                    onClick={() =>
-                      router.push(
-                        `/admission/dashboard/students-management/detail/${studentId}`,
-                      )
-                    }
-                  >
-                    Back to Student Detail
-                  </Button>
-
                   {generatedDocument?.file_url ? (
                     <Button
                       type="primary"
@@ -324,7 +333,9 @@ export default function StatementLetterEditorPage() {
                       href={generatedDocument.file_url}
                       target="_blank"
                     >
-                      {isPdfActive ? "Download Current PDF" : "Download Current Word"}
+                      {isPdfActive
+                        ? "Download Current PDF"
+                        : "Download Current Word"}
                     </Button>
                   ) : null}
                 </Space>
@@ -344,7 +355,9 @@ export default function StatementLetterEditorPage() {
       ) : null}
 
       {fetchLoading ? (
-        <Card style={{ minHeight: "80vh", display: "grid", placeItems: "center" }}>
+        <Card
+          style={{ minHeight: "80vh", display: "grid", placeItems: "center" }}
+        >
           <Spin size="large" />
         </Card>
       ) : null}
@@ -354,7 +367,7 @@ export default function StatementLetterEditorPage() {
           showIcon
           type="info"
           message="Statement letter belum tersedia"
-          description="Generate statement letter terlebih dahulu sebelum membuka editor."
+          description="Buat manual atau generate statement letter terlebih dahulu sebelum membuka editor."
         />
       ) : null}
 
@@ -373,7 +386,10 @@ export default function StatementLetterEditorPage() {
       {!fetchLoading &&
       generatedDocument &&
       ((isPdfActive && generatedDocument.file_url) ||
-        (!isPdfActive && callbackUrl && ONLYOFFICE_URL && editorDocumentUrl)) ? (
+        (!isPdfActive &&
+          callbackUrl &&
+          ONLYOFFICE_URL &&
+          editorDocumentUrl)) ? (
         <Card
           bodyStyle={{ padding: 0 }}
           style={{
@@ -416,15 +432,23 @@ export default function StatementLetterEditorPage() {
                   <>
                     <Tag
                       color="processing"
-                      style={{ borderRadius: 999, margin: 0, paddingInline: 10 }}
+                      style={{
+                        borderRadius: 999,
+                        margin: 0,
+                        paddingInline: 10,
+                      }}
                     >
                       <EyeOutlined /> Editable
                     </Tag>
                     <Tag
                       color="success"
-                      style={{ borderRadius: 999, margin: 0, paddingInline: 10 }}
+                      style={{
+                        borderRadius: 999,
+                        margin: 0,
+                        paddingInline: 10,
+                      }}
                     >
-                      Auto-save Callback
+                      Auto-save
                     </Tag>
                   </>
                 ) : (

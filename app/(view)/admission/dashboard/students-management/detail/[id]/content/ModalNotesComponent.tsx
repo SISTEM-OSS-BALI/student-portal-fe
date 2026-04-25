@@ -23,7 +23,7 @@ export default function ModalNotesComponent({
       open={props.open}
       onCancel={props.onClose}
       footer={null}
-      destroyOnClose
+      destroyOnHidden
     >
       <FormNotesComponent
         user_id={props.user_id}

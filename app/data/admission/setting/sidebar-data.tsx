@@ -1,5 +1,4 @@
 import { MenuProps } from "antd";
-import { useRouter } from "next/navigation";
 // Font Awesome (React)
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -10,8 +9,6 @@ import {
 import menuLabel from "@/app/utils/menu-label";
 
 export const SidebarSettingAdmission = (): MenuProps["items"] => {
-  const router = useRouter();
-
   const sidebarMenu: MenuProps["items"] = [
     {
       key: "/admission/dashboard/master-data",
@@ -22,35 +19,21 @@ export const SidebarSettingAdmission = (): MenuProps["items"] => {
           key: "/admission/dashboard/master-data/questions-management",
           label: menuLabel("Manajemen Pertanyaan"),
           icon: <FontAwesomeIcon icon={faCircle} style={{ fontSize: 10 }} />,
-          onClick: () =>
-            router.push(
-              "/admission/dashboard/master-data/questions-management",
-            ),
         },
         {
           key: "/admission/dashboard/master-data/documents-management",
           label: menuLabel("Manajemen Dokumen"),
           icon: <FontAwesomeIcon icon={faCircle} style={{ fontSize: 10 }} />,
-          onClick: () =>
-            router.push(
-              "/admission/dashboard/master-data/documents-management",
-            ),
         },
         {
           key: "/admission/dashboard/master-data/child-steps-management",
           label: menuLabel("Kategori Step"),
           icon: <FontAwesomeIcon icon={faCircle} style={{ fontSize: 10 }} />,
-          onClick: () =>
-            router.push(
-              "/admission/dashboard/master-data/child-steps-management",
-            ),
         },
         {
           key: "/admission/dashboard/master-data/steps-management",
           label: menuLabel("Manajemen Step"),
           icon: <FontAwesomeIcon icon={faCircle} style={{ fontSize: 10 }} />,
-          onClick: () =>
-            router.push("/admission/dashboard/master-data/steps-management"),
         },
       ],
     },
@@ -58,8 +41,6 @@ export const SidebarSettingAdmission = (): MenuProps["items"] => {
       key: "/admission/dashboard/stages-management",
       label: menuLabel("Stage"),
       icon: <FontAwesomeIcon icon={faDiagramProject} style={{ fontSize: 16 }} />,
-      onClick: () =>
-        router.push("/admission/dashboard/stages-management"),
     },
   ];
 

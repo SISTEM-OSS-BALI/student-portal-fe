@@ -3,12 +3,9 @@
 import {
   Avatar,
   Badge,
-  Drawer,
   Dropdown,
   Input,
   Layout,
-  Menu,
-  Tag,
   Typography,
 } from "antd";
 import {
@@ -20,16 +17,56 @@ import {
 import getInitials from "@/app/utils/initials-username";
 
 import { useAuth } from "@/app/utils/use-auth";
-import { useUsers } from "@/app/hooks/use-users";
+import { useUserRoleStudents, useUsers } from "@/app/hooks/use-users";
+import { useInformationCountries } from "@/app/hooks/use-information-country-management";
 import { SiderAdmission } from "../../sider/admission";
 import { MainBreadcrumb } from "@/app/components/common/breadscrumb";
 import { normalizedRole } from "@/app/utils/normalized";
 import styles from "./layout.module.css";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useChatMentions, useMarkMentionRead } from "@/app/hooks/use-chat";
+import { useTicketMessages } from "@/app/hooks/use-ticket-message";
+import InboxDrawer from "@/app/components/common/inbox-drawer";
+import GlobalSearchModal, {
+  type GlobalSearchItem,
+} from "@/app/components/common/global-search-modal";
+import type { UserDataModel } from "@/app/models/user";
 
 const { Header, Content, Footer } = Layout;
+
+function formatSearchDate(value?: string | null): string {
+  if (!value) return "Tanpa tanggal";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Tanpa tanggal";
+  return new Intl.DateTimeFormat("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function formatPriorityLabel(priority?: string | null): string {
+  const value = String(priority ?? "normal").trim().toLowerCase();
+  if (!value) return "Normal Priority";
+  return `${value.charAt(0).toUpperCase()}${value.slice(1)} Priority`;
+}
+
+function getPriorityColor(priority?: string | null): string {
+  const value = String(priority ?? "normal").trim().toLowerCase();
+  if (value === "high") return "red";
+  if (value === "medium") return "orange";
+  if (value === "low") return "blue";
+  return "default";
+}
+
+function getStudentSearchStatus(student: UserDataModel): string {
+  return String(
+    student.student_status ?? student.status ?? student.visa_status ?? "On Going",
+  );
+}
 
 export default function AdmissionLayout({
   children,
@@ -44,12 +81,24 @@ export default function AdmissionLayout({
   const { role, logout, user_id } = useAuth();
 
   const [openInbox, setOpenInbox] = useState(false);
+  const [openGlobalSearch, setOpenGlobalSearch] = useState(false);
+
   const { data: usersData } = useUsers({ enabled: Boolean(user_id) });
+  const { data: studentsData = [] } = useUserRoleStudents({
+    enabled: Boolean(user_id),
+  });
+  const { data: informationData = [] } = useInformationCountries({
+    enabled: Boolean(user_id),
+  });
   const { data: mentionMessages, refetch: refetchMentions } = useChatMentions({
     enabled: Boolean(user_id),
     user_id: user_id,
   });
   const { onMarkRead } = useMarkMentionRead();
+  const { data: ticketMessages = [] } = useTicketMessages({
+    enabled: Boolean(user_id),
+    withNotification: false,
+  });
 
   const userNameMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -58,6 +107,14 @@ export default function AdmissionLayout({
     });
     return map;
   }, [usersData]);
+
+  const ticketConversationIds = useMemo(() => {
+    return new Set(
+      ticketMessages
+        .map((item) => item.conversation_id)
+        .filter((value): value is string => Boolean(value)),
+    );
+  }, [ticketMessages]);
 
   const unreadCount = useMemo(
     () => (mentionMessages ?? []).filter((item) => !item.is_read).length,
@@ -69,43 +126,154 @@ export default function AdmissionLayout({
     refetchMentions();
   };
 
-  const closeFrawerInbox = () => {
+  const closeDrawerInbox = () => {
     setOpenInbox(false);
   };
 
-  const resolveStudentDetailPath = (studentId: string) => {
-    if ((role ?? "").toUpperCase() === "DIRECTOR") {
-      return `/director/dashboard/students-management/detail/${studentId}`;
-    }
-    return `/admission/dashboard/students-management/detail/${studentId}`;
-  };
+  const resolveStudentDetailPath = useCallback(
+    (studentId: string) => {
+      if ((role ?? "").toUpperCase() === "DIRECTOR") {
+        return `/director/dashboard/students-management/detail/${studentId}`;
+      }
+      return `/admission/dashboard/students-management/detail/${studentId}`;
+    },
+    [role],
+  );
 
   const handleOpenMention = async (item: {
     id: string;
     context_user_id?: string | null;
+    conversation_id?: string | null;
   }) => {
     await onMarkRead(item.id);
     if (!item.context_user_id) {
       return;
     }
-    router.push(resolveStudentDetailPath(item.context_user_id));
-    closeFrawerInbox();
+
+    const targetPath = resolveStudentDetailPath(item.context_user_id);
+    const fromTicketStudent = Boolean(
+      item.conversation_id && ticketConversationIds.has(item.conversation_id),
+    );
+    const params = new URLSearchParams();
+
+    if (fromTicketStudent) {
+      params.set("tab", "chat");
+      if (item.conversation_id) {
+        params.set("conversation_id", item.conversation_id);
+      }
+    } else {
+      params.set("tab", "overview");
+    }
+
+    router.push(`${targetPath}?${params.toString()}`);
+    closeDrawerInbox();
   };
 
-  const menu = (
-    <Menu>
-      <Menu.Item
-        key="logout"
-        icon={<LogoutOutlined />}
-        onClick={() => {
-          logout();
-          router.push("/login");
-        }}
-      >
-        Logout
-      </Menu.Item>
-    </Menu>
-  );
+  const searchItems = useMemo<GlobalSearchItem[]>(() => {
+    const studentItems = studentsData.map((student) => ({
+      id: `student-${student.id}`,
+      type: "student" as const,
+      title: student.name,
+      subtitle: [
+        student.stage?.country?.name,
+        student.name_campus,
+        student.visa_type ? student.visa_type.replace(/_/g, " ").toUpperCase() : undefined,
+      ]
+        .filter(Boolean)
+        .join(" • "),
+      description: student.email,
+      meta: `Status: ${getStudentSearchStatus(student)}`,
+      badge: "Student",
+      badgeColor: "blue",
+      href: resolveStudentDetailPath(String(student.id)),
+      keywords: [
+        student.name,
+        student.email,
+        student.no_phone,
+        student.name_campus,
+        student.degree,
+        student.name_degree,
+        student.visa_type,
+        student.stage?.country?.name,
+        student.student_status,
+        student.status,
+      ]
+        .filter(Boolean)
+        .join(" "),
+    }));
+
+    const infoItems = informationData.map((item) => ({
+      id: `update-${item.id}`,
+      type: "update" as const,
+      title: item.title,
+      subtitle: [item.country?.name, item.slug].filter(Boolean).join(" • "),
+      description: item.description ?? "Tidak ada deskripsi",
+      meta: `Updated ${formatSearchDate(item.updated_at)}`,
+      badge: formatPriorityLabel(item.priority),
+      badgeColor: getPriorityColor(item.priority),
+      href: "/admission/dashboard/home",
+      keywords: [
+        item.title,
+        item.slug,
+        item.description,
+        item.country?.name,
+        item.priority,
+      ]
+        .filter(Boolean)
+        .join(" "),
+    }));
+
+    const mentionItems = (mentionMessages ?? []).map((item) => ({
+      id: `mention-${item.id}`,
+      type: "mention" as const,
+      title: item.sender_name ? `Mention from ${item.sender_name}` : "Mention inbox",
+      subtitle: item.context_user_name ? `Student case • ${item.context_user_name}` : "Inbox notification",
+      description: item.text ?? "Tidak ada preview pesan",
+      meta: formatSearchDate(item.created_at),
+      badge: item.is_read ? "Read" : "Unread",
+      badgeColor: item.is_read ? "default" : "gold",
+      keywords: [
+        item.sender_name,
+        item.context_user_name,
+        item.text,
+        userNameMap.get(String(item.sender_id)),
+      ]
+        .filter(Boolean)
+        .join(" "),
+    }));
+
+    return [...studentItems, ...infoItems, ...mentionItems];
+  }, [informationData, mentionMessages, resolveStudentDetailPath, studentsData, userNameMap]);
+
+  const handleOpenSearchItem = async (item: GlobalSearchItem) => {
+    setOpenGlobalSearch(false);
+
+    if (item.type === "mention") {
+      const source = (mentionMessages ?? []).find(
+        (mention) => `mention-${mention.id}` === item.id,
+      );
+      if (source) {
+        await handleOpenMention(source);
+        return;
+      }
+    }
+
+    if (item.href) {
+      router.push(item.href);
+    }
+  };
+
+  const menuItems = [
+    {
+      key: "logout",
+      icon: <LogoutOutlined />,
+      label: "Logout",
+      onClick: () => {
+        logout();
+        router.push("/login");
+      },
+    },
+  ];
 
   return (
     <div>
@@ -119,9 +287,15 @@ export default function AdmissionLayout({
             <div className={styles.headerRight}>
               <Input
                 className={styles.search}
-                allowClear
+                readOnly
                 placeholder="Cari mahasiswa, berkas, atau pengumuman"
                 prefix={<SearchOutlined />}
+                suffix={<span className={styles.searchHint}>Search</span>}
+                onClick={() => setOpenGlobalSearch(true)}
+                onFocus={(event) => {
+                  event.target.blur();
+                  setOpenGlobalSearch(true);
+                }}
               />
               <Badge count={3} size="small" className={styles.badge}>
                 <button className={styles.iconButton} type="button">
@@ -139,7 +313,7 @@ export default function AdmissionLayout({
                 </button>
               </Badge>
               <Dropdown
-                overlay={menu}
+                menu={{ items: menuItems }}
                 placement="bottomRight"
                 trigger={["click"]}
               >
@@ -172,65 +346,22 @@ export default function AdmissionLayout({
         </Layout>
       </Layout>
 
-      <Drawer
-        title="Inbox"
+      <GlobalSearchModal
+        open={openGlobalSearch}
+        onClose={() => setOpenGlobalSearch(false)}
+        items={searchItems}
+        onOpenItem={handleOpenSearchItem}
+        title="Admission Search"
+      />
+
+      <InboxDrawer
         open={openInbox}
-        onClose={() => closeFrawerInbox()}
-        placement="left"
-        width={600}
-      >
-        <div className={styles.inboxList}>
-          {mentionMessages?.length ? (
-            mentionMessages.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() =>
-                  handleOpenMention({
-                    id: item.id,
-                    context_user_id: item.context_user_id,
-                  })
-                }
-                className={`${styles.inboxItem} ${
-                  item.is_read ? styles.inboxItemRead : styles.inboxItemUnread
-                }`}
-              >
-                <div className={styles.inboxHeader}>
-                  <Typography.Text className={styles.inboxTitle}>
-                    Student {item.context_user_name ||
-                      (item.context_user_id
-                        ? userNameMap.get(item.context_user_id)
-                        : undefined) ||
-                      "Student"}
-                  </Typography.Text>
-                  {!item.is_read && (
-                    <Tag color="gold" className={styles.inboxTag}>
-                      Baru
-                    </Tag>
-                  )}
-                </div>
-                <Typography.Text className={styles.inboxMeta}>
-                  {item.sender_name
-                    ? `Dari ${item.sender_name}`
-                    : "Mention baru"}
-                </Typography.Text>
-                <Typography.Text className={styles.inboxPreview}>
-                  {item.text || "Lampiran baru"}
-                </Typography.Text>
-                <Typography.Text className={styles.inboxTime}>
-                  {new Date(item.created_at).toLocaleString()}
-                </Typography.Text>
-              </button>
-            ))
-          ) : (
-            <div className={styles.inboxEmpty}>
-              <Typography.Text type="secondary">
-                Belum ada mention.
-              </Typography.Text>
-            </div>
-          )}
-        </div>
-      </Drawer>
+        onClose={() => closeDrawerInbox()}
+        items={mentionMessages ?? []}
+        userNameMap={userNameMap}
+        onMarkItemRead={onMarkRead}
+        onOpenItem={handleOpenMention}
+      />
     </div>
   );
 }

@@ -24,10 +24,8 @@ type FinalizePdfRequest = {
 };
 
 function getSupabaseServerClient() {
-  const supabaseUrl =
-    process.env.SUPABASE_URL?.trim() ||
-    process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  const serviceRoleKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
 
   if (!supabaseUrl || !serviceRoleKey) {
     return null;
@@ -54,10 +52,15 @@ function buildPdfName(sourceFileName?: string) {
 }
 
 export async function POST(req: NextRequest) {
-  const body = (await req.json().catch(() => null)) as FinalizePdfRequest | null;
+  const body = (await req
+    .json()
+    .catch(() => null)) as FinalizePdfRequest | null;
   if (!body?.student_id || !body.source_file_url || !body.source_file_path) {
     return NextResponse.json(
-      { message: "student_id, source_file_url, dan source_file_path wajib diisi." },
+      {
+        message:
+          "student_id, source_file_url, dan source_file_path wajib diisi.",
+      },
       { status: 400 },
     );
   }
@@ -100,16 +103,20 @@ export async function POST(req: NextRequest) {
 
     const pdfBuffer = await fs.readFile(outputPath);
     const pdfPath = buildPdfPath(body.source_file_path);
-    const { error } = await supabase.storage.from("student-portal").upload(pdfPath, pdfBuffer, {
-      upsert: true,
-      contentType: "application/pdf",
-    });
+    const { error } = await supabase.storage
+      .from("student-portal")
+      .upload(pdfPath, pdfBuffer, {
+        upsert: true,
+        contentType: "application/pdf",
+      });
 
     if (error) {
       return NextResponse.json({ message: error.message }, { status: 500 });
     }
 
-    const { data } = supabase.storage.from("student-portal").getPublicUrl(pdfPath);
+    const { data } = supabase.storage
+      .from("student-portal")
+      .getPublicUrl(pdfPath);
 
     return NextResponse.json({
       result: {
@@ -137,6 +144,8 @@ export async function POST(req: NextRequest) {
       { status: 500 },
     );
   } finally {
-    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
+    await fs
+      .rm(tempDir, { recursive: true, force: true })
+      .catch(() => undefined);
   }
 }

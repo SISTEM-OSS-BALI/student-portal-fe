@@ -1,25 +1,30 @@
 import { MenuProps } from "antd";
-import { useRouter } from "next/navigation";
 // Font Awesome (React)
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faBriefcase } from "@fortawesome/free-solid-svg-icons";
 import menuLabel from "@/app/utils/menu-label";
 
 export const SidebarStudent = (): MenuProps["items"] => {
-  const router = useRouter();
-
   const sidebarMenu: MenuProps["items"] = [
     {
       key: "/student/dashboard/home",
       label: menuLabel("Dashboard"),
       icon: <FontAwesomeIcon icon={faBriefcase} style={{ fontSize: 16 }} />,
-      onClick: () => router.push("/student/dashboard/home"),
     },
     {
-      key: "/student/dashboard/upload-documents",
-      label: menuLabel("Upload Dokumen"),
+      key: "/student/dashboard/upload-personal-information",
+      label: menuLabel("Upload Personal Information"),
       icon: <FontAwesomeIcon icon={faBriefcase} style={{ fontSize: 16 }} />,
-      onClick: () => router.push("/student/dashboard/upload-documents"),
+    },
+    {
+      key: "/student/dashboard/upload-country-document",
+      label: menuLabel("Upload Country Document"),
+      icon: <FontAwesomeIcon icon={faBriefcase} style={{ fontSize: 16 }} />,
+    },
+    {
+      key: "/student/dashboard/chat",
+      label: menuLabel("Chat"),
+      icon: <FontAwesomeIcon icon={faBriefcase} style={{ fontSize: 16 }} />,
     },
   ];
 

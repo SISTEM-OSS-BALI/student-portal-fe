@@ -82,6 +82,7 @@ export const useCreateUser = () => {
       api.post(usersUrl, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [queryKey] });
+      queryClient.invalidateQueries({ queryKey: ["user-role-students"] });
       notify({ type: "success", entity, action: "created" });
     },
     onError: () => {
@@ -106,6 +107,7 @@ export const useUpdateUser = () => {
     }) => api.put(`${usersUrl}/${id}`, payload),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: [queryKey] });
+      queryClient.invalidateQueries({ queryKey: ["user-role-students"] });
       queryClient.invalidateQueries({ queryKey: [entity, variables.id] });
       notify({ type: "success", entity, action: "updated" });
     },
@@ -125,6 +127,7 @@ export const useDeleteUser = () => {
     mutationFn: async (id: string | number) => api.delete(`${usersUrl}/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [queryKey] });
+      queryClient.invalidateQueries({ queryKey: ["user-role-students"] });
       notify({ type: "success", entity, action: "deleted" });
     },
     onError: () => {
@@ -179,6 +182,7 @@ export const usePatchQuotaTranslation = () => {
       }),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: [queryKey] });
+      queryClient.invalidateQueries({ queryKey: ["user-role-students"] });
       queryClient.invalidateQueries({ queryKey: [entity, variables.id] });
       notify({ type: "success", entity, action: "patched" });
     },
@@ -188,4 +192,63 @@ export const usePatchQuotaTranslation = () => {
   });
 
   return { onPatch, onPatchLoading };
+};
+
+export const useUpdateVisaStatusUser = () => {
+  const queryClient = useQueryClient();
+  const notify = useMainNotification();
+
+  const { mutateAsync: onUpdate, isPending: onUpdateLoading } = useMutation({
+    mutationFn: async ({
+      id,
+      visa_status,
+    }: {
+      id: string | number;
+      visa_status: string;
+    }) =>
+      api.patch(`${usersUrl}/${id}/visa-status`, {
+        visa_status,
+      }),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: [queryKey] });
+      queryClient.invalidateQueries({ queryKey: ["user-role-students"] });
+      queryClient.invalidateQueries({ queryKey: [entity, variables.id] });
+      notify({ type: "success", entity, action: "updated" });
+    },
+    onError: () => {
+      notify({ type: "error", entity, action: "updated" });
+    },
+  });
+
+  return { onUpdate, onUpdateLoading };
+};
+
+
+export const useUpdateStudentStatusUser = () => {
+  const queryClient = useQueryClient();
+  const notify = useMainNotification();
+
+  const { mutateAsync: onUpdate, isPending: onUpdateLoading } = useMutation({
+    mutationFn: async ({
+      id,
+      student_status,
+    }: {
+      id: string | number;
+      student_status: string;
+    }) =>
+      api.patch(`${usersUrl}/${id}/student-status`, {
+        student_status,
+      }),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: [queryKey] });
+      queryClient.invalidateQueries({ queryKey: ["user-role-students"] });
+      queryClient.invalidateQueries({ queryKey: [entity, variables.id] });
+      notify({ type: "success", entity, action: "updated" });
+    },
+    onError: () => {
+      notify({ type: "error", entity, action: "updated" });
+    },
+  });
+
+  return { onUpdate, onUpdateLoading };
 };

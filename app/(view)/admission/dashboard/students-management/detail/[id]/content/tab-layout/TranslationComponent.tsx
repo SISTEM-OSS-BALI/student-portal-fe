@@ -22,7 +22,6 @@ import {
   DeleteOutlined,
   EyeOutlined,
   FileTextOutlined,
-  GlobalOutlined,
   PlusOutlined,
   TranslationOutlined,
 } from "@ant-design/icons";
@@ -38,6 +37,7 @@ import { useAuth } from "@/app/utils/use-auth";
 import { useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { usePatchQuotaTranslation } from "@/app/hooks/use-users";
+import { buildFilePreviewUrl } from "@/app/utils/file-preview";
 
 const statusColor = (value: string) => {
   const key = value.toLowerCase();
@@ -66,6 +66,22 @@ type TranslationRow = DocumentWithUrl & {
   file_type?: string | null;
   page_count?: number | null;
 };
+
+type TranslationQuotaError = Error & {
+  requiredQuota?: number;
+  remainingQuota?: number;
+};
+
+type ApiError = Error & {
+  response?: {
+    data?: {
+      error?: {
+        code?: string;
+      };
+    };
+  };
+};
+
 const getDocumentUrl = (doc: TranslationRow) =>
   doc.file_url ?? doc.public_url ?? doc.url ?? null;
 
@@ -321,9 +337,11 @@ export default function TranslationComponent({
         const remainingQuota = Number(translation_quota ?? 0);
         const requiredQuota = pageCount;
         if (requiredQuota > remainingQuota) {
-          const quotaError = new Error("translation_quota_exceeded_local");
-          (quotaError as any).requiredQuota = requiredQuota;
-          (quotaError as any).remainingQuota = remainingQuota;
+          const quotaError: TranslationQuotaError = new Error(
+            "translation_quota_exceeded_local",
+          );
+          quotaError.requiredQuota = requiredQuota;
+          quotaError.remainingQuota = remainingQuota;
           throw quotaError;
         }
 
@@ -355,7 +373,8 @@ export default function TranslationComponent({
           message: "Upload berhasil",
           description: `${row.label ?? "Dokumen"} berhasil diunggah (${pageCount} halaman).`,
         });
-      } catch (err: any) {
+      } catch (error) {
+        const err = error as TranslationQuotaError & ApiError;
         if (err?.message === "translation_quota_exceeded_local") {
           const requiredQuota = Number(err?.requiredQuota ?? 0);
           const remainingQuota = Number(err?.remainingQuota ?? 0);
@@ -386,6 +405,7 @@ export default function TranslationComponent({
     [
       docInternalCodeMap,
       docPatternMap,
+      notification,
       onCreate,
       onUpdate,
       queryClient,
@@ -413,14 +433,15 @@ export default function TranslationComponent({
           message: "Dokumen dihapus",
           description: `${row.label ?? "Dokumen"} berhasil dihapus.`,
         });
-      } catch (err: any) {
+      } catch (error) {
+        const err = error as ApiError;
         notification.error({
           message: "Gagal menghapus",
           description: err?.message ?? "Terjadi kesalahan saat menghapus.",
         });
       }
     },
-    [onDelete, queryClient, student_id],
+    [notification, onDelete, queryClient, student_id],
   );
 
   const translationColumns: ColumnsType<TranslationRow> = useMemo(
@@ -482,7 +503,15 @@ export default function TranslationComponent({
               <Button
                 icon={<EyeOutlined />}
                 disabled={!fileUrl}
-                href={fileUrl ?? undefined}
+                href={
+                  fileUrl
+                    ? buildFilePreviewUrl(
+                        fileUrl,
+                        record.file_name ?? `${record.label ?? "document"}.pdf`,
+                        record.file_type,
+                      )
+                    : undefined
+                }
                 target={fileUrl ? "_blank" : undefined}
               />
               <Upload
@@ -546,7 +575,15 @@ export default function TranslationComponent({
           return (
             <Tag color={fileUrl ? "blue" : "default"}>
               {fileUrl ? (
-                <Link href={fileUrl} target="_blank" rel="noreferrer">
+                <Link
+                  href={buildFilePreviewUrl(
+                    fileUrl,
+                    record.file_name ?? `${record.label ?? "document"}.pdf`,
+                    record.file_type,
+                  )}
+                  target="_blank"
+                  rel="noreferrer"
+                >
                   Buka Dokumen
                 </Link>
               ) : (

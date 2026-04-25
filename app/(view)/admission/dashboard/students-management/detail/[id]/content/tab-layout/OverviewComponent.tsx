@@ -50,6 +50,24 @@ const getUserHandle = (user: UserDataModel) => {
   return user.name.toLowerCase().replace(/\s+/g, "");
 };
 
+const formatRoleLabel = (value?: string | null) => {
+  const raw = String(value ?? "").trim();
+  return raw ? raw.replace(/_/g, " ").toUpperCase() : "UNKNOWN";
+};
+
+const getRoleTagColor = (value?: string | null) => {
+  switch (formatRoleLabel(value)) {
+    case "DIRECTOR":
+      return "gold";
+    case "ADMISSION":
+      return "blue";
+    case "STUDENT":
+      return "green";
+    default:
+      return "default";
+  }
+};
+
 const extractConversationId = (data: unknown): string | undefined => {
   if (!data || typeof data !== "object") return undefined;
   const payload = data as { result?: unknown; id?: unknown };
@@ -280,6 +298,14 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
     return getUserHandle(currentUser);
   }, [currentUser]);
 
+  const internalUserIds = useMemo(() => {
+    return new Set(
+      (usersData ?? [])
+        .filter((user) => isMentionableRole(user.role))
+        .map((user) => String(user.id)),
+    );
+  }, [usersData]);
+
   const chatPeerId = selectedPeerId;
 
   const directConversation = useMemo(() => {
@@ -295,9 +321,13 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
 
   const fallbackConversationId = useMemo(() => {
     if (!chatConversations || !currentUserId) return undefined;
-    const mine = chatConversations.filter((conversation) =>
-      conversation.member_ids?.includes(currentUserId),
-    );
+    const mine = chatConversations.filter((conversation) => {
+      if (conversation.type !== "direct") return false;
+      if (!conversation.member_ids?.includes(currentUserId)) return false;
+      return (conversation.member_ids ?? []).every((memberId) =>
+        internalUserIds.has(String(memberId)),
+      );
+    });
     if (!mine.length) return undefined;
     const sorted = [...mine].sort((a, b) => {
       const timeA = a.updated_at ? new Date(a.updated_at).getTime() : 0;
@@ -305,7 +335,7 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
       return timeB - timeA;
     });
     return sorted[0]?.id;
-  }, [chatConversations, currentUserId]);
+  }, [chatConversations, currentUserId, internalUserIds]);
 
   const conversation_id = activeConversationId ?? fallbackConversationId;
   const { data: chatMessagesData } = useChatMessages({ conversation_id });
@@ -332,6 +362,25 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
       ),
     [chatMessagesData, conversation_id, localMessagesByConversation, mergeChatMessages],
   );
+
+  const internalChatMessages = useMemo(() => {
+    return mergedChatMessages.filter((message) => {
+      const senderRole = String(
+        message.sender_role ??
+          (String(message.sender_id) === String(currentUserId)
+            ? currentUser?.role
+            : String(message.sender_id) === String(studentId)
+              ? "STUDENT"
+              : ""),
+      ).toUpperCase();
+
+      if (senderRole === "STUDENT") {
+        return false;
+      }
+
+      return String(message.sender_id) !== String(studentId);
+    });
+  }, [mergedChatMessages, currentUserId, currentUser?.role, studentId]);
 
   const handleIncomingMessage = useCallback(
     (message: ChatMessage) => {
@@ -389,7 +438,7 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
       );
       return (result.data?.result ?? result.data) as ChatMessage;
     },
-    [],
+    [studentId],
   );
 
   const handleChatTextChange = useCallback(
@@ -553,7 +602,7 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
         }}
       >
         <Card
-          bodyStyle={{ padding: 16 }}
+          styles={{ body: { padding: 16 } }}
           style={{
             borderRadius: 16,
             borderColor: "#e5e7eb",
@@ -595,7 +644,7 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
         </Card>
 
         <Card
-          bodyStyle={{ padding: 16 }}
+          styles={{ body: { padding: 16 } }}
           style={{
             borderRadius: 16,
             borderColor: "#e5e7eb",
@@ -639,7 +688,7 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
       </div>
 
       <Card
-        bodyStyle={{ padding: 16 }}
+        styles={{ body: { padding: 16 } }}
         style={{
           borderRadius: 16,
           borderColor: "#e5e7eb",
@@ -661,7 +710,7 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
           )}
           <div style={{ maxHeight: 260, overflow: "auto" }}>
             <List
-              dataSource={mergedChatMessages}
+              dataSource={internalChatMessages}
               locale={{ emptyText: "Belum ada pesan" }}
               renderItem={(message) => {
                 const isMine = message.sender_id === currentUserId;
@@ -674,6 +723,14 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
                   (currentUserHandle &&
                     (message.text ?? "").includes(`@${currentUserHandle}`));
                 const attachments = message.attachments ?? [];
+                const senderName =
+                  message.sender_name ??
+                  (isMine
+                    ? (currentUser?.name ?? "You")
+                    : (props.detailStudent?.name ?? "Student"));
+                const senderRole =
+                  message.sender_role ??
+                  (isMine ? (currentUser?.role ?? "ADMISSION") : "STUDENT");
                 return (
                   <List.Item style={{ paddingInline: 0, border: "none" }}>
                     <Flex
@@ -695,11 +752,24 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
                           borderRadius: 12,
                         }}
                       >
-                        {isMentioned && !isMine && (
-                          <Tag color="gold" style={{ margin: 0 }}>
-                            Mentioned you
-                          </Tag>
-                        )}
+                        <Flex align="center" justify="space-between" gap={10} wrap>
+                          <Space size={8} align="center" wrap>
+                            <Typography.Text strong style={{ fontSize: 12 }}>
+                              {senderName}
+                            </Typography.Text>
+                            <Tag
+                              color={getRoleTagColor(senderRole)}
+                              style={{ margin: 0, fontSize: 10 }}
+                            >
+                              {formatRoleLabel(senderRole)}
+                            </Tag>
+                            {isMentioned && !isMine && (
+                              <Tag color="gold" style={{ margin: 0 }}>
+                                Mentioned you
+                              </Tag>
+                            )}
+                          </Space>
+                        </Flex>
                         {message.text && (
                           <Typography.Text style={{ fontSize: 13 }}>
                             {renderMessageText(message.text)}

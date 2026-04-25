@@ -1,6 +1,11 @@
 "use client";
 
-import { useUser, useUsers } from "@/app/hooks/use-users";
+import { useUsers } from "@/app/hooks/use-users";
+import { useDocumentTranslations } from "@/app/hooks/use-document-translations";
+import { useAnswerApprovals } from "@/app/hooks/use-answer-approvals";
+import { useGeneratedCvAiDocuments } from "@/app/hooks/use-generated-cv-ai-documents";
+import { useGeneratedStatementLetterAiDocuments } from "@/app/hooks/use-generated-statement-letter-ai-documents";
+import { useGeneratedSponsorLetterAiDocuments } from "@/app/hooks/use-generated-sponsor-letter-ai-documents";
 import { useAuth } from "@/app/utils/use-auth";
 import {
   useChatConversations,
@@ -10,38 +15,34 @@ import {
 import { useChatSocket } from "@/app/hooks/use-chat-socket";
 import type { ChatMessage } from "@/app/models/chat";
 import type { UserDataModel } from "@/app/models/user";
-import type { NoteStudentDataModel } from "@/app/models/notes-student";
 import {
   App,
   Avatar,
   Button,
   Card,
   Flex,
+  Image,
   List,
   Mentions,
   Progress,
   Space,
-  Steps,
-  Tabs,
   Tag,
   Tooltip,
   Typography,
   Upload,
 } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "next/navigation";
-import ModalNotesComponent from "./ModalNotesComponent";
-import { useStudentNotes } from "@/app/hooks/use-student-notes";
-import {
-  CloseOutlined,
-  DeleteOutlined,
-  EditOutlined,
-  PaperClipOutlined,
-} from "@ant-design/icons";
+import { useRouter } from "next/navigation";
+import { CloseOutlined, PaperClipOutlined } from "@ant-design/icons";
 import api from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 import type { UploadedChatAttachment } from "@/app/vendor/chat-upload";
 import { uploadChatFiles } from "@/app/vendor/chat-upload";
+
+interface OverviewComponentProps {
+  detailStudent: UserDataModel;
+  student_id: string;
+}
 
 const isMentionableRole = (role?: string) => {
   const r = (role ?? "").toUpperCase();
@@ -53,6 +54,24 @@ const getUserHandle = (user: UserDataModel) => {
   const local = email.split("@")[0];
   if (local) return local.toLowerCase();
   return user.name.toLowerCase().replace(/\s+/g, "");
+};
+
+const formatRoleLabel = (value?: string | null) => {
+  const raw = String(value ?? "").trim();
+  return raw ? raw.replace(/_/g, " ").toUpperCase() : "UNKNOWN";
+};
+
+const getRoleTagColor = (value?: string | null) => {
+  switch (formatRoleLabel(value)) {
+    case "DIRECTOR":
+      return "gold";
+    case "ADMISSION":
+      return "blue";
+    case "STUDENT":
+      return "green";
+    default:
+      return "default";
+  }
 };
 
 const extractConversationId = (data: unknown): string | undefined => {
@@ -247,31 +266,14 @@ const useMentionHelpers = (
   };
 };
 
-export default function DetailStudentPage() {
-  const params = useParams();
-  const rawId = params.id;
+export default function OverviewComponent({ ...props}: OverviewComponentProps)  {
+  const rawId = props.student_id;
   const studentId = Array.isArray(rawId) ? rawId[0] : rawId;
 
-  const { data: detailStudentData } = useUser({ id: studentId as string });
-  const [activeTab, setActiveTab] = useState("overview");
-  const [isModalNotesOpen, setIsModalNotesOpen] = useState(false);
-  const [selectedNote, setSelectedNote] = useState<NoteStudentDataModel | null>(
-    null,
-  );
-  const {
-    data: notesData,
-    onCreate: onCreateNote,
-    onCreateLoading: onCreateNoteLoading,
-    onDelete: onDeleteNote,
-    onDeleteLoading: onDeleteNoteLoading,
-    onUpdate: onUpdateNote,
-    onUpdateLoading: onUpdateNoteLoading,
-  } = useStudentNotes({
-    queryString: studentId ? `user_id=${studentId}` : undefined,
-    enabled: Boolean(studentId),
-  });
+  const detailStudentData = props.detailStudent;
 
   const { notification } = App.useApp();
+  const router = useRouter();
   const queryClient = useQueryClient();
   const { user_id: currentUserId } = useAuth();
   const { data: usersData } = useUsers({ enabled: Boolean(currentUserId) });
@@ -290,6 +292,27 @@ export default function DetailStudentPage() {
   >([]);
   const [uploadingAttachments, setUploadingAttachments] = useState(false);
 
+  const { data: translationItems = [] } = useDocumentTranslations({
+    queryString: studentId ? `student_id=${studentId}` : undefined,
+    enabled: Boolean(studentId),
+  });
+  const { data: answerApprovalItems = [] } = useAnswerApprovals({
+    queryString: studentId ? `student_id=${studentId}` : undefined,
+    enabled: Boolean(studentId),
+  });
+  const { data: cvDocuments = [] } = useGeneratedCvAiDocuments({
+    studentId,
+    enabled: Boolean(studentId),
+  });
+  const { data: statementDocuments = [] } = useGeneratedStatementLetterAiDocuments({
+    studentId,
+    enabled: Boolean(studentId),
+  });
+  const { data: sponsorDocuments = [] } = useGeneratedSponsorLetterAiDocuments({
+    studentId,
+    enabled: Boolean(studentId),
+  });
+
   const { mentionOptionNodes, extractMentionUserIds, renderMessageText } =
     useMentionHelpers(usersData, currentUserId);
 
@@ -302,32 +325,6 @@ export default function DetailStudentPage() {
     if (!currentUser) return "";
     return getUserHandle(currentUser);
   }, [currentUser]);
-
-  const studentName = detailStudentData?.name ?? "Student";
-  const studentEmail = detailStudentData?.email ?? "student@email.com";
-  const studentCountry =
-    detailStudentData?.stage?.country?.name ?? "Belum ada negara";
-  const studentCampus = detailStudentData?.name_campus ?? "Belum ada kampus";
-  const studentDegree = detailStudentData?.degree ?? "Belum ada degree";
-  const visa_typeLabel = detailStudentData?.visa_type
-    ? detailStudentData.visa_type.replace(/_/g, " ").toUpperCase()
-    : "Belum dipilih";
-  const statusLabel = detailStudentData?.status ?? "ON GOING";
-
-  const notesSource = useMemo(
-    () => (notesData?.length ? notesData : (detailStudentData?.notes ?? [])),
-    [detailStudentData?.notes, notesData],
-  );
-
-  const notesItems = useMemo(() => {
-    return notesSource.map((note) => ({
-      id: note.id,
-      author: "Internal",
-      note: note.content ?? "-",
-      time: note.created_at ? new Date(note.created_at).toLocaleString() : "-",
-      raw: note,
-    }));
-  }, [notesSource]);
 
   const chatPeerId = selectedPeerId;
 
@@ -344,8 +341,10 @@ export default function DetailStudentPage() {
 
   const fallbackConversationId = useMemo(() => {
     if (!chatConversations || !currentUserId) return undefined;
-    const mine = chatConversations.filter((conversation) =>
-      conversation.member_ids?.includes(currentUserId),
+    const mine = chatConversations.filter(
+      (conversation) =>
+        conversation.type === "direct" &&
+        conversation.member_ids?.includes(currentUserId),
     );
     if (!mine.length) return undefined;
     const sorted = [...mine].sort((a, b) => {
@@ -438,7 +437,7 @@ export default function DetailStudentPage() {
       );
       return (result.data?.result ?? result.data) as ChatMessage;
     },
-    [],
+    [studentId],
   );
 
   const handleChatTextChange = useCallback(
@@ -564,51 +563,21 @@ export default function DetailStudentPage() {
     return () => clearInterval(interval);
   }, [conversation_id, connected, lastError, queryClient]);
 
-  const handleOpenModalNotes = () => {
-    setSelectedNote(null);
-    setIsModalNotesOpen(true);
-  };
+  const formatRelativeTime = useCallback((value?: string | null) => {
+    if (!value) return "Updated recently";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "Updated recently";
 
-  const handleCloseModalNotes = () => {
-    setSelectedNote(null);
-    setIsModalNotesOpen(false);
-  };
-
-  const handleSubmitNote = (values: { content?: string }) => {
-    const content = values.content?.trim();
-    if (!content) return;
-
-    if (selectedNote?.id) {
-      onUpdateNote({
-        id: selectedNote.id,
-        payload: { content },
-      });
-    } else if (studentId) {
-      onCreateNote({
-        user_id: String(studentId),
-        content,
-      });
-    }
-    setIsModalNotesOpen(false);
-    setSelectedNote(null);
-  };
-
-  const handleEditNote = (note: NoteStudentDataModel) => {
-    setSelectedNote(note);
-    setIsModalNotesOpen(true);
-  };
-
-  const handleDeleteNote = async (note: NoteStudentDataModel) => {
-    if (!note.id) return;
-    await onDeleteNote(note.id);
-  };
-
-  const initials = useMemo(() => {
-    const parts = studentName.split(" ").filter(Boolean);
-    if (parts.length === 0) return "ST";
-    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-    return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
-  }, [studentName]);
+    const diffMs = Date.now() - date.getTime();
+    const minutes = Math.floor(diffMs / 60000);
+    if (minutes < 1) return "just now";
+    if (minutes < 60) return `${minutes} minute${minutes > 1 ? "s" : ""} ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours} hour${hours > 1 ? "s" : ""} ago`;
+    const days = Math.floor(hours / 24);
+    if (days === 1) return "1 day ago";
+    return `${days} days ago`;
+  }, []);
 
   const stepsSource = useMemo(() => {
     const raw = detailStudentData?.stage?.country?.steps ?? [];
@@ -619,33 +588,132 @@ export default function DetailStudentPage() {
     });
   }, [detailStudentData?.stage?.country?.steps]);
 
-  const progressSteps = stepsSource.map((step, index) => ({
-    title: step.label,
-    description:
-      step.children?.map((child) => child.label).join(", ") ??
-      "Belum ada detail",
-    status: index === 0 ? ("process" as const) : ("wait" as const),
-  }));
+  const currentStepIndex = useMemo(() => {
+    const currentStepId = String(detailStudentData?.current_step_id ?? "");
+    if (!currentStepId) return -1;
+    return stepsSource.findIndex((step) => step.id === currentStepId);
+  }, [detailStudentData?.current_step_id, stepsSource]);
 
-  const activityItems = [
-    {
-      title: "Student uploaded passport",
-      meta: "Step 1 • Ngurah Manik Mahardika",
-      time: "2 hours ago",
-    },
-    {
-      title: "Admission uploaded translated transcript",
-      meta: "Step 2 • Kimfa",
-      time: "5 hours ago",
-    },
-    {
-      title: "CV sent to Director for approval",
-      meta: "Step 3 • Kimfa",
-      time: "1 day ago",
-    },
-  ];
+  const progressSummary = useMemo(() => {
+    const totalSteps = stepsSource.length;
+    const visaGranted = String(detailStudentData?.visa_status ?? "").toLowerCase().includes("grant");
+    const completedSteps = visaGranted
+      ? totalSteps
+      : currentStepIndex >= 0
+        ? currentStepIndex
+        : 0;
+    const percent = totalSteps ? Math.round((completedSteps / totalSteps) * 100) : 0;
 
-  const overviewContent = (
+    return {
+      totalSteps,
+      completedSteps,
+      percent,
+    };
+  }, [currentStepIndex, detailStudentData?.visa_status, stepsSource.length]);
+
+  const activityItems = useMemo(() => {
+    const items: Array<{ id: string; title: string; meta: string; time: string; sortTime: number }> = [];
+
+    translationItems.forEach((item) => {
+      const rawTime = item.updated_at ?? item.created_at;
+      if (!rawTime) return;
+      items.push({
+        id: `translation-${item.id}`,
+        title: item.file_name
+          ? `Admission uploaded translated ${item.file_name}`
+          : "Admission uploaded translated document",
+        meta: `${detailStudentData?.current_step_id ? (stepsSource.find((step) => step.id === detailStudentData.current_step_id)?.label ?? "Step") : "Step"} • Admission`,
+        time: formatRelativeTime(rawTime),
+        sortTime: new Date(rawTime).getTime(),
+      });
+    });
+
+    answerApprovalItems.forEach((item) => {
+      const rawTime = item.reviewed_at ?? item.updated_at ?? item.created_at;
+      if (!rawTime) return;
+      const status = String(item.status ?? "").toLowerCase();
+      items.push({
+        id: `approval-${item.id}`,
+        title: status === "approved" ? "Document approved by Director" : "Document waiting director review",
+        meta: `${detailStudentData?.current_step_id ? (stepsSource.find((step) => step.id === detailStudentData.current_step_id)?.label ?? "Step") : "Step"} • Director`,
+        time: formatRelativeTime(rawTime),
+        sortTime: new Date(rawTime).getTime(),
+      });
+    });
+
+    cvDocuments.forEach((item) => {
+      const rawTime = item.updated_at ?? item.created_at;
+      if (!rawTime) return;
+      items.push({
+        id: `cv-${item.id}`,
+        title: String(item.status ?? "").toLowerCase() === "submitted_to_director"
+          ? "CV sent to Director for approval"
+          : "CV updated",
+        meta: `${detailStudentData?.current_step_id ? (stepsSource.find((step) => step.id === detailStudentData.current_step_id)?.label ?? "Step") : "Step"} • Admission`,
+        time: formatRelativeTime(rawTime),
+        sortTime: new Date(rawTime).getTime(),
+      });
+    });
+
+    [...statementDocuments, ...sponsorDocuments].forEach((item, index) => {
+      const rawTime = item.updated_at ?? item.created_at;
+      if (!rawTime) return;
+      const label = index < statementDocuments.length ? "Statement letter" : "Sponsor letter";
+      const status = String(item.status ?? "").toLowerCase();
+      items.push({
+        id: `letter-${item.id}`,
+        title: status === "submitted_to_director"
+          ? `${label} sent to Director for approval`
+          : `${label} updated`,
+        meta: `${detailStudentData?.current_step_id ? (stepsSource.find((step) => step.id === detailStudentData.current_step_id)?.label ?? "Step") : "Step"} • Admission`,
+        time: formatRelativeTime(rawTime),
+        sortTime: new Date(rawTime).getTime(),
+      });
+    });
+
+    if (detailStudentData?.student_status_updated_at) {
+      items.push({
+        id: `student-status-${detailStudentData.id}`,
+        title: `Student status updated to ${detailStudentData.student_status ?? "On Going"}`,
+        meta: `${detailStudentData.student_status_updated_by_name ?? "Admission"} • Student case`,
+        time: formatRelativeTime(detailStudentData.student_status_updated_at),
+        sortTime: new Date(detailStudentData.student_status_updated_at).getTime(),
+      });
+    }
+
+    if (detailStudentData?.visa_granted_at) {
+      items.push({
+        id: `visa-${detailStudentData.id}`,
+        title: `Visa status updated to ${detailStudentData.visa_status ?? "Grant"}`,
+        meta: `${stepsSource.at(-1)?.label ?? "Final Step"} • System`,
+        time: formatRelativeTime(detailStudentData.visa_granted_at),
+        sortTime: new Date(detailStudentData.visa_granted_at).getTime(),
+      });
+    }
+
+    return items
+      .filter((item) => !Number.isNaN(item.sortTime))
+      .sort((a, b) => b.sortTime - a.sortTime)
+      .slice(0, 6);
+  }, [
+    answerApprovalItems,
+    cvDocuments,
+    detailStudentData?.current_step_id,
+    detailStudentData?.id,
+    detailStudentData?.student_status,
+    detailStudentData?.student_status_updated_at,
+    detailStudentData?.student_status_updated_by_name,
+    detailStudentData?.visa_granted_at,
+    detailStudentData?.visa_status,
+    formatRelativeTime,
+    sponsorDocuments,
+    statementDocuments,
+    stepsSource,
+    translationItems,
+  ]);
+
+
+  return (
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
       <div
         style={{
@@ -655,7 +723,7 @@ export default function DetailStudentPage() {
         }}
       >
         <Card
-          bodyStyle={{ padding: 16 }}
+          styles={{ body: { padding: 16 } }}
           style={{
             borderRadius: 16,
             borderColor: "#e5e7eb",
@@ -667,10 +735,10 @@ export default function DetailStudentPage() {
             <div>
               <Typography.Text strong>Progress Ringkasan</Typography.Text>
               <Typography.Text type="secondary" style={{ display: "block" }}>
-                3 dari 6 tugas selesai
+                {`${progressSummary.completedSteps} dari ${progressSummary.totalSteps || 0} tugas selesai`}
               </Typography.Text>
-              <Progress percent={50} showInfo={false} />
-              <Typography.Text type="secondary">50% Complete</Typography.Text>
+              <Progress percent={progressSummary.percent} showInfo={false} />
+              <Typography.Text type="secondary">{progressSummary.percent}% Complete</Typography.Text>
             </div>
             <Space direction="vertical" size={10} style={{ width: "100%" }}>
               {stepsSource.length ? (
@@ -697,7 +765,7 @@ export default function DetailStudentPage() {
         </Card>
 
         <Card
-          bodyStyle={{ padding: 16 }}
+          styles={{ body: { padding: 16 } }}
           style={{
             borderRadius: 16,
             borderColor: "#e5e7eb",
@@ -714,7 +782,7 @@ export default function DetailStudentPage() {
               }}
             >
               <Typography.Text strong>Recent Activity Summary</Typography.Text>
-              <Typography.Link>View all</Typography.Link>
+              <Typography.Link onClick={() => router.push(`/director/dashboard/students-management/detail/${studentId}?tab=activity-log`)}>View all</Typography.Link>
             </div>
             <List
               dataSource={activityItems}
@@ -741,7 +809,7 @@ export default function DetailStudentPage() {
       </div>
 
       <Card
-        bodyStyle={{ padding: 16 }}
+        styles={{ body: { padding: 16 } }}
         style={{
           borderRadius: 16,
           borderColor: "#e5e7eb",
@@ -776,6 +844,14 @@ export default function DetailStudentPage() {
                   (currentUserHandle &&
                     (message.text ?? "").includes(`@${currentUserHandle}`));
                 const attachments = message.attachments ?? [];
+                const senderName =
+                  message.sender_name ??
+                  (isMine
+                    ? (currentUser?.name ?? "You")
+                    : (props.detailStudent?.name ?? "Student"));
+                const senderRole =
+                  message.sender_role ??
+                  (isMine ? (currentUser?.role ?? "ADMISSION") : "STUDENT");
                 return (
                   <List.Item style={{ paddingInline: 0, border: "none" }}>
                     <Flex
@@ -797,11 +873,24 @@ export default function DetailStudentPage() {
                           borderRadius: 12,
                         }}
                       >
-                        {isMentioned && !isMine && (
-                          <Tag color="gold" style={{ margin: 0 }}>
-                            Mentioned you
-                          </Tag>
-                        )}
+                        <Flex align="center" justify="space-between" gap={10} wrap>
+                          <Space size={8} align="center" wrap>
+                            <Typography.Text strong style={{ fontSize: 12 }}>
+                              {senderName}
+                            </Typography.Text>
+                            <Tag
+                              color={getRoleTagColor(senderRole)}
+                              style={{ margin: 0, fontSize: 10 }}
+                            >
+                              {formatRoleLabel(senderRole)}
+                            </Tag>
+                            {isMentioned && !isMine && (
+                              <Tag color="gold" style={{ margin: 0 }}>
+                                Mentioned you
+                              </Tag>
+                            )}
+                          </Space>
+                        </Flex>
                         {message.text && (
                           <Typography.Text style={{ fontSize: 13 }}>
                             {renderMessageText(message.text)}
@@ -815,7 +904,7 @@ export default function DetailStudentPage() {
                                 false;
                               if (isImage) {
                                 return (
-                                  <img
+                                  <Image
                                     key={attachment.url}
                                     src={attachment.url}
                                     alt={attachment.name}
@@ -930,189 +1019,6 @@ export default function DetailStudentPage() {
           </Space.Compact>
         </Space>
       </Card>
-    </Space>
-  );
-
-  const tabsItems = [
-    { key: "overview", label: "Overview", children: overviewContent },
-    {
-      key: "documents",
-      label: "Documents",
-      children: <div>Documents content will appear here.</div>,
-    },
-    {
-      key: "translation",
-      label: "Translation",
-      children: <div>Translation content will appear here.</div>,
-    },
-    {
-      key: "data-cv",
-      label: "Data & CV",
-      children: <div>Data & CV content will appear here.</div>,
-    },
-    {
-      key: "letter",
-      label: "Letter",
-      children: <div>Letter content will appear here.</div>,
-    },
-    {
-      key: "chat",
-      label: "Chat",
-      children: <div>Chat content will appear here.</div>,
-    },
-    {
-      key: "activity-log",
-      label: "Activity Log",
-      children: <div>Activity log content will appear here.</div>,
-    },
-  ];
-
-  return (
-    <Space direction="vertical" size={16} style={{ width: "100%" }}>
-      <Typography.Title level={4} style={{ marginBottom: 4 }}>
-        Student Case Detail
-      </Typography.Title>
-
-      <Card
-        bodyStyle={{ padding: 16 }}
-        style={{
-          borderRadius: 16,
-          borderColor: "#60a5fa",
-          background: "#f8fbff",
-          boxShadow: "0 10px 30px rgba(15, 23, 42, 0.05)",
-        }}
-      >
-        <div
-          style={{
-            display: "grid",
-            gap: 16,
-            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-            alignItems: "start",
-          }}
-        >
-          <Space align="start" size={12}>
-            <Avatar size={48} style={{ backgroundColor: "#f59e0b" }}>
-              {initials}
-            </Avatar>
-            <Space direction="vertical" size={4}>
-              <Typography.Text strong>{studentName}</Typography.Text>
-              <Typography.Text type="secondary">{studentEmail}</Typography.Text>
-              <Typography.Text type="secondary">
-                No Phone: {detailStudentData?.phone ?? "Belum ada nomor telepon"}
-              </Typography.Text>
-              <Typography.Text type="secondary">
-                Destination: {studentCountry}
-              </Typography.Text>
-              <Typography.Text type="secondary">
-                Campus: {studentCampus}
-              </Typography.Text>
-              <Typography.Text type="secondary">
-                Degree: {studentDegree}
-              </Typography.Text>
-              <div style={{ marginTop: 10 }}>
-                <Flex align="space-between" gap={4} wrap>
-                  <Typography.Text strong>Note</Typography.Text>
-                  <Button size="small" onClick={() => handleOpenModalNotes()}>
-                    {" "}
-                    +{" "}
-                  </Button>
-                </Flex>
-                <Typography.Text type="secondary" style={{ display: "block" }}>
-                  <List
-                    dataSource={notesItems}
-                    renderItem={(item) => (
-                      <List.Item style={{ paddingInline: 0 }}>
-                        <Flex
-                          align="start"
-                          justify="space-between"
-                          style={{ width: "100%" }}
-                        >
-                          <Typography.Text>{item.note}</Typography.Text>
-                          <Space size={8}>
-                            <Button
-                              size="small"
-                              type="link"
-                              icon={<EditOutlined />}
-                              onClick={() => handleEditNote(item.raw)}
-                            />
-                              
-                            
-                            <Button
-                              size="small"
-                              type="link"
-                              danger
-                              icon={<DeleteOutlined />}
-                              loading={onDeleteNoteLoading}
-                              onClick={() => handleDeleteNote(item.raw)}
-                            />
-                             
-                          </Space>
-                        </Flex>
-                      </List.Item>
-                    )}
-                  />
-                </Typography.Text>
-              </div>
-            </Space>
-          </Space>
-
-          <Space direction="vertical" size={8}>
-            <Typography.Text strong>4-Step Progress</Typography.Text>
-            <Steps direction="vertical" size="small" items={progressSteps} />
-            <Typography.Text type="secondary">50% Complete</Typography.Text>
-          </Space>
-
-          <div
-            style={{
-              background: "#f1f5f9",
-              padding: 12,
-              borderRadius: 12,
-            }}
-          >
-            <Space direction="vertical" size={8} style={{ width: "100%" }}>
-              <div>
-                <Typography.Text strong>Visa Status</Typography.Text>
-                <div style={{ marginTop: 6 }}>
-                  <Tag color="blue" style={{ marginRight: 0 }}>
-                    {statusLabel}
-                  </Tag>
-                </div>
-              </div>
-              <div>
-                <Typography.Text strong>Visa Type</Typography.Text>
-                <Typography.Text style={{ display: "block" }}>
-                  {visa_typeLabel}
-                </Typography.Text>
-              </div>
-              <div>
-                <Typography.Text strong>PIC Admission</Typography.Text>
-                <Typography.Text style={{ display: "block" }}>
-                  Kimfa
-                </Typography.Text>
-              </div>
-              <div>
-                <Typography.Text strong>Joined at</Typography.Text>
-                <Typography.Text style={{ display: "block" }}>
-                  Dec 1, 2025
-                </Typography.Text>
-              </div>
-              <Button type="primary" block>
-                Update Status
-              </Button>
-            </Space>
-          </div>
-        </div>
-      </Card>
-
-      <Tabs activeKey={activeTab} onChange={setActiveTab} items={tabsItems} />
-      <ModalNotesComponent
-        open={isModalNotesOpen}
-        onClose={handleCloseModalNotes}
-        user_id={studentId ? String(studentId) : undefined}
-        loading={onCreateNoteLoading || onUpdateNoteLoading}
-        selectedNote={selectedNote}
-        onSubmit={handleSubmitNote}
-      />
     </Space>
   );
 }
