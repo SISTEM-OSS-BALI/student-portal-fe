@@ -1,31 +1,28 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import type { CSSProperties, ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+} from "react";
 import {
   Button,
   Card,
   Empty,
   Flex,
   Input,
-  Modal,
+  Pagination,
   Select,
   Space,
   Tag,
   Typography,
 } from "antd";
 import {
-  BankOutlined,
-  CalendarOutlined,
-  EnvironmentOutlined,
   FilterOutlined,
-  GlobalOutlined,
   HolderOutlined,
-  InfoCircleOutlined,
-  MailOutlined,
-  PhoneOutlined,
   PlusOutlined,
-  ReadOutlined,
   SearchOutlined,
 } from "@ant-design/icons";
 import {
@@ -47,6 +44,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { useRouter } from "next/navigation";
 
 import ModalStudentComponent from "./ModalStudentComponent";
 import {
@@ -57,10 +55,10 @@ import {
 } from "@/app/hooks/use-users";
 import { useStagesManagement } from "@/app/hooks/use-stages-management";
 import type { UserDataModel, UserPayloadCreateModel } from "@/app/models/user";
-import dayjs from "dayjs";
-import { useRouter } from "next/navigation";
 
 const { Text, Title } = Typography;
+
+const PAGE_SIZE = 10;
 
 const filterStyle: CSSProperties = {
   minWidth: 180,
@@ -116,24 +114,87 @@ function normalizeText(value: unknown): string {
     .toLowerCase();
 }
 
+function sanitizeFilterValue(value?: string | null): string | undefined {
+  const normalized = String(value ?? "").trim();
+  return normalized ? normalized : undefined;
+}
+
+function normalizeStudentResponse(value: unknown): UserDataModel[] {
+  if (Array.isArray(value)) {
+    return value as UserDataModel[];
+  }
+
+  const response = value as
+    | {
+        data?: unknown;
+        result?: unknown;
+        users?: unknown;
+        students?: unknown;
+      }
+    | undefined;
+
+  if (!response) {
+    return [];
+  }
+
+  if (Array.isArray(response.data)) {
+    return response.data as UserDataModel[];
+  }
+
+  if (Array.isArray(response.result)) {
+    return response.result as UserDataModel[];
+  }
+
+  if (Array.isArray(response.users)) {
+    return response.users as UserDataModel[];
+  }
+
+  if (Array.isArray(response.students)) {
+    return response.students as UserDataModel[];
+  }
+
+  const nestedData = response.data as
+    | {
+        data?: unknown;
+        result?: unknown;
+        users?: unknown;
+        students?: unknown;
+      }
+    | undefined;
+
+  if (Array.isArray(nestedData?.data)) {
+    return nestedData.data as UserDataModel[];
+  }
+
+  if (Array.isArray(nestedData?.result)) {
+    return nestedData.result as UserDataModel[];
+  }
+
+  if (Array.isArray(nestedData?.users)) {
+    return nestedData.users as UserDataModel[];
+  }
+
+  if (Array.isArray(nestedData?.students)) {
+    return nestedData.students as UserDataModel[];
+  }
+
+  return [];
+}
+
 function getCountryName(student: UserDataModel): string {
-  return student.stage?.country?.name || "";
+  return String(student.stage?.country?.name ?? "").trim();
 }
 
 function getVisaName(student: UserDataModel): string {
-  return student.visa_type || "";
+  return String(student.visa_type ?? "").trim();
 }
 
 function getDegreeLabel(student: UserDataModel): string {
-  return student.degree || student.name_degree || "";
+  return String(student.degree || student.name_degree || "").trim();
 }
 
 function getCampusName(student: UserDataModel): string {
-  return student.name_campus || "";
-}
-
-function getVisaType(student: UserDataModel): string {
-  return student.visa_type || "";
+  return String(student.name_campus ?? "").trim();
 }
 
 function getStudentId(student: UserDataModel): string {
@@ -227,7 +288,7 @@ function formatVisaType(value: string): string {
 }
 
 function getStudentInitials(student: UserDataModel): string {
-  const parts = (student.name || "")
+  const parts = String(student.name ?? "")
     .split(" ")
     .map((item) => item.trim())
     .filter(Boolean)
@@ -240,90 +301,21 @@ function getStudentInitials(student: UserDataModel): string {
   return parts.map((item) => item.charAt(0).toUpperCase()).join("");
 }
 
-function buildStudentInformation(student: UserDataModel): string {
-  if (
-    student.student_status_updated_by_name &&
-    student.student_status_updated_at_label
-  ) {
-    return `Diubah oleh ${student.student_status_updated_by_name} pada ${student.student_status_updated_at_label}`;
-  }
-
-  if (student.student_status_updated_at_label) {
-    return `Diubah pada ${student.student_status_updated_at_label}`;
-  }
-
-  return "Belum ada riwayat perubahan status.";
-}
-
 function buildStudentMetaLine(student: UserDataModel): string {
-  const parts = [getCountryName(student), getCampusName(student)]
-    .map((item) => item?.trim())
-    .filter(Boolean);
+  const parts = [getCountryName(student), getCampusName(student)].filter(
+    Boolean,
+  );
 
   return parts.join(" • ") || "Profil student belum lengkap";
 }
 
 function buildStudentSecondaryLine(student: UserDataModel): string {
-  const parts = [getDegreeLabel(student), student.no_phone]
-    .map((item) => String(item ?? "").trim())
-    .filter(Boolean);
+  const parts = [
+    getDegreeLabel(student),
+    String(student.no_phone ?? "").trim(),
+  ].filter(Boolean);
 
   return parts.join(" • ") || student.email || "Belum ada detail tambahan";
-}
-
-function DetailItem({
-  label,
-  value,
-  icon,
-}: {
-  label: string;
-  value: ReactNode;
-  icon: ReactNode;
-}) {
-  return (
-    <div
-      style={{
-        border: "1px solid #edf0f5",
-        borderRadius: 18,
-        padding: "14px 16px",
-        background: "#ffffff",
-      }}
-    >
-      <Flex align="flex-start" gap={12}>
-        <div
-          style={{
-            width: 36,
-            height: 36,
-            borderRadius: 12,
-            background: "#eef2ff",
-            color: "#4f46e5",
-            display: "grid",
-            placeItems: "center",
-            flexShrink: 0,
-            fontSize: 16,
-          }}
-        >
-          {icon}
-        </div>
-
-        <div style={{ minWidth: 0 }}>
-          <Text type="secondary" style={{ fontSize: 12, display: "block" }}>
-            {label}
-          </Text>
-          <Text
-            style={{
-              color: "#111827",
-              fontSize: 14,
-              lineHeight: 1.5,
-              wordBreak: "break-word",
-            }}
-          >
-            {value || "-"}
-          </Text>
-        </div>
-      </Flex>
-    </div>
-  );
 }
 
 function StudentCardInner({
@@ -466,7 +458,7 @@ function StudentCardInner({
               letterSpacing: 0.3,
             }}
           >
-            {formatVisaType(getVisaType(student))}
+            {formatVisaType(getVisaName(student))}
           </Tag>
         </Flex>
       </Flex>
@@ -507,7 +499,6 @@ function SortableStudentCard({
         padding: 0,
         cursor: isDragging ? "grabbing" : "pointer",
         textAlign: "left",
-        // opacity: disabled ? 0.7 : 1,
         transform: CSS.Transform.toString(transform),
         transition,
       }}
@@ -525,12 +516,20 @@ function SortableStudentCard({
 function BoardColumn({
   column,
   students,
+  paginatedStudents,
+  currentPage,
+  pageSize,
+  onPageChange,
   onClickStudent,
   isHighlighted,
   disableInteraction,
 }: {
   column: BoardColumnConfig;
   students: UserDataModel[];
+  paginatedStudents: UserDataModel[];
+  currentPage: number;
+  pageSize: number;
+  onPageChange: (page: number) => void;
   onClickStudent: (student: UserDataModel) => void;
   isHighlighted: boolean;
   disableInteraction?: boolean;
@@ -538,14 +537,20 @@ function BoardColumn({
   const { setNodeRef, isOver } = useDroppable({
     id: column.key,
   });
+
   const isActive = isHighlighted || isOver;
+
+  const startNumber =
+    students.length === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const endNumber = Math.min(currentPage * pageSize, students.length);
 
   return (
     <div
       ref={setNodeRef}
       style={{
         background: isActive ? column.softBg : "#ffffff",
-        minHeight: 560,
+        height: "clamp(560px, calc(100vh - 360px), 820px)",
+        minWidth: 340,
         display: "flex",
         flexDirection: "column",
         transition: "all 0.18s ease",
@@ -561,8 +566,11 @@ function BoardColumn({
         style={{
           padding: 18,
           borderBottom: "1px solid #edf0f5",
-          background: "rgba(255,255,255,0.82)",
+          background: "rgba(255,255,255,0.94)",
           backdropFilter: "blur(8px)",
+          position: "sticky",
+          top: 0,
+          zIndex: 2,
         }}
       >
         <div
@@ -574,11 +582,13 @@ function BoardColumn({
             marginBottom: 14,
           }}
         />
+
         <Flex justify="space-between" align="center" gap={12}>
-          <div>
+          <div style={{ minWidth: 0 }}>
             <Text strong style={{ fontSize: 19, color: "#111827" }}>
               {column.title}
             </Text>
+
             <Text
               style={{
                 display: "block",
@@ -610,7 +620,7 @@ function BoardColumn({
       </div>
 
       <SortableContext
-        items={students.map((student) => getStudentId(student))}
+        items={paginatedStudents.map((student) => getStudentId(student))}
         strategy={verticalListSortingStrategy}
       >
         <div
@@ -621,6 +631,7 @@ function BoardColumn({
             gap: 14,
             flex: 1,
             overflowY: "auto",
+            overscrollBehavior: "contain",
           }}
         >
           {students.length === 0 ? (
@@ -630,7 +641,7 @@ function BoardColumn({
                 border: isActive
                   ? `1px dashed ${column.borderColor}`
                   : "1px dashed #e5e7eb",
-                minHeight: 240,
+                minHeight: 220,
                 display: "grid",
                 placeItems: "center",
                 transition: "border-color 0.18s ease",
@@ -640,7 +651,7 @@ function BoardColumn({
               <Empty description="Belum ada student" />
             </div>
           ) : (
-            students.map((student) => (
+            paginatedStudents.map((student) => (
               <SortableStudentCard
                 key={student.id}
                 student={student}
@@ -651,6 +662,38 @@ function BoardColumn({
           )}
         </div>
       </SortableContext>
+
+      <div
+        style={{
+          padding: "12px 16px 16px",
+          borderTop: "1px solid #edf0f5",
+          background: "rgba(255,255,255,0.96)",
+        }}
+      >
+        <Flex align="center" justify="space-between" gap={10} wrap>
+          <Text
+            type="secondary"
+            style={{
+              fontSize: 12,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {students.length > 0
+              ? `${startNumber}-${endNumber} dari ${students.length}`
+              : "0 data"}
+          </Text>
+
+          <Pagination
+            size="small"
+            current={currentPage}
+            pageSize={pageSize}
+            total={students.length}
+            onChange={onPageChange}
+            showSizeChanger={false}
+            hideOnSinglePage
+          />
+        </Flex>
+      </div>
     </div>
   );
 }
@@ -660,9 +703,8 @@ export default function StudentsManagementContent() {
   const [selectedStudent, setSelectedStudent] = useState<UserDataModel | null>(
     null,
   );
-  const router = useRouter();
   const [keyword, setKeyword] = useState("");
-  const [showFilters, setShowFilters] = useState(false);
+  const [showFilters, setShowFilters] = useState(true);
   const [selectedCountry, setSelectedCountry] = useState<string | undefined>();
   const [selectedVisa, setSelectedVisa] = useState<string | undefined>();
   const [selectedDegree, setSelectedDegree] = useState<string | undefined>();
@@ -674,12 +716,27 @@ export default function StudentsManagementContent() {
     Record<string, Partial<UserDataModel>>
   >({});
 
+  const [pageByStatus, setPageByStatus] = useState<
+    Record<StudentBoardStatus, number>
+  >({
+    ONGOING: 1,
+    POSTPONE: 1,
+    CANCEL: 1,
+  });
+
+  const router = useRouter();
+
   const { onCreate, onCreateLoading } = useCreateUser();
   const { onDelete, onDeleteLoading } = useDeleteUser();
   const { onUpdate: onUpdateStudentStatus, onUpdateLoading } =
     useUpdateStudentStatusUser();
-  const { data: studentsRoleData } = useUserRoleStudents();
+
+  const { data: rawStudentsRoleData } = useUserRoleStudents();
   const { data: stagesData } = useStagesManagement({});
+
+  const studentsRoleData = useMemo<UserDataModel[]>(() => {
+    return normalizeStudentResponse(rawStudentsRoleData);
+  }, [rawStudentsRoleData]);
 
   const goToStudentDetail = useCallback(
     (student: UserDataModel) => {
@@ -698,8 +755,51 @@ export default function StudentsManagementContent() {
     }),
   );
 
+  const activeCountryFilter = sanitizeFilterValue(selectedCountry);
+  const activeVisaFilter = sanitizeFilterValue(selectedVisa);
+  const activeDegreeFilter = sanitizeFilterValue(selectedDegree);
+  const activeKeyword = sanitizeFilterValue(keyword);
+
+  const hasActiveFilter = Boolean(
+    activeKeyword ||
+    activeCountryFilter ||
+    activeVisaFilter ||
+    activeDegreeFilter,
+  );
+
+  const resetPagination = useCallback(() => {
+    setPageByStatus({
+      ONGOING: 1,
+      POSTPONE: 1,
+      CANCEL: 1,
+    });
+  }, []);
+
+  const resetFilters = useCallback(() => {
+    setSelectedCountry(undefined);
+    setSelectedVisa(undefined);
+    setSelectedDegree(undefined);
+    setKeyword("");
+    resetPagination();
+  }, [resetPagination]);
+
+  const toggleFilters = useCallback(() => {
+    setShowFilters((prev) => !prev);
+  }, []);
+
   useEffect(() => {
-    if (!studentsRoleData?.length) {
+    resetPagination();
+  }, [
+    keyword,
+    selectedCountry,
+    selectedVisa,
+    selectedDegree,
+    studentsRoleData.length,
+    resetPagination,
+  ]);
+
+  useEffect(() => {
+    if (!studentsRoleData.length) {
       return;
     }
 
@@ -710,6 +810,7 @@ export default function StudentsManagementContent() {
       for (const student of studentsRoleData) {
         const id = getStudentId(student);
         const override = next[id];
+
         if (!override) {
           continue;
         }
@@ -718,13 +819,8 @@ export default function StudentsManagementContent() {
         const overrideStatus = resolveBoardStatus(
           override.student_status ?? override.status ?? student.student_status,
         );
-        const sameAudit =
-          (override.student_status_updated_at ?? null) ===
-            (student.student_status_updated_at ?? null) &&
-          (override.student_status_updated_by_id ?? null) ===
-            (student.student_status_updated_by_id ?? null);
 
-        if (serverStatus == overrideStatus && sameAudit) {
+        if (serverStatus === overrideStatus) {
           delete next[id];
           changed = true;
         }
@@ -746,29 +842,38 @@ export default function StudentsManagementContent() {
 
   const handleSubmit = useCallback(
     async (values: UserPayloadCreateModel) => {
-      const payload = {
+      await onCreate({
         ...values,
         role: "student",
-      };
-      await onCreate(payload);
+      });
+
       closeModal();
+      resetPagination();
     },
-    [closeModal, onCreate],
+    [closeModal, onCreate, resetPagination],
   );
 
   const handleDelete = useCallback(async () => {
-    if (!selectedStudent) return;
+    if (!selectedStudent) {
+      return;
+    }
+
     await onDelete(selectedStudent.id);
     closeModal();
-  }, [closeModal, onDelete, selectedStudent]);
+    resetPagination();
+  }, [closeModal, onDelete, resetPagination, selectedStudent]);
 
   const countryOptions = useMemo<SelectOption[]>(() => {
     const map = new Map<string, SelectOption>();
 
-    (studentsRoleData ?? []).forEach((student: UserDataModel) => {
+    studentsRoleData.forEach((student) => {
       const country = getCountryName(student);
+
       if (country) {
-        map.set(country, { value: country, label: country });
+        map.set(country, {
+          value: country,
+          label: country,
+        });
       }
     });
 
@@ -778,10 +883,14 @@ export default function StudentsManagementContent() {
   const visaOptions = useMemo<SelectOption[]>(() => {
     const map = new Map<string, SelectOption>();
 
-    (studentsRoleData ?? []).forEach((student: UserDataModel) => {
-      const city = getVisaName(student);
-      if (city) {
-        map.set(city, { value: city, label: city });
+    studentsRoleData.forEach((student) => {
+      const visa = getVisaName(student);
+
+      if (visa) {
+        map.set(visa, {
+          value: visa,
+          label: formatVisaType(visa),
+        });
       }
     });
 
@@ -791,8 +900,9 @@ export default function StudentsManagementContent() {
   const degreeOptions = useMemo<SelectOption[]>(() => {
     const map = new Map<string, SelectOption>();
 
-    (studentsRoleData ?? []).forEach((student: UserDataModel) => {
+    studentsRoleData.forEach((student) => {
       const degree = getDegreeLabel(student);
+
       if (degree) {
         map.set(degree, {
           value: degree,
@@ -805,16 +915,17 @@ export default function StudentsManagementContent() {
   }, [studentsRoleData]);
 
   const effectiveStudents = useMemo<UserDataModel[]>(() => {
-    return (studentsRoleData ?? []).map((student) =>
+    return studentsRoleData.map((student) =>
       mergeStudentData(student, studentOverrides[getStudentId(student)]),
     );
-  }, [studentOverrides, studentsRoleData]);
+  }, [studentsRoleData, studentOverrides]);
 
   const filteredStudents = useMemo<UserDataModel[]>(() => {
-    const list = effectiveStudents;
-    const search = normalizeText(keyword);
+    if (!hasActiveFilter) {
+      return effectiveStudents;
+    }
 
-    return list.filter((student: UserDataModel) => {
+    return effectiveStudents.filter((student) => {
       const haystack = [
         student.name,
         student.email,
@@ -823,33 +934,45 @@ export default function StudentsManagementContent() {
         getVisaName(student),
         getDegreeLabel(student),
         getCampusName(student),
-        getVisaType(student),
       ]
         .map((item) => normalizeText(item))
         .join(" ");
 
-      const matchSearch = !search || haystack.includes(search);
-      const matchCountry =
-        !selectedCountry || getCountryName(student) === selectedCountry;
-      const matchVisa = getVisaName(student) === selectedVisa;
-      const matchDegree =
-        !selectedDegree || getDegreeLabel(student) === selectedDegree;
+      const matchKeyword =
+        !activeKeyword || haystack.includes(normalizeText(activeKeyword));
 
-      return matchSearch && matchCountry && matchVisa && matchDegree;
+      const matchCountry =
+        !activeCountryFilter ||
+        normalizeText(getCountryName(student)) ===
+          normalizeText(activeCountryFilter);
+
+      const matchVisa =
+        !activeVisaFilter ||
+        normalizeText(getVisaName(student)) === normalizeText(activeVisaFilter);
+
+      const matchDegree =
+        !activeDegreeFilter ||
+        normalizeText(getDegreeLabel(student)) ===
+          normalizeText(activeDegreeFilter);
+
+      return matchKeyword && matchCountry && matchVisa && matchDegree;
     });
   }, [
-    keyword,
-    selectedCountry,
-    selectedVisa,
-    selectedDegree,
     effectiveStudents,
+    hasActiveFilter,
+    activeKeyword,
+    activeCountryFilter,
+    activeVisaFilter,
+    activeDegreeFilter,
   ]);
 
   const studentMap = useMemo(() => {
     const map = new Map<string, UserDataModel>();
+
     effectiveStudents.forEach((student) => {
       map.set(getStudentId(student), student);
     });
+
     return map;
   }, [effectiveStudents]);
 
@@ -869,13 +992,32 @@ export default function StudentsManagementContent() {
       CANCEL: [],
     };
 
-    filteredStudents.forEach((student: UserDataModel) => {
+    filteredStudents.forEach((student) => {
       const status = getEffectiveBoardStatus(student);
       grouped[status].push(student);
     });
 
     return grouped;
   }, [filteredStudents, getEffectiveBoardStatus]);
+
+  const paginatedGroupedStudents = useMemo<
+    Record<StudentBoardStatus, UserDataModel[]>
+  >(() => {
+    return {
+      ONGOING: groupedStudents.ONGOING.slice(
+        (pageByStatus.ONGOING - 1) * PAGE_SIZE,
+        pageByStatus.ONGOING * PAGE_SIZE,
+      ),
+      POSTPONE: groupedStudents.POSTPONE.slice(
+        (pageByStatus.POSTPONE - 1) * PAGE_SIZE,
+        pageByStatus.POSTPONE * PAGE_SIZE,
+      ),
+      CANCEL: groupedStudents.CANCEL.slice(
+        (pageByStatus.CANCEL - 1) * PAGE_SIZE,
+        pageByStatus.CANCEL * PAGE_SIZE,
+      ),
+    };
+  }, [groupedStudents, pageByStatus]);
 
   const activeStudent = activeStudentId
     ? (studentMap.get(activeStudentId) ?? null)
@@ -890,11 +1032,13 @@ export default function StudentsManagementContent() {
       }
 
       const candidate = String(overId);
+
       if (boardConfig.some((column) => column.key === candidate)) {
         return candidate as StudentBoardStatus;
       }
 
       const overStudent = studentMap.get(candidate);
+
       return overStudent ? getEffectiveBoardStatus(overStudent) : null;
     },
     [getEffectiveBoardStatus, studentMap],
@@ -925,6 +1069,7 @@ export default function StudentsManagementContent() {
       }
 
       const currentStatus = getEffectiveBoardStatus(draggedStudent);
+
       if (currentStatus === nextStatus) {
         return;
       }
@@ -936,6 +1081,7 @@ export default function StudentsManagementContent() {
           student_status: getStudentStatusPayload(nextStatus),
         },
       }));
+
       setMovingStudentId(draggedId);
 
       try {
@@ -943,6 +1089,7 @@ export default function StudentsManagementContent() {
           id: draggedId,
           student_status: getStudentStatusPayload(nextStatus),
         });
+
         const updatedStudent = (response?.data?.result ?? response?.data) as
           | UserDataModel
           | undefined;
@@ -957,15 +1104,18 @@ export default function StudentsManagementContent() {
         setStudentOverrides((prev) => {
           const next = { ...prev };
           delete next[draggedId];
+
           return next;
         });
       } finally {
         setMovingStudentId(null);
+        resetPagination();
       }
     },
     [
       getEffectiveBoardStatus,
       onUpdateStudentStatus,
+      resetPagination,
       resolveDropStatus,
       studentMap,
     ],
@@ -975,6 +1125,16 @@ export default function StudentsManagementContent() {
     setActiveStudentId(null);
     setDragOverStatus(null);
   }, []);
+
+  const handleColumnPageChange = useCallback(
+    (status: StudentBoardStatus, page: number) => {
+      setPageByStatus((prev) => ({
+        ...prev,
+        [status]: page,
+      }));
+    },
+    [],
+  );
 
   const boardSummary = useMemo(() => {
     return boardConfig.map((column) => ({
@@ -1002,6 +1162,7 @@ export default function StudentsManagementContent() {
               >
                 Student Pipeline Management
               </Title>
+
               <Text style={{ color: "#667085", fontSize: 15, lineHeight: 1.7 }}>
                 Kelola progres student dengan tampilan board yang lebih jelas.
                 Drag and drop antar status akan langsung menyimpan perubahan ke
@@ -1024,6 +1185,7 @@ export default function StudentsManagementContent() {
                   <Text type="secondary" style={{ fontSize: 12 }}>
                     {item.title}
                   </Text>
+
                   <div
                     style={{
                       marginTop: 8,
@@ -1068,7 +1230,7 @@ export default function StudentsManagementContent() {
             <Button
               size="large"
               icon={<FilterOutlined />}
-              onClick={() => setShowFilters((prev) => !prev)}
+              onClick={toggleFilters}
               style={{
                 minWidth: 122,
                 borderRadius: 16,
@@ -1116,7 +1278,9 @@ export default function StudentsManagementContent() {
                 placeholder="Country"
                 allowClear
                 value={selectedCountry}
-                onChange={setSelectedCountry}
+                onChange={(value) =>
+                  setSelectedCountry(sanitizeFilterValue(value))
+                }
                 style={filterStyle}
                 options={countryOptions}
               />
@@ -1125,7 +1289,9 @@ export default function StudentsManagementContent() {
                 placeholder="Visa"
                 allowClear
                 value={selectedVisa}
-                onChange={setSelectedVisa}
+                onChange={(value) =>
+                  setSelectedVisa(sanitizeFilterValue(value))
+                }
                 style={filterStyle}
                 options={visaOptions}
               />
@@ -1134,18 +1300,15 @@ export default function StudentsManagementContent() {
                 placeholder="Degree"
                 allowClear
                 value={selectedDegree}
-                onChange={setSelectedDegree}
+                onChange={(value) =>
+                  setSelectedDegree(sanitizeFilterValue(value))
+                }
                 style={filterStyle}
                 options={degreeOptions}
               />
 
               <Button
-                onClick={() => {
-                  setSelectedCountry(undefined);
-                  setSelectedVisa(undefined);
-                  setSelectedDegree(undefined);
-                  setKeyword("");
-                }}
+                onClick={resetFilters}
                 style={{ borderRadius: 999, fontWeight: 600 }}
               >
                 Reset Filter
@@ -1164,22 +1327,39 @@ export default function StudentsManagementContent() {
         >
           <div
             style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-              gap: 18,
-              alignItems: "stretch",
+              width: "100%",
+              overflowX: "auto",
+              paddingBottom: 8,
             }}
           >
-            {boardConfig.map((column) => (
-              <BoardColumn
-                key={column.key}
-                column={column}
-                students={groupedStudents[column.key]}
-                onClickStudent={goToStudentDetail}
-                isHighlighted={dragOverStatus === column.key}
-                disableInteraction={onUpdateLoading && movingStudentId !== null}
-              />
-            ))}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(3, minmax(340px, 1fr))",
+                gap: 18,
+                alignItems: "stretch",
+                minWidth: 1060,
+              }}
+            >
+              {boardConfig.map((column) => (
+                <BoardColumn
+                  key={column.key}
+                  column={column}
+                  students={groupedStudents[column.key]}
+                  paginatedStudents={paginatedGroupedStudents[column.key]}
+                  currentPage={pageByStatus[column.key]}
+                  pageSize={PAGE_SIZE}
+                  onPageChange={(page) =>
+                    handleColumnPageChange(column.key, page)
+                  }
+                  onClickStudent={goToStudentDetail}
+                  isHighlighted={dragOverStatus === column.key}
+                  disableInteraction={
+                    onUpdateLoading && movingStudentId !== null
+                  }
+                />
+              ))}
+            </div>
           </div>
 
           <DragOverlay>

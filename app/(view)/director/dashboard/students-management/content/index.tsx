@@ -1,31 +1,22 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { CSSProperties, ReactNode } from "react";
+import type { CSSProperties } from "react";
 import {
   Button,
   Card,
   Empty,
   Flex,
   Input,
-  Modal,
+  Pagination,
   Select,
   Space,
   Tag,
   Typography,
 } from "antd";
 import {
-  BankOutlined,
-  CalendarOutlined,
-  EnvironmentOutlined,
   FilterOutlined,
-  GlobalOutlined,
   HolderOutlined,
-  InfoCircleOutlined,
-  MailOutlined,
-  PhoneOutlined,
-  PlusOutlined,
-  ReadOutlined,
   SearchOutlined,
 } from "@ant-design/icons";
 import {
@@ -47,24 +38,21 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { useRouter } from "next/navigation";
 
-import ModalStudentComponent from "./ModalStudentComponent";
 import {
-  useCreateUser,
-  useDeleteUser,
   useUpdateStudentStatusUser,
   useUserRoleStudents,
 } from "@/app/hooks/use-users";
-import { useStagesManagement } from "@/app/hooks/use-stages-management";
-import type { UserDataModel, UserPayloadCreateModel } from "@/app/models/user";
-import dayjs from "dayjs";
-import { useRouter } from "next/navigation";
+import type { UserDataModel } from "@/app/models/user";
 
 const { Text, Title } = Typography;
 
+const DEFAULT_VISA_TYPE = "student_visa_500";
+const PAGE_SIZE = 10;
+
 const filterStyle: CSSProperties = {
-  minWidth: 180,
-  borderRadius: 999,
+  width: "100%",
 };
 
 type StudentBoardStatus = "ONGOING" | "POSTPONE" | "CANCEL";
@@ -116,24 +104,76 @@ function normalizeText(value: unknown): string {
     .toLowerCase();
 }
 
-function getCountryName(student: UserDataModel): string {
-  return student.stage?.country?.name || "";
+function sanitizeFilterValue(value?: string | null): string | undefined {
+  const normalized = String(value ?? "").trim();
+  return normalized ? normalized : undefined;
 }
 
-function getCityName(): string {
-  return "";
+function normalizeStudentResponse(value: unknown): UserDataModel[] {
+  if (Array.isArray(value)) {
+    return value as UserDataModel[];
+  }
+
+  const response = value as
+    | {
+        data?: unknown;
+        result?: unknown;
+        users?: unknown;
+        students?: unknown;
+      }
+    | undefined;
+
+  if (!response) return [];
+
+  if (Array.isArray(response.data)) return response.data as UserDataModel[];
+  if (Array.isArray(response.result)) return response.result as UserDataModel[];
+  if (Array.isArray(response.users)) return response.users as UserDataModel[];
+  if (Array.isArray(response.students)) {
+    return response.students as UserDataModel[];
+  }
+
+  const nestedData = response.data as
+    | {
+        data?: unknown;
+        result?: unknown;
+        users?: unknown;
+        students?: unknown;
+      }
+    | undefined;
+
+  if (Array.isArray(nestedData?.data)) {
+    return nestedData.data as UserDataModel[];
+  }
+
+  if (Array.isArray(nestedData?.result)) {
+    return nestedData.result as UserDataModel[];
+  }
+
+  if (Array.isArray(nestedData?.users)) {
+    return nestedData.users as UserDataModel[];
+  }
+
+  if (Array.isArray(nestedData?.students)) {
+    return nestedData.students as UserDataModel[];
+  }
+
+  return [];
+}
+
+function getCountryName(student: UserDataModel): string {
+  return String(student.stage?.country?.name ?? "").trim();
 }
 
 function getDegreeLabel(student: UserDataModel): string {
-  return student.degree || student.name_degree || "";
+  return String(student.degree || student.name_degree || "").trim();
 }
 
 function getCampusName(student: UserDataModel): string {
-  return student.name_campus || "";
+  return String(student.name_campus ?? "").trim();
 }
 
 function getVisaType(student: UserDataModel): string {
-  return student.visa_type || "";
+  return String(student.visa_type ?? "").trim();
 }
 
 function getStudentId(student: UserDataModel): string {
@@ -226,38 +266,39 @@ function formatVisaType(value: string): string {
   return value ? value.replace(/_/g, " ").toUpperCase() : "Visa belum dipilih";
 }
 
+function getFilterSummaryLabel({
+  country,
+  visa,
+  degree,
+}: {
+  country?: string;
+  visa?: string;
+  degree?: string;
+}): string {
+  const parts = [
+    country ? `Negara: ${country}` : null,
+    visa ? `Visa: ${formatVisaType(visa)}` : null,
+    degree ? `Jenjang: ${degree}` : null,
+  ].filter(Boolean);
+
+  return parts.length ? parts.join(" • ") : "Menampilkan semua student";
+}
+
 function getStudentInitials(student: UserDataModel): string {
-  const parts = (student.name || "")
+  const parts = String(student.name ?? "")
     .split(" ")
     .map((item) => item.trim())
     .filter(Boolean)
     .slice(0, 2);
 
-  if (!parts.length) {
-    return "ST";
-  }
+  if (!parts.length) return "ST";
 
   return parts.map((item) => item.charAt(0).toUpperCase()).join("");
 }
 
-function buildStudentInformation(student: UserDataModel): string {
-  if (
-    student.student_status_updated_by_name &&
-    student.student_status_updated_at_label
-  ) {
-    return `Diubah oleh ${student.student_status_updated_by_name} pada ${student.student_status_updated_at_label}`;
-  }
-
-  if (student.student_status_updated_at_label) {
-    return `Diubah pada ${student.student_status_updated_at_label}`;
-  }
-
-  return "Belum ada riwayat perubahan status.";
-}
-
 function buildStudentMetaLine(student: UserDataModel): string {
   const parts = [getCountryName(student), getCampusName(student)]
-    .map((item) => item?.trim())
+    .map((item) => item.trim())
     .filter(Boolean);
 
   return parts.join(" • ") || "Profil student belum lengkap";
@@ -269,61 +310,6 @@ function buildStudentSecondaryLine(student: UserDataModel): string {
     .filter(Boolean);
 
   return parts.join(" • ") || student.email || "Belum ada detail tambahan";
-}
-
-function DetailItem({
-  label,
-  value,
-  icon,
-}: {
-  label: string;
-  value: ReactNode;
-  icon: ReactNode;
-}) {
-  return (
-    <div
-      style={{
-        border: "1px solid #edf0f5",
-        borderRadius: 18,
-        padding: "14px 16px",
-        background: "#ffffff",
-      }}
-    >
-      <Flex align="flex-start" gap={12}>
-        <div
-          style={{
-            width: 36,
-            height: 36,
-            borderRadius: 12,
-            background: "#eef2ff",
-            color: "#4f46e5",
-            display: "grid",
-            placeItems: "center",
-            flexShrink: 0,
-            fontSize: 16,
-          }}
-        >
-          {icon}
-        </div>
-
-        <div style={{ minWidth: 0 }}>
-          <Text type="secondary" style={{ fontSize: 12, display: "block" }}>
-            {label}
-          </Text>
-          <Text
-            style={{
-              color: "#111827",
-              fontSize: 14,
-              lineHeight: 1.5,
-              wordBreak: "break-word",
-            }}
-          >
-            {value || "-"}
-          </Text>
-        </div>
-      </Flex>
-    </div>
-  );
 }
 
 function StudentCardInner({
@@ -347,43 +333,43 @@ function StudentCardInner({
         textAlign: "left",
         border: isDragging ? "1px solid #818cf8" : "1px solid #e7eaf0",
         background: "linear-gradient(180deg, #ffffff 0%, #fbfcff 100%)",
-        borderRadius: 20,
-        padding: 16,
+        borderRadius: 18,
+        padding: 14,
         boxShadow: isDragging
-          ? "0 22px 36px rgba(79, 70, 229, 0.18)"
-          : "0 12px 30px rgba(15, 23, 42, 0.06)",
+          ? "0 18px 30px rgba(79, 70, 229, 0.18)"
+          : "0 10px 24px rgba(15, 23, 42, 0.045)",
         opacity: isDragging ? 0.95 : 1,
         transition: "all 0.18s ease",
       }}
     >
-      <Flex justify="space-between" align="flex-start" gap={14}>
-        <Flex gap={12} align="flex-start" style={{ minWidth: 0, flex: 1 }}>
+      <Flex justify="space-between" align="flex-start" gap={12}>
+        <Flex gap={10} align="flex-start" style={{ minWidth: 0, flex: 1 }}>
           <div
             style={{
-              width: 44,
-              height: 44,
-              borderRadius: 16,
+              width: 40,
+              height: 40,
+              borderRadius: 14,
               background: "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)",
               color: "#fff",
               display: "grid",
               placeItems: "center",
-              fontSize: 15,
+              fontSize: 14,
               fontWeight: 700,
-              letterSpacing: 0.4,
+              letterSpacing: 0.3,
               flexShrink: 0,
-              boxShadow: "0 12px 24px rgba(79, 70, 229, 0.22)",
+              boxShadow: "0 10px 20px rgba(79, 70, 229, 0.2)",
             }}
           >
             {getStudentInitials(student)}
           </div>
 
           <div style={{ minWidth: 0, flex: 1 }}>
-            <Flex align="center" gap={8} wrap style={{ marginBottom: 6 }}>
+            <Flex align="center" gap={6} wrap style={{ marginBottom: 5 }}>
               <Text
                 strong
                 ellipsis
                 style={{
-                  fontSize: 15,
+                  fontSize: 14,
                   lineHeight: 1.35,
                   color: "#111827",
                   minWidth: 0,
@@ -397,8 +383,8 @@ function StudentCardInner({
                 style={{
                   marginRight: 0,
                   borderRadius: 999,
-                  padding: "2px 10px",
-                  fontSize: 11,
+                  padding: "1px 8px",
+                  fontSize: 10,
                   fontWeight: 600,
                   color: statusMeta.color,
                   background: statusMeta.background,
@@ -410,12 +396,13 @@ function StudentCardInner({
             </Flex>
 
             <Text
+              ellipsis
               style={{
                 display: "block",
                 color: "#475467",
-                fontSize: 13,
+                fontSize: 12,
                 lineHeight: 1.45,
-                marginBottom: 4,
+                marginBottom: 3,
               }}
             >
               {buildStudentMetaLine(student)}
@@ -423,26 +410,31 @@ function StudentCardInner({
 
             <Text
               type="secondary"
-              style={{ display: "block", fontSize: 12, lineHeight: 1.5 }}
+              ellipsis
+              style={{
+                display: "block",
+                fontSize: 11,
+                lineHeight: 1.45,
+              }}
             >
               {buildStudentSecondaryLine(student)}
             </Text>
           </div>
         </Flex>
 
-        <Flex vertical align="flex-end" gap={10} style={{ flexShrink: 0 }}>
+        <Flex vertical align="flex-end" gap={8} style={{ flexShrink: 0 }}>
           <div
             {...dragAttributes}
             {...dragListeners}
             style={{
-              width: 34,
-              height: 34,
-              borderRadius: 12,
+              width: 30,
+              height: 30,
+              borderRadius: 11,
               border: "1px solid #e5e7eb",
               color: "#98a2b3",
               display: "grid",
               placeItems: "center",
-              fontSize: 15,
+              fontSize: 14,
               cursor: isDragging ? "grabbing" : "grab",
               touchAction: "none",
               background: "#fff",
@@ -457,13 +449,16 @@ function StudentCardInner({
             style={{
               marginRight: 0,
               borderRadius: 999,
-              padding: "6px 12px",
-              fontSize: 11,
+              padding: "5px 10px",
+              fontSize: 10,
               fontWeight: 700,
               color: "#3153d4",
               background: "#eef4ff",
               borderColor: "#bfd2ff",
-              letterSpacing: 0.3,
+              letterSpacing: 0.25,
+              maxWidth: 132,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
             }}
           >
             {formatVisaType(getVisaType(student))}
@@ -507,7 +502,6 @@ function SortableStudentCard({
         padding: 0,
         cursor: isDragging ? "grabbing" : "pointer",
         textAlign: "left",
-        // opacity: disabled ? 0.7 : 1,
         transform: CSS.Transform.toString(transform),
         transition,
       }}
@@ -522,328 +516,21 @@ function SortableStudentCard({
   );
 }
 
-function StudentDetailModal({
-  open,
-  student,
-  onClose,
-}: {
-  open: boolean;
-  student: UserDataModel | null;
-  onClose: () => void;
-}) {
-  if (!student) return null;
-
-  const status = getStudentBoardStatus(student);
-  const statusMeta = getStatusTagMeta(status);
-  const visaDuration = student.visa_grant_duration_label || "Belum tersedia";
-  const joinedAt = student.joined_at || student.created_at || "";
-
-  return (
-    <Modal
-      open={open}
-      onCancel={onClose}
-      footer={null}
-      centered
-      width={760}
-      title={null}
-    >
-      <Space direction="vertical" size={18} style={{ width: "100%" }}>
-        <div
-          style={{
-            borderRadius: 28,
-            padding: 24,
-            background:
-              "linear-gradient(135deg, #f8fbff 0%, #f6f2ff 55%, #ffffff 100%)",
-            border: "1px solid #e8eaf6",
-          }}
-        >
-          <Flex justify="space-between" align="flex-start" gap={18} wrap>
-            <Flex gap={16} align="flex-start" style={{ minWidth: 0 }}>
-              <div
-                style={{
-                  width: 64,
-                  height: 64,
-                  borderRadius: 22,
-                  background:
-                    "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)",
-                  color: "#fff",
-                  display: "grid",
-                  placeItems: "center",
-                  fontSize: 22,
-                  fontWeight: 700,
-                  boxShadow: "0 18px 30px rgba(79, 70, 229, 0.18)",
-                  flexShrink: 0,
-                }}
-              >
-                {getStudentInitials(student)}
-              </div>
-
-              <div style={{ minWidth: 0 }}>
-                <Title level={4} style={{ margin: 0, color: "#0f172a" }}>
-                  {student.name || "-"}
-                </Title>
-                <Text
-                  style={{ display: "block", color: "#667085", marginTop: 4 }}
-                >
-                  {student.email || "Email belum tersedia"}
-                </Text>
-                <Flex gap={8} wrap style={{ marginTop: 14 }}>
-                  <Tag
-                    style={{
-                      marginRight: 0,
-                      borderRadius: 999,
-                      padding: "4px 12px",
-                      fontWeight: 700,
-                      color: statusMeta.color,
-                      background: statusMeta.background,
-                      borderColor: statusMeta.borderColor,
-                    }}
-                  >
-                    {statusMeta.label}
-                  </Tag>
-                  <Tag
-                    style={{
-                      marginRight: 0,
-                      borderRadius: 999,
-                      padding: "4px 12px",
-                      fontWeight: 700,
-                      color: "#3153d4",
-                      background: "#eef4ff",
-                      borderColor: "#bfd2ff",
-                    }}
-                  >
-                    {formatVisaType(getVisaType(student))}
-                  </Tag>
-                </Flex>
-              </div>
-            </Flex>
-
-            <div
-              style={{
-                minWidth: 220,
-                borderRadius: 22,
-                padding: 16,
-                background: "rgba(255, 255, 255, 0.76)",
-                border: "1px solid #e6eaf2",
-                backdropFilter: "blur(8px)",
-              }}
-            >
-              <Text type="secondary" style={{ display: "block", fontSize: 12 }}>
-                Informasi Status
-              </Text>
-              <Text
-                style={{
-                  display: "block",
-                  marginTop: 6,
-                  color: "#111827",
-                  lineHeight: 1.55,
-                }}
-              >
-                {buildStudentInformation(student)}
-              </Text>
-            </div>
-          </Flex>
-        </div>
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-            gap: 14,
-          }}
-        >
-          <DetailItem
-            label="Email"
-            icon={<MailOutlined />}
-            value={student.email || "-"}
-          />
-          <DetailItem
-            label="No. Telepon"
-            icon={<PhoneOutlined />}
-            value={student.no_phone || "-"}
-          />
-          <DetailItem
-            label="Country"
-            icon={<GlobalOutlined />}
-            value={getCountryName(student) || "-"}
-          />
-          <DetailItem
-            label="City"
-            icon={<EnvironmentOutlined />}
-            value={getCityName(student) || "-"}
-          />
-          <DetailItem
-            label="Degree"
-            icon={<ReadOutlined />}
-            value={getDegreeLabel(student) || "-"}
-          />
-          <DetailItem
-            label="Campus"
-            icon={<BankOutlined />}
-            value={getCampusName(student) || "-"}
-          />
-        </div>
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-            gap: 14,
-          }}
-        >
-          <div
-            style={{
-              borderRadius: 22,
-              padding: 18,
-              background: "#ffffff",
-              border: "1px solid #edf0f5",
-            }}
-          >
-            <Flex align="center" gap={10} style={{ marginBottom: 12 }}>
-              <div
-                style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 12,
-                  background: "#eef2ff",
-                  color: "#4f46e5",
-                  display: "grid",
-                  placeItems: "center",
-                }}
-              >
-                <CalendarOutlined />
-              </div>
-              <div>
-                <Text
-                  type="secondary"
-                  style={{ display: "block", fontSize: 12 }}
-                >
-                  Timeline Visa
-                </Text>
-                <Text strong style={{ color: "#101828" }}>
-                  {student.visa_status || "Belum ada status visa"}
-                </Text>
-              </div>
-            </Flex>
-
-            <div style={{ display: "grid", gap: 10 }}>
-              <div>
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  Joined At
-                </Text>
-                <div style={{ color: "#111827" }}>
-                  {dayjs(student.created_at).format("DD MMMM YYYY") || "-"}
-                </div>
-              </div>
-              <div>
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  Visa Granted At
-                </Text>
-                <div style={{ color: "#111827" }}>
-                  {dayjs(student.visa_granted_at).format("DD MMMM YYYY") || "-"}
-                </div>
-              </div>
-              <div>
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  Lama Proses Visa
-                </Text>
-                <div style={{ color: "#111827" }}>{visaDuration}</div>
-              </div>
-            </div>
-          </div>
-
-          <div
-            style={{
-              borderRadius: 22,
-              padding: 18,
-              background: "#ffffff",
-              border: "1px solid #edf0f5",
-            }}
-          >
-            <Flex align="center" gap={10} style={{ marginBottom: 12 }}>
-              <div
-                style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 12,
-                  background: "#eef2ff",
-                  color: "#4f46e5",
-                  display: "grid",
-                  placeItems: "center",
-                }}
-              >
-                <InfoCircleOutlined />
-              </div>
-              <div>
-                <Text
-                  type="secondary"
-                  style={{ display: "block", fontSize: 12 }}
-                >
-                  Case Summary
-                </Text>
-                <Text strong style={{ color: "#101828" }}>
-                  Ringkasan profil student
-                </Text>
-              </div>
-            </Flex>
-
-            <div style={{ display: "grid", gap: 10 }}>
-              <div>
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  Visa Type
-                </Text>
-                <div style={{ color: "#111827" }}>
-                  {formatVisaType(getVisaType(student)) || "-"}
-                </div>
-              </div>
-              <div>
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  Current Status
-                </Text>
-                <div style={{ color: "#111827" }}>{statusMeta.label}</div>
-              </div>
-              <div>
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  Informasi Tambahan
-                </Text>
-                <div style={{ color: "#111827", lineHeight: 1.6 }}>
-                  {buildStudentInformation(student)}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div style={{ paddingTop: 4 }}>
-          <Button
-            block
-            type="primary"
-            onClick={onClose}
-            style={{
-              height: 46,
-              borderRadius: 16,
-              fontWeight: 700,
-              background: "linear-gradient(135deg, #5b4de6 0%, #4338ca 100%)",
-              boxShadow: "0 12px 24px rgba(79, 70, 229, 0.18)",
-            }}
-          >
-            Tutup
-          </Button>
-        </div>
-      </Space>
-    </Modal>
-  );
-}
-
 function BoardColumn({
   column,
   students,
+  paginatedStudents,
+  currentPage,
+  onPageChange,
   onClickStudent,
   isHighlighted,
   disableInteraction,
 }: {
   column: BoardColumnConfig;
   students: UserDataModel[];
+  paginatedStudents: UserDataModel[];
+  currentPage: number;
+  onPageChange: (page: number) => void;
   onClickStudent: (student: UserDataModel) => void;
   isHighlighted: boolean;
   disableInteraction?: boolean;
@@ -851,19 +538,25 @@ function BoardColumn({
   const { setNodeRef, isOver } = useDroppable({
     id: column.key,
   });
+
   const isActive = isHighlighted || isOver;
+
+  const startNumber =
+    students.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
+  const endNumber = Math.min(currentPage * PAGE_SIZE, students.length);
 
   return (
     <div
       ref={setNodeRef}
       style={{
         background: isActive ? column.softBg : "#ffffff",
-        minHeight: 560,
+        height: "clamp(560px, calc(100vh - 360px), 820px)",
+        minWidth: 340,
         display: "flex",
         flexDirection: "column",
         transition: "all 0.18s ease",
         border: `1px solid ${isActive ? column.borderColor : "#e8ebf2"}`,
-        borderRadius: 28,
+        borderRadius: 26,
         boxShadow: isActive
           ? "0 18px 40px rgba(79, 70, 229, 0.08)"
           : "0 14px 32px rgba(15, 23, 42, 0.04)",
@@ -872,32 +565,37 @@ function BoardColumn({
     >
       <div
         style={{
-          padding: 18,
+          padding: 16,
           borderBottom: "1px solid #edf0f5",
-          background: "rgba(255,255,255,0.82)",
+          background: "rgba(255,255,255,0.94)",
           backdropFilter: "blur(8px)",
+          position: "sticky",
+          top: 0,
+          zIndex: 2,
         }}
       >
         <div
           style={{
-            height: 6,
-            width: 92,
+            height: 5,
+            width: 82,
             borderRadius: 999,
             background: column.accent,
-            marginBottom: 14,
+            marginBottom: 12,
           }}
         />
+
         <Flex justify="space-between" align="center" gap={12}>
-          <div>
-            <Text strong style={{ fontSize: 19, color: "#111827" }}>
+          <div style={{ minWidth: 0 }}>
+            <Text strong style={{ fontSize: 17, color: "#111827" }}>
               {column.title}
             </Text>
+
             <Text
               style={{
                 display: "block",
-                marginTop: 4,
+                marginTop: 3,
                 color: "#667085",
-                fontSize: 13,
+                fontSize: 12,
               }}
             >
               {students.length} student{students.length === 1 ? "" : "s"}
@@ -906,15 +604,16 @@ function BoardColumn({
 
           <div
             style={{
-              minWidth: 42,
-              height: 42,
+              minWidth: 38,
+              height: 38,
               borderRadius: 14,
               background: column.softBg,
               color: column.color,
               border: `1px solid ${column.borderColor}`,
               display: "grid",
               placeItems: "center",
-              fontWeight: 700,
+              fontWeight: 800,
+              fontSize: 13,
             }}
           >
             {students.length}
@@ -923,27 +622,28 @@ function BoardColumn({
       </div>
 
       <SortableContext
-        items={students.map((student) => getStudentId(student))}
+        items={paginatedStudents.map((student) => getStudentId(student))}
         strategy={verticalListSortingStrategy}
       >
         <div
           style={{
-            padding: 16,
+            padding: 14,
             display: "flex",
             flexDirection: "column",
-            gap: 14,
+            gap: 12,
             flex: 1,
             overflowY: "auto",
+            overscrollBehavior: "contain",
           }}
         >
           {students.length === 0 ? (
             <div
               style={{
-                borderRadius: 24,
+                borderRadius: 22,
                 border: isActive
                   ? `1px dashed ${column.borderColor}`
                   : "1px dashed #e5e7eb",
-                minHeight: 240,
+                minHeight: 190,
                 display: "grid",
                 placeItems: "center",
                 transition: "border-color 0.18s ease",
@@ -953,7 +653,7 @@ function BoardColumn({
               <Empty description="Belum ada student" />
             </div>
           ) : (
-            students.map((student) => (
+            paginatedStudents.map((student) => (
               <SortableStudentCard
                 key={student.id}
                 student={student}
@@ -964,28 +664,51 @@ function BoardColumn({
           )}
         </div>
       </SortableContext>
+
+      <div
+        style={{
+          padding: "12px 14px 14px",
+          borderTop: "1px solid #edf0f5",
+          background: "rgba(255,255,255,0.95)",
+        }}
+      >
+        <Flex align="center" justify="space-between" gap={10} wrap>
+          <Text
+            type="secondary"
+            style={{
+              fontSize: 12,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {students.length > 0
+              ? `${startNumber}-${endNumber} dari ${students.length}`
+              : "0 data"}
+          </Text>
+
+          <Pagination
+            size="small"
+            current={currentPage}
+            pageSize={PAGE_SIZE}
+            total={students.length}
+            onChange={onPageChange}
+            showSizeChanger={false}
+            hideOnSinglePage
+          />
+        </Flex>
+      </div>
     </div>
   );
 }
 
 export default function StudentsManagementContent() {
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedStudent, setSelectedStudent] = useState<UserDataModel | null>(
-    null,
-  );
   const router = useRouter();
-  const goToStudentDetail = useCallback(
-    (student: UserDataModel) => {
-      router.push(
-        `/director/dashboard/students-management/detail/${student.id}`,
-      );
-    },
-    [router],
-  );
+
   const [keyword, setKeyword] = useState("");
-  const [showFilters, setShowFilters] = useState(false);
+  const [showFilters, setShowFilters] = useState(true);
   const [selectedCountry, setSelectedCountry] = useState<string | undefined>();
-  const [selectedCity, setSelectedCity] = useState<string | undefined>();
+  const [selectedVisa, setSelectedVisa] = useState<string | undefined>(
+    DEFAULT_VISA_TYPE,
+  );
   const [selectedDegree, setSelectedDegree] = useState<string | undefined>();
   const [activeStudentId, setActiveStudentId] = useState<string | null>(null);
   const [dragOverStatus, setDragOverStatus] =
@@ -995,12 +718,31 @@ export default function StudentsManagementContent() {
     Record<string, Partial<UserDataModel>>
   >({});
 
-  const { onCreate, onCreateLoading } = useCreateUser();
-  const { onDelete, onDeleteLoading } = useDeleteUser();
+  const [pageByStatus, setPageByStatus] = useState<
+    Record<StudentBoardStatus, number>
+  >({
+    ONGOING: 1,
+    POSTPONE: 1,
+    CANCEL: 1,
+  });
+
   const { onUpdate: onUpdateStudentStatus, onUpdateLoading } =
     useUpdateStudentStatusUser();
-  const { data: studentsRoleData } = useUserRoleStudents();
-  const { data: stagesData } = useStagesManagement({});
+
+  const { data: rawStudentsRoleData } = useUserRoleStudents();
+
+  const studentsRoleData = useMemo<UserDataModel[]>(() => {
+    return normalizeStudentResponse(rawStudentsRoleData);
+  }, [rawStudentsRoleData]);
+
+  const goToStudentDetail = useCallback(
+    (student: UserDataModel) => {
+      router.push(
+        `/director/dashboard/students-management/detail/${student.id}`,
+      );
+    },
+    [router],
+  );
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -1010,8 +752,51 @@ export default function StudentsManagementContent() {
     }),
   );
 
+  const resetPagination = useCallback(() => {
+    setPageByStatus({
+      ONGOING: 1,
+      POSTPONE: 1,
+      CANCEL: 1,
+    });
+  }, []);
+
+  const activeCountryFilter = sanitizeFilterValue(selectedCountry);
+  const activeVisaFilter = sanitizeFilterValue(selectedVisa);
+  const activeDegreeFilter = sanitizeFilterValue(selectedDegree);
+  const activeKeyword = sanitizeFilterValue(keyword);
+
+  const hasActiveFilter = Boolean(
+    activeKeyword ||
+    activeCountryFilter ||
+    activeVisaFilter ||
+    activeDegreeFilter,
+  );
+
+  const resetFilters = useCallback(() => {
+    setSelectedCountry(undefined);
+    setSelectedVisa(DEFAULT_VISA_TYPE);
+    setSelectedDegree(undefined);
+    setKeyword("");
+    resetPagination();
+  }, [resetPagination]);
+
+  const toggleFilters = useCallback(() => {
+    setShowFilters((prev) => !prev);
+  }, []);
+
   useEffect(() => {
-    if (!studentsRoleData?.length) {
+    resetPagination();
+  }, [
+    keyword,
+    selectedCountry,
+    selectedVisa,
+    selectedDegree,
+    studentsRoleData.length,
+    resetPagination,
+  ]);
+
+  useEffect(() => {
+    if (!studentsRoleData.length) {
       return;
     }
 
@@ -1022,6 +807,7 @@ export default function StudentsManagementContent() {
       for (const student of studentsRoleData) {
         const id = getStudentId(student);
         const override = next[id];
+
         if (!override) {
           continue;
         }
@@ -1030,13 +816,14 @@ export default function StudentsManagementContent() {
         const overrideStatus = resolveBoardStatus(
           override.student_status ?? override.status ?? student.student_status,
         );
+
         const sameAudit =
           (override.student_status_updated_at ?? null) ===
             (student.student_status_updated_at ?? null) &&
           (override.student_status_updated_by_id ?? null) ===
             (student.student_status_updated_by_id ?? null);
 
-        if (serverStatus == overrideStatus && sameAudit) {
+        if (serverStatus === overrideStatus && sameAudit) {
           delete next[id];
           changed = true;
         }
@@ -1046,55 +833,43 @@ export default function StudentsManagementContent() {
     });
   }, [studentsRoleData]);
 
-  const openCreateModal = useCallback(() => {
-    setSelectedStudent(null);
-    setIsModalOpen(true);
-  }, []);
-
-  const closeModal = useCallback(() => {
-    setIsModalOpen(false);
-    setSelectedStudent(null);
-  }, []);
-
-  const handleSubmit = useCallback(
-    async (values: UserPayloadCreateModel) => {
-      await onCreate({
-        ...values,
-        role: "student",
-      });
-      closeModal();
-    },
-    [closeModal, onCreate],
-  );
-
-  const handleDelete = useCallback(async () => {
-    if (!selectedStudent) return;
-    await onDelete(selectedStudent.id);
-    closeModal();
-  }, [closeModal, onDelete, selectedStudent]);
-
   const countryOptions = useMemo<SelectOption[]>(() => {
     const map = new Map<string, SelectOption>();
 
-    (studentsRoleData ?? []).forEach((student: UserDataModel) => {
+    studentsRoleData.forEach((student) => {
       const country = getCountryName(student);
+
       if (country) {
-        map.set(country, { value: country, label: country });
+        map.set(country, {
+          value: country,
+          label: country,
+        });
       }
     });
 
     return Array.from(map.values());
   }, [studentsRoleData]);
 
-  const cityOptions = useMemo<SelectOption[]>(() => {
+  const visaOptions = useMemo<SelectOption[]>(() => {
     const map = new Map<string, SelectOption>();
 
-    (studentsRoleData ?? []).forEach((student: UserDataModel) => {
-      const city = getCityName(student);
-      if (city) {
-        map.set(city, { value: city, label: city });
+    studentsRoleData.forEach((student) => {
+      const visa = getVisaType(student);
+
+      if (visa) {
+        map.set(visa, {
+          value: visa,
+          label: formatVisaType(visa),
+        });
       }
     });
+
+    if (!map.has(DEFAULT_VISA_TYPE)) {
+      map.set(DEFAULT_VISA_TYPE, {
+        value: DEFAULT_VISA_TYPE,
+        label: formatVisaType(DEFAULT_VISA_TYPE),
+      });
+    }
 
     return Array.from(map.values());
   }, [studentsRoleData]);
@@ -1102,8 +877,9 @@ export default function StudentsManagementContent() {
   const degreeOptions = useMemo<SelectOption[]>(() => {
     const map = new Map<string, SelectOption>();
 
-    (studentsRoleData ?? []).forEach((student: UserDataModel) => {
+    studentsRoleData.forEach((student) => {
       const degree = getDegreeLabel(student);
+
       if (degree) {
         map.set(degree, {
           value: degree,
@@ -1116,22 +892,22 @@ export default function StudentsManagementContent() {
   }, [studentsRoleData]);
 
   const effectiveStudents = useMemo<UserDataModel[]>(() => {
-    return (studentsRoleData ?? []).map((student) =>
+    return studentsRoleData.map((student) =>
       mergeStudentData(student, studentOverrides[getStudentId(student)]),
     );
   }, [studentOverrides, studentsRoleData]);
 
   const filteredStudents = useMemo<UserDataModel[]>(() => {
-    const list = effectiveStudents;
-    const search = normalizeText(keyword);
+    if (!hasActiveFilter) {
+      return effectiveStudents;
+    }
 
-    return list.filter((student: UserDataModel) => {
+    return effectiveStudents.filter((student) => {
       const haystack = [
         student.name,
         student.email,
         student.no_phone,
         getCountryName(student),
-        getCityName(student),
         getDegreeLabel(student),
         getCampusName(student),
         getVisaType(student),
@@ -1139,28 +915,41 @@ export default function StudentsManagementContent() {
         .map((item) => normalizeText(item))
         .join(" ");
 
-      const matchSearch = !search || haystack.includes(search);
-      const matchCountry =
-        !selectedCountry || getCountryName(student) === selectedCountry;
-      const matchCity = !selectedCity || getCityName(student) === selectedCity;
-      const matchDegree =
-        !selectedDegree || getDegreeLabel(student) === selectedDegree;
+      const matchKeyword =
+        !activeKeyword || haystack.includes(normalizeText(activeKeyword));
 
-      return matchSearch && matchCountry && matchCity && matchDegree;
+      const matchCountry =
+        !activeCountryFilter ||
+        normalizeText(getCountryName(student)) ===
+          normalizeText(activeCountryFilter);
+
+      const matchVisa =
+        !activeVisaFilter ||
+        normalizeText(getVisaType(student)) === normalizeText(activeVisaFilter);
+
+      const matchDegree =
+        !activeDegreeFilter ||
+        normalizeText(getDegreeLabel(student)) ===
+          normalizeText(activeDegreeFilter);
+
+      return matchKeyword && matchCountry && matchVisa && matchDegree;
     });
   }, [
-    keyword,
-    selectedCountry,
-    selectedCity,
-    selectedDegree,
     effectiveStudents,
+    hasActiveFilter,
+    activeKeyword,
+    activeCountryFilter,
+    activeVisaFilter,
+    activeDegreeFilter,
   ]);
 
   const studentMap = useMemo(() => {
     const map = new Map<string, UserDataModel>();
+
     effectiveStudents.forEach((student) => {
       map.set(getStudentId(student), student);
     });
+
     return map;
   }, [effectiveStudents]);
 
@@ -1180,13 +969,32 @@ export default function StudentsManagementContent() {
       CANCEL: [],
     };
 
-    filteredStudents.forEach((student: UserDataModel) => {
+    filteredStudents.forEach((student) => {
       const status = getEffectiveBoardStatus(student);
       grouped[status].push(student);
     });
 
     return grouped;
   }, [filteredStudents, getEffectiveBoardStatus]);
+
+  const paginatedGroupedStudents = useMemo<
+    Record<StudentBoardStatus, UserDataModel[]>
+  >(() => {
+    return {
+      ONGOING: groupedStudents.ONGOING.slice(
+        (pageByStatus.ONGOING - 1) * PAGE_SIZE,
+        pageByStatus.ONGOING * PAGE_SIZE,
+      ),
+      POSTPONE: groupedStudents.POSTPONE.slice(
+        (pageByStatus.POSTPONE - 1) * PAGE_SIZE,
+        pageByStatus.POSTPONE * PAGE_SIZE,
+      ),
+      CANCEL: groupedStudents.CANCEL.slice(
+        (pageByStatus.CANCEL - 1) * PAGE_SIZE,
+        pageByStatus.CANCEL * PAGE_SIZE,
+      ),
+    };
+  }, [groupedStudents, pageByStatus]);
 
   const activeStudent = activeStudentId
     ? (studentMap.get(activeStudentId) ?? null)
@@ -1201,11 +1009,13 @@ export default function StudentsManagementContent() {
       }
 
       const candidate = String(overId);
+
       if (boardConfig.some((column) => column.key === candidate)) {
         return candidate as StudentBoardStatus;
       }
 
       const overStudent = studentMap.get(candidate);
+
       return overStudent ? getEffectiveBoardStatus(overStudent) : null;
     },
     [getEffectiveBoardStatus, studentMap],
@@ -1236,6 +1046,7 @@ export default function StudentsManagementContent() {
       }
 
       const currentStatus = getEffectiveBoardStatus(draggedStudent);
+
       if (currentStatus === nextStatus) {
         return;
       }
@@ -1247,6 +1058,7 @@ export default function StudentsManagementContent() {
           student_status: getStudentStatusPayload(nextStatus),
         },
       }));
+
       setMovingStudentId(draggedId);
 
       try {
@@ -1254,6 +1066,7 @@ export default function StudentsManagementContent() {
           id: draggedId,
           student_status: getStudentStatusPayload(nextStatus),
         });
+
         const updatedStudent = (response?.data?.result ?? response?.data) as
           | UserDataModel
           | undefined;
@@ -1263,25 +1076,23 @@ export default function StudentsManagementContent() {
             ...prev,
             [draggedId]: updatedStudent,
           }));
-          setDetailStudent((prev) =>
-            prev && String(prev.id) === draggedId
-              ? mergeStudentData(prev, updatedStudent)
-              : prev,
-          );
         }
       } catch {
         setStudentOverrides((prev) => {
           const next = { ...prev };
           delete next[draggedId];
+
           return next;
         });
       } finally {
         setMovingStudentId(null);
+        resetPagination();
       }
     },
     [
       getEffectiveBoardStatus,
       onUpdateStudentStatus,
+      resetPagination,
       resolveDropStatus,
       studentMap,
     ],
@@ -1292,6 +1103,16 @@ export default function StudentsManagementContent() {
     setDragOverStatus(null);
   }, []);
 
+  const handleColumnPageChange = useCallback(
+    (status: StudentBoardStatus, page: number) => {
+      setPageByStatus((prev) => ({
+        ...prev,
+        [status]: page,
+      }));
+    },
+    [],
+  );
+
   const boardSummary = useMemo(() => {
     return boardConfig.map((column) => ({
       ...column,
@@ -1301,62 +1122,50 @@ export default function StudentsManagementContent() {
 
   return (
     <div>
-      <Space direction="vertical" size={20} style={{ width: "100%" }}>
-        <div
+      <Space direction="vertical" size={18} style={{ width: "100%" }}>
+        <Card
+          bodyStyle={{ padding: 20 }}
           style={{
-            borderRadius: 30,
-            padding: 20,
+            borderRadius: 28,
             border: "1px solid #e6eaf2",
-            boxShadow: "0 22px 48px rgba(15, 23, 42, 0.06)",
+            boxShadow: "0 18px 42px rgba(15, 23, 42, 0.055)",
+            background: "#ffffff",
           }}
         >
           <Flex justify="space-between" align="flex-start" gap={18} wrap>
-            <div style={{ maxWidth: 620 }}>
-              {/* <Text
-                style={{
-                  color: "#4f46e5",
-                  fontWeight: 700,
-                  letterSpacing: 0.4,
-                  textTransform: "uppercase",
-                  fontSize: 12,
-                }}
-              >
-                Admission Board
-              </Text> */}
-              <Title
-                level={3}
-                style={{ margin: "8px 0 6px", color: "#101828" }}
-              >
+            <div style={{ maxWidth: 680 }}>
+              <Title level={3} style={{ margin: "0 0 6px", color: "#101828" }}>
                 Student Pipeline Management
               </Title>
-              <Text style={{ color: "#667085", fontSize: 15, lineHeight: 1.7 }}>
-                Kelola progres student dengan tampilan board yang lebih jelas.
-                Drag and drop antar status akan langsung menyimpan perubahan ke
-                sistem.
+
+              <Text style={{ color: "#667085", fontSize: 14, lineHeight: 1.7 }}>
+                Kelola progres student dengan tampilan board yang lebih ringkas.
+                Data student ditampilkan 10 per halaman pada setiap kolom.
               </Text>
             </div>
 
-            <Flex gap={12} wrap>
+            <Flex gap={10} wrap>
               {boardSummary.map((item) => (
                 <div
                   key={item.key}
                   style={{
-                    minWidth: 138,
-                    borderRadius: 22,
-                    padding: 16,
+                    minWidth: 128,
+                    borderRadius: 20,
+                    padding: 14,
                     background: item.softBg,
                     border: `1px solid ${item.borderColor}`,
                   }}
                 >
-                  <Text type="secondary" style={{ fontSize: 12 }}>
+                  <Text type="secondary" style={{ fontSize: 11 }}>
                     {item.title}
                   </Text>
+
                   <div
                     style={{
-                      marginTop: 8,
-                      fontSize: 28,
+                      marginTop: 7,
+                      fontSize: 26,
                       lineHeight: 1,
-                      fontWeight: 700,
+                      fontWeight: 800,
                       color: "#111827",
                     }}
                   >
@@ -1373,7 +1182,7 @@ export default function StudentsManagementContent() {
               gap: 12,
               alignItems: "center",
               flexWrap: "wrap",
-              marginTop: 20,
+              marginTop: 18,
             }}
           >
             <Input
@@ -1387,7 +1196,7 @@ export default function StudentsManagementContent() {
                 flex: 1,
                 minWidth: 260,
                 borderRadius: 16,
-                height: 54,
+                height: 52,
                 background: "#fff",
               }}
             />
@@ -1395,12 +1204,12 @@ export default function StudentsManagementContent() {
             <Button
               size="large"
               icon={<FilterOutlined />}
-              onClick={() => setShowFilters((prev) => !prev)}
+              onClick={toggleFilters}
               style={{
-                minWidth: 122,
+                minWidth: 120,
                 borderRadius: 16,
-                height: 54,
-                fontWeight: 600,
+                height: 52,
+                fontWeight: 700,
                 borderColor: showFilters ? "#c7d2fe" : undefined,
                 color: showFilters ? "#4338ca" : undefined,
                 background: showFilters ? "#eef2ff" : "#fff",
@@ -1408,76 +1217,149 @@ export default function StudentsManagementContent() {
             >
               Filter
             </Button>
-
-            {/* <Button
-              type="primary"
-              size="large"
-              icon={<PlusOutlined />}
-              onClick={openCreateModal}
-              style={{
-                minWidth: 170,
-                borderRadius: 16,
-                height: 54,
-                fontWeight: 700,
-                background: "linear-gradient(135deg, #5b4de6 0%, #4338ca 100%)",
-                boxShadow: "0 14px 26px rgba(79, 70, 229, 0.2)",
-              }}
-            >
-              Add Student
-            </Button> */}
           </div>
-        </div>
+        </Card>
 
         {showFilters && (
           <Card
             bodyStyle={{ padding: 18 }}
             style={{
               borderRadius: 24,
-              border: "1px solid #e5e7eb",
-              boxShadow: "0 12px 30px rgba(15, 23, 42, 0.05)",
-              background: "linear-gradient(180deg, #ffffff 0%, #fafbff 100%)",
+              border: "1px solid #e6e9f4",
+              boxShadow: "0 10px 26px rgba(15, 23, 42, 0.045)",
+              background:
+                "linear-gradient(135deg, #ffffff 0%, #fbfcff 55%, #f7f8ff 100%)",
             }}
           >
-            <Space size={12} wrap style={{ width: "100%" }}>
-              <Select
-                placeholder="Country"
-                allowClear
-                value={selectedCountry}
-                onChange={setSelectedCountry}
-                style={filterStyle}
-                options={countryOptions}
-              />
+            <Flex
+              justify="space-between"
+              align="center"
+              gap={16}
+              wrap
+              style={{ marginBottom: 14 }}
+            >
+              <div>
+                <Text
+                  strong
+                  style={{
+                    display: "block",
+                    color: "#111827",
+                    fontSize: 14,
+                    marginBottom: 4,
+                  }}
+                >
+                  Filter Student
+                </Text>
 
-              <Select
-                placeholder="City"
-                allowClear
-                value={selectedCity}
-                onChange={setSelectedCity}
-                style={filterStyle}
-                options={cityOptions}
-              />
-
-              <Select
-                placeholder="Degree"
-                allowClear
-                value={selectedDegree}
-                onChange={setSelectedDegree}
-                style={filterStyle}
-                options={degreeOptions}
-              />
+                <Text style={{ color: "#667085", fontSize: 12 }}>
+                  {getFilterSummaryLabel({
+                    country: selectedCountry,
+                    visa: selectedVisa,
+                    degree: selectedDegree,
+                  })}
+                </Text>
+              </div>
 
               <Button
-                onClick={() => {
-                  setSelectedCountry(undefined);
-                  setSelectedCity(undefined);
-                  setSelectedDegree(undefined);
-                  setKeyword("");
+                onClick={resetFilters}
+                style={{
+                  borderRadius: 999,
+                  fontWeight: 700,
+                  height: 38,
+                  paddingInline: 18,
+                  borderColor: "#d7ddff",
+                  color: "#4338ca",
+                  background: "#f4f6ff",
                 }}
-                style={{ borderRadius: 999, fontWeight: 600 }}
               >
                 Reset Filter
               </Button>
-            </Space>
+            </Flex>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                gap: 12,
+              }}
+            >
+              <div>
+                <Text
+                  style={{
+                    display: "block",
+                    fontSize: 12,
+                    color: "#667085",
+                    marginBottom: 6,
+                    fontWeight: 600,
+                  }}
+                >
+                  Negara Tujuan
+                </Text>
+
+                <Select
+                  placeholder="Semua negara"
+                  allowClear
+                  value={selectedCountry}
+                  onChange={(value) =>
+                    setSelectedCountry(sanitizeFilterValue(value))
+                  }
+                  style={filterStyle}
+                  size="large"
+                  options={countryOptions}
+                />
+              </div>
+
+              <div>
+                <Text
+                  style={{
+                    display: "block",
+                    fontSize: 12,
+                    color: "#667085",
+                    marginBottom: 6,
+                    fontWeight: 600,
+                  }}
+                >
+                  Jenis Visa
+                </Text>
+
+                <Select
+                  placeholder="Pilih jenis visa"
+                  value={selectedVisa}
+                  onChange={(value) =>
+                    setSelectedVisa(sanitizeFilterValue(value))
+                  }
+                  style={filterStyle}
+                  size="large"
+                  options={visaOptions}
+                />
+              </div>
+
+              <div>
+                <Text
+                  style={{
+                    display: "block",
+                    fontSize: 12,
+                    color: "#667085",
+                    marginBottom: 6,
+                    fontWeight: 600,
+                  }}
+                >
+                  Jenjang Pendidikan
+                </Text>
+
+                <Select
+                  placeholder="Semua jenjang"
+                  allowClear
+                  value={selectedDegree}
+                  onChange={(value) =>
+                    setSelectedDegree(sanitizeFilterValue(value))
+                  }
+                  style={filterStyle}
+                  size="large"
+                  options={degreeOptions}
+                />
+              </div>
+            </div>
           </Card>
         )}
 
@@ -1491,45 +1373,49 @@ export default function StudentsManagementContent() {
         >
           <div
             style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-              gap: 18,
-              alignItems: "stretch",
+              width: "100%",
+              overflowX: "auto",
+              paddingBottom: 8,
             }}
           >
-            {boardConfig.map((column) => (
-              <BoardColumn
-                key={column.key}
-                column={column}
-                students={groupedStudents[column.key]}
-                onClickStudent={goToStudentDetail}
-                isHighlighted={dragOverStatus === column.key}
-                disableInteraction={onUpdateLoading && movingStudentId !== null}
-              />
-            ))}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(3, minmax(340px, 1fr))",
+                gap: 18,
+                alignItems: "stretch",
+                minWidth: 1060,
+              }}
+            >
+              {boardConfig.map((column) => (
+                <BoardColumn
+                  key={column.key}
+                  column={column}
+                  students={groupedStudents[column.key]}
+                  paginatedStudents={paginatedGroupedStudents[column.key]}
+                  currentPage={pageByStatus[column.key]}
+                  onPageChange={(page) =>
+                    handleColumnPageChange(column.key, page)
+                  }
+                  onClickStudent={goToStudentDetail}
+                  isHighlighted={dragOverStatus === column.key}
+                  disableInteraction={
+                    onUpdateLoading && movingStudentId !== null
+                  }
+                />
+              ))}
+            </div>
           </div>
 
           <DragOverlay>
             {activeStudent ? (
-              <div style={{ width: 360, maxWidth: "92vw" }}>
+              <div style={{ width: 340, maxWidth: "92vw" }}>
                 <StudentCardInner student={activeStudent} isDragging />
               </div>
             ) : null}
           </DragOverlay>
         </DndContext>
       </Space>
-
-      <ModalStudentComponent
-        open={isModalOpen}
-        onClose={closeModal}
-        onSubmit={handleSubmit}
-        onDelete={handleDelete}
-        onCancel={closeModal}
-        loading={onCreateLoading}
-        deleteLoading={onDeleteLoading}
-        selectedStudent={selectedStudent}
-        stagesData={stagesData ?? []}
-      />
     </div>
   );
 }

@@ -4,6 +4,7 @@ import api from "@/lib/api";
 import { useMainNotification } from "../components/common/notification";
 import { useAuth } from "../utils/use-auth";
 import {
+  PatchDocumentsConsentPayload,
   UserDataModel,
   UserLoginModel,
   UserPayloadCreateModel,
@@ -243,6 +244,32 @@ export const useUpdateStudentStatusUser = () => {
       queryClient.invalidateQueries({ queryKey: [queryKey] });
       queryClient.invalidateQueries({ queryKey: ["user-role-students"] });
       queryClient.invalidateQueries({ queryKey: [entity, variables.id] });
+      notify({ type: "success", entity, action: "updated" });
+    },
+    onError: () => {
+      notify({ type: "error", entity, action: "updated" });
+    },
+  });
+
+  return { onUpdate, onUpdateLoading };
+};
+
+export const usePatchDocumentConsent = () => {
+  const queryClient = useQueryClient();
+  const notify = useMainNotification();
+
+  const { mutateAsync: onUpdate, isPending: onUpdateLoading } = useMutation({
+    mutationFn: async ({
+      id,
+      payload,
+    }: {
+      id: string | number;
+      payload: PatchDocumentsConsentPayload;
+    }) => api.patch(`${usersUrl}/${id}/document-consent`, payload),
+    onSuccess: async (_, variables) => {
+      await queryClient.invalidateQueries({ queryKey: [queryKey] });
+      await queryClient.invalidateQueries({ queryKey: ["user-role-students"] });
+      await queryClient.invalidateQueries({ queryKey: ["user", variables.id] });
       notify({ type: "success", entity, action: "updated" });
     },
     onError: () => {

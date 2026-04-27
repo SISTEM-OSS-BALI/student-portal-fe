@@ -33,6 +33,11 @@ export interface UserDataModel {
   student_status_updated_at?: string | null;
   student_status_updated_at_label?: string | null;
 
+  document_consent_signature_url?: string | null;
+  document_consent_proof_photo_url?: string | null;
+  document_consent_signed_at?: string | null;
+  document_consent_signed?: boolean;
+
   notes?: NoteStudentDataModel[];
   stage?: {
     id: string;
@@ -83,6 +88,13 @@ export interface UserPayloadUpdateModel {
 export interface UserLoginModel {
   email: string;
   password: string;
+}
+
+export interface PatchDocumentsConsentPayload {
+  document_consent_signature_url?: string | null;
+  document_consent_proof_photo_url?: string | null;
+  document_consent_signed_at?: string | null;
+  document_consent_signed?: boolean;
 }
 
 export type UserFormModel = UserLoginModel;

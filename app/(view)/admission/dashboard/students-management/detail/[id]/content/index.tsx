@@ -29,7 +29,12 @@ import {
   Typography,
 } from "antd";
 import dayjs from "dayjs";
-import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
+import {
+  useParams,
+  usePathname,
+  useRouter,
+  useSearchParams,
+} from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import ModalNotesComponent from "./ModalNotesComponent";
 import OverviewComponent from "./tab-layout/OverviewComponent";
@@ -459,7 +464,10 @@ export default function StudentDetailContentPage() {
       key: "documents",
       label: "Documents",
       children: studentId ? (
-        <DocumentsComponent student_id={studentId} />
+        <DocumentsComponent
+          student_id={studentId}
+          student={detailStudentData}
+        />
       ) : null,
     },
     {
