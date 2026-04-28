@@ -98,22 +98,22 @@ const useMentionHelpers = (
 
   const mentionOptions = useMemo(() => {
     return mentionableUsers
-      .filter((user) => String(user.id) !== currentUserId)
-      .map((user) => ({
-        value: getUserHandle(user),
-        label: user.name,
-      }));
-  }, [mentionableUsers, currentUserId]);
+      .filter((user) => String(user.id) !== String(currentUserId))
+      .map((user) => {
+        const handle = getUserHandle(user);
+        const initials = user.name
+          .split(" ")
+          .filter(Boolean)
+          .map((part) => part[0])
+          .slice(0, 2)
+          .join("")
+          .toUpperCase();
+        const roleLabel = (user.role ?? "STAFF").toUpperCase();
+        const roleColor = roleLabel === "DIRECTOR" ? "gold" : "blue";
 
-  const mentionOptionNodes = useMemo(() => {
-    return mentionOptions.map((option) => {
-      const handle = option.value;
-      const user = mentionMap.get(handle);
-      const fallbackInitials = handle.slice(0, 2).toUpperCase();
-
-      if (!user) {
-        return (
-          <Mentions.Option key={handle} value={handle}>
+        return {
+          value: handle,
+          label: (
             <div
               style={{
                 display: "flex",
@@ -128,70 +128,48 @@ const useMentionHelpers = (
               <Avatar
                 size={32}
                 style={{
-                  background: "linear-gradient(135deg, #94a3b8, #64748b)",
+                  background: "linear-gradient(135deg, #2563eb, #0ea5e9)",
                   border: "2px solid #e2e8f0",
+                  flexShrink: 0,
                 }}
               >
-                {fallbackInitials}
+                {initials || handle.slice(0, 2).toUpperCase()}
               </Avatar>
-              <div style={{ display: "flex", flexDirection: "column" }}>
-                <Typography.Text style={{ fontSize: 13, fontWeight: 600 }}>
-                  {option.label}
-                </Typography.Text>
-                <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-                  @{handle}
-                </Typography.Text>
-              </div>
-            </div>
-          </Mentions.Option>
-        );
-      }
 
-      const initials = user.name
-        .split(" ")
-        .filter(Boolean)
-        .map((part) => part[0])
-        .slice(0, 2)
-        .join("")
-        .toUpperCase();
-      const roleLabel = (user.role ?? "staff").toUpperCase();
-      const roleColor = roleLabel === "DIRECTOR" ? "gold" : "blue";
-
-      return (
-        <Mentions.Option key={handle} value={handle}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-              padding: "6px 10px",
-              borderRadius: 12,
-              border: "1px solid #e2e8f0",
-              background: "linear-gradient(180deg, #fff, #f8fafc)",
-            }}
-          >
-            <Avatar
-              size={32}
-              style={{
-                background: "linear-gradient(135deg, #2563eb, #0ea5e9)",
-                border: "2px solid #e2e8f0",
-              }}
-            >
-              {initials || fallbackInitials}
-            </Avatar>
-            <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <Typography.Text style={{ fontSize: 13, fontWeight: 600 }}>
-                  {user.name}
-                </Typography.Text>
-                <Tag
-                  color={roleColor}
-                  style={{ marginInline: 0, fontSize: 10 }}
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  minWidth: 0,
+                  flex: 1,
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    flexWrap: "wrap",
+                  }}
                 >
-                  {roleLabel}
-                </Tag>
-              </div>
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <Typography.Text
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 600,
+                      lineHeight: 1.2,
+                    }}
+                  >
+                    {user.name}
+                  </Typography.Text>
+
+                  <Tag
+                    color={roleColor}
+                    style={{ marginInline: 0, fontSize: 10 }}
+                  >
+                    {roleLabel}
+                  </Tag>
+                </div>
+
                 <Typography.Text
                   style={{
                     fontSize: 10,
@@ -199,27 +177,32 @@ const useMentionHelpers = (
                     background: "#e2e8f0",
                     borderRadius: 999,
                     padding: "1px 6px",
+                    width: "fit-content",
+                    marginTop: 4,
                   }}
                 >
                   @{handle}
                 </Typography.Text>
               </div>
             </div>
-          </div>
-        </Mentions.Option>
-      );
-    });
-  }, [mentionOptions, mentionMap]);
+          ),
+        };
+      });
+  }, [mentionableUsers, currentUserId]);
 
   const extractMentionUserIds = useCallback(
     (text: string) => {
       const matches = text.match(/@([a-zA-Z0-9._-]+)/g) ?? [];
       const ids = new Set<string>();
+
       matches.forEach((raw) => {
         const handle = raw.slice(1);
         const user = mentionMap.get(handle);
-        if (user) ids.add(String(user.id));
+        if (user) {
+          ids.add(String(user.id));
+        }
       });
+
       return Array.from(ids);
     },
     [mentionMap],
@@ -228,7 +211,9 @@ const useMentionHelpers = (
   const renderMessageText = useCallback(
     (text?: string | null) => {
       if (!text) return "-";
+
       const parts = text.split(/(@[a-zA-Z0-9._-]+)/g);
+
       return parts.map((part, index) => {
         if (part.startsWith("@")) {
           const handle = part.slice(1);
@@ -236,16 +221,22 @@ const useMentionHelpers = (
           const label = user
             ? `${user.name} • ${(user.role ?? "").toUpperCase()}`
             : undefined;
+
           const content = (
             <span style={{ color: "#2563eb", fontWeight: 600 }}>{part}</span>
           );
-          if (!label) return <span key={index}>{content}</span>;
+
+          if (!label) {
+            return <span key={index}>{content}</span>;
+          }
+
           return (
             <Tooltip key={index} title={label}>
               {content}
             </Tooltip>
           );
         }
+
         return <span key={index}>{part}</span>;
       });
     },
@@ -254,16 +245,16 @@ const useMentionHelpers = (
 
   return {
     mentionOptions,
-    mentionOptionNodes,
     extractMentionUserIds,
     renderMessageText,
   };
 };
 
-export default function OverviewComponent({ ...props}: OverviewComponentProps)  {
+export default function OverviewComponent({
+  ...props
+}: OverviewComponentProps) {
   const rawId = props.student_id;
   const studentId = Array.isArray(rawId) ? rawId[0] : rawId;
-
   const detailStudentData = props.detailStudent;
 
   const { notification } = App.useApp();
@@ -272,6 +263,7 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
   const { data: usersData } = useUsers({ enabled: Boolean(currentUserId) });
   const { data: chatConversations } = useChatConversations();
   const { onCreate: onCreateConversation } = useCreateChatConversation();
+
   const [activeConversationId, setActiveConversationId] = useState<
     string | undefined
   >();
@@ -285,7 +277,7 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
   >([]);
   const [uploadingAttachments, setUploadingAttachments] = useState(false);
 
-  const { mentionOptionNodes, extractMentionUserIds, renderMessageText } =
+  const { mentionOptions, extractMentionUserIds, renderMessageText } =
     useMentionHelpers(usersData, currentUserId);
 
   const currentUser = useMemo(() => {
@@ -310,7 +302,9 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
 
   const directConversation = useMemo(() => {
     if (!chatConversations || !chatPeerId || !currentUserId) return undefined;
+
     const peerKey = String(chatPeerId);
+
     return chatConversations.find(
       (conversation) =>
         conversation.type === "direct" &&
@@ -321,30 +315,38 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
 
   const fallbackConversationId = useMemo(() => {
     if (!chatConversations || !currentUserId) return undefined;
+
     const mine = chatConversations.filter((conversation) => {
       if (conversation.type !== "direct") return false;
       if (!conversation.member_ids?.includes(currentUserId)) return false;
+
       return (conversation.member_ids ?? []).every((memberId) =>
         internalUserIds.has(String(memberId)),
       );
     });
+
     if (!mine.length) return undefined;
+
     const sorted = [...mine].sort((a, b) => {
       const timeA = a.updated_at ? new Date(a.updated_at).getTime() : 0;
       const timeB = b.updated_at ? new Date(b.updated_at).getTime() : 0;
       return timeB - timeA;
     });
+
     return sorted[0]?.id;
   }, [chatConversations, currentUserId, internalUserIds]);
 
   const conversation_id = activeConversationId ?? fallbackConversationId;
+
   const { data: chatMessagesData } = useChatMessages({ conversation_id });
 
   const mergeChatMessages = useCallback(
     (base: ChatMessage[], extra: ChatMessage[]) => {
       const map = new Map<string, ChatMessage>();
+
       base.forEach((item) => map.set(item.id, item));
       extra.forEach((item) => map.set(item.id, item));
+
       return Array.from(map.values()).sort((a, b) => {
         const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
         const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
@@ -354,14 +356,17 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
     [],
   );
 
-  const mergedChatMessages = useMemo(
-    () =>
-      mergeChatMessages(
-        chatMessagesData ?? [],
-        (conversation_id && localMessagesByConversation[conversation_id]) || [],
-      ),
-    [chatMessagesData, conversation_id, localMessagesByConversation, mergeChatMessages],
-  );
+  const mergedChatMessages = useMemo(() => {
+    return mergeChatMessages(
+      chatMessagesData ?? [],
+      (conversation_id && localMessagesByConversation[conversation_id]) || [],
+    );
+  }, [
+    chatMessagesData,
+    conversation_id,
+    localMessagesByConversation,
+    mergeChatMessages,
+  ]);
 
   const internalChatMessages = useMemo(() => {
     return mergedChatMessages.filter((message) => {
@@ -386,18 +391,22 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
     (message: ChatMessage) => {
       const key = message.conversation_id;
       if (!key) return;
+
       setLocalMessagesByConversation((prev) => ({
         ...prev,
         [key]: mergeChatMessages(prev[key] ?? [], [message]),
       }));
+
       const mentionIds = message.mention_user_ids ?? [];
       const text = message.text ?? "";
       const hasMentionByText = currentUserHandle
         ? text.includes(`@${currentUserHandle}`)
         : false;
+
       const mentioned =
         (currentUserId && mentionIds.includes(currentUserId)) ||
         hasMentionByText;
+
       if (mentioned && message.sender_id !== currentUserId) {
         notification.info({
           message: "You were mentioned",
@@ -425,7 +434,7 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
         {
           type: content ? "text" : "file",
           text: content || undefined,
-          mention_user_ids: mention_user_ids,
+          mention_user_ids,
           context_user_id: studentId ? String(studentId) : undefined,
           context_type: "student",
           attachments: attachments.map((item) => ({
@@ -436,6 +445,7 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
           })),
         },
       );
+
       return (result.data?.result ?? result.data) as ChatMessage;
     },
     [studentId],
@@ -453,9 +463,10 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
   const handleAttachmentUpload = useCallback(
     async (file: File) => {
       setUploadingAttachments(true);
+
       try {
         const uploads = await uploadChatFiles([file], {
-          folder: "attcahment-chat",
+          folder: "attachment-chat",
         });
         setPendingAttachments((prev) => [...prev, ...uploads]);
       } catch (error) {
@@ -467,6 +478,7 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
       } finally {
         setUploadingAttachments(false);
       }
+
       return false;
     },
     [notification],
@@ -478,13 +490,17 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
     );
   }, []);
 
-  const handleSendChat = async () => {
+  const handleSendChat = useCallback(async () => {
     const content = chatText.trim();
-    const hasAttachments = pendingAttachments.length > 0;
+    const attachmentsToSend = [...pendingAttachments];
+    const hasAttachments = attachmentsToSend.length > 0;
+
     if (!content && !hasAttachments) return;
+
     const mention_user_ids = extractMentionUserIds(content);
     const peerId = mention_user_ids[0];
     let targetConversationId = conversation_id;
+
     if (!targetConversationId) {
       if (!peerId) {
         notification.warning({
@@ -493,11 +509,13 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
         });
         return;
       }
+
       if (directConversation?.id) {
         setActiveConversationId(directConversation.id);
         targetConversationId = directConversation.id;
       }
     }
+
     if (!targetConversationId) {
       try {
         if (creatingConversationRef.current) {
@@ -507,12 +525,16 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
           });
           return;
         }
+
         creatingConversationRef.current = true;
+
         const res = await onCreateConversation({
           type: "direct",
           member_ids: [String(peerId)],
         });
+
         const id = extractConversationId(res.data);
+
         if (id) {
           setActiveConversationId(id);
           targetConversationId = id;
@@ -527,16 +549,28 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
         creatingConversationRef.current = false;
       }
     }
+
+    if (!targetConversationId) {
+      notification.error({
+        message: "Chat tidak tersedia",
+        description: "Conversation tidak berhasil dibuat.",
+      });
+      return;
+    }
+
     try {
       setChatText("");
       setPendingAttachments([]);
+
       const message = await sendMessageViaApi(
-        targetConversationId!,
+        targetConversationId,
         content,
         mention_user_ids,
-        pendingAttachments,
+        attachmentsToSend,
       );
+
       const key = message.conversation_id;
+
       if (key) {
         setLocalMessagesByConversation((prev) => ({
           ...prev,
@@ -548,24 +582,38 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
         message: "Gagal mengirim pesan",
         description: "Coba lagi beberapa saat.",
       });
+
       setChatText(content);
-      setPendingAttachments(pendingAttachments);
+      setPendingAttachments(attachmentsToSend);
     }
-  };
+  }, [
+    chatText,
+    pendingAttachments,
+    extractMentionUserIds,
+    conversation_id,
+    directConversation?.id,
+    onCreateConversation,
+    notification,
+    sendMessageViaApi,
+    mergeChatMessages,
+  ]);
 
   useEffect(() => {
     if (!conversation_id) return;
     if (connected && !lastError) return;
+
     const interval = setInterval(() => {
       queryClient.invalidateQueries({
         queryKey: ["chat-messages", conversation_id],
       });
     }, 4000);
+
     return () => clearInterval(interval);
   }, [conversation_id, connected, lastError, queryClient]);
 
   const stepsSource = useMemo(() => {
     const raw = detailStudentData?.stage?.country?.steps ?? [];
+
     return [...raw].sort((a, b) => {
       const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
       const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
@@ -590,7 +638,6 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
       time: "1 day ago",
     },
   ];
-
 
   return (
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
@@ -619,6 +666,7 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
               <Progress percent={50} showInfo={false} />
               <Typography.Text type="secondary">50% Complete</Typography.Text>
             </div>
+
             <Space direction="vertical" size={10} style={{ width: "100%" }}>
               {stepsSource.length ? (
                 stepsSource.map((step) => (
@@ -663,6 +711,7 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
               <Typography.Text strong>Recent Activity Summary</Typography.Text>
               <Typography.Link>View all</Typography.Link>
             </div>
+
             <List
               dataSource={activityItems}
               renderItem={(item) => (
@@ -703,17 +752,20 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
               Internal notes and communication log
             </Typography.Text>
           </div>
+
           {!conversation_id && !chatPeerId && (
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
               Gunakan @ untuk memilih siapa yang akan di-mention.
             </Typography.Text>
           )}
+
           <div style={{ maxHeight: 260, overflow: "auto" }}>
             <List
               dataSource={internalChatMessages}
               locale={{ emptyText: "Belum ada pesan" }}
               renderItem={(message) => {
-                const isMine = message.sender_id === currentUserId;
+                const isMine =
+                  String(message.sender_id) === String(currentUserId);
                 const timeLabel = message.created_at
                   ? new Date(message.created_at).toLocaleString()
                   : "-";
@@ -731,6 +783,7 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
                 const senderRole =
                   message.sender_role ??
                   (isMine ? (currentUser?.role ?? "ADMISSION") : "STUDENT");
+
                 return (
                   <List.Item style={{ paddingInline: 0, border: "none" }}>
                     <Flex
@@ -752,17 +805,24 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
                           borderRadius: 12,
                         }}
                       >
-                        <Flex align="center" justify="space-between" gap={10} wrap>
+                        <Flex
+                          align="center"
+                          justify="space-between"
+                          gap={10}
+                          wrap
+                        >
                           <Space size={8} align="center" wrap>
                             <Typography.Text strong style={{ fontSize: 12 }}>
                               {senderName}
                             </Typography.Text>
+
                             <Tag
                               color={getRoleTagColor(senderRole)}
                               style={{ margin: 0, fontSize: 10 }}
                             >
                               {formatRoleLabel(senderRole)}
                             </Tag>
+
                             {isMentioned && !isMine && (
                               <Tag color="gold" style={{ margin: 0 }}>
                                 Mentioned you
@@ -770,17 +830,20 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
                             )}
                           </Space>
                         </Flex>
+
                         {message.text && (
                           <Typography.Text style={{ fontSize: 13 }}>
                             {renderMessageText(message.text)}
                           </Typography.Text>
                         )}
+
                         {attachments.length > 0 && (
                           <Space direction="vertical" size={6}>
                             {attachments.map((attachment) => {
                               const isImage =
                                 attachment.mime_type?.startsWith("image/") ??
                                 false;
+
                               if (isImage) {
                                 return (
                                   <Image
@@ -795,6 +858,7 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
                                   />
                                 );
                               }
+
                               return (
                                 <a
                                   key={attachment.url}
@@ -813,6 +877,7 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
                             })}
                           </Space>
                         )}
+
                         <Typography.Text
                           type="secondary"
                           style={{ fontSize: 11 }}
@@ -826,6 +891,7 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
               }}
             />
           </div>
+
           {pendingAttachments.length > 0 && (
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
               {pendingAttachments.map((attachment, index) => (
@@ -844,6 +910,7 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
                   <Typography.Text style={{ fontSize: 12 }}>
                     {attachment.name}
                   </Typography.Text>
+
                   <Button
                     type="text"
                     size="small"
@@ -854,6 +921,7 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
               ))}
             </div>
           )}
+
           <Space.Compact style={{ width: "100%" }}>
             <Upload
               multiple
@@ -865,32 +933,31 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
                 loading={uploadingAttachments}
               />
             </Upload>
+
             <Mentions
               placeholder="Tulis catatan atau pesan... (gunakan @ untuk tag)"
               value={chatText}
               onChange={handleChatTextChange}
               onPressEnter={(event) => {
                 event.preventDefault();
-                handleSendChat();
+                void handleSendChat();
               }}
               disabled={!currentUserId}
-              dropdownStyle={{
-                padding: 8,
-                borderRadius: 14,
-                border: "1px solid #e2e8f0",
-                boxShadow: "0 16px 30px rgba(15, 23, 42, 0.12)",
-                background: "#fff",
-              }}
               style={{ width: "100%" }}
-            >
-              {mentionOptionNodes}
-            </Mentions>
+              options={mentionOptions}
+              styles={{
+                textarea: {
+                  borderRadius: 0,
+                },
+              }}
+            />
+
             <Button
               type="primary"
-              onClick={handleSendChat}
+              onClick={() => void handleSendChat()}
               disabled={
                 (!chatText.trim() && pendingAttachments.length === 0) ||
-                (!conversation_id && !chatPeerId)
+                !currentUserId
               }
             >
               Send

@@ -81,6 +81,8 @@ type BoardColumnConfig = {
   accent: string;
 };
 
+type SortableHookResult = ReturnType<typeof useSortable>;
+
 const boardConfig: BoardColumnConfig[] = [
   {
     key: "ONGOING",
@@ -325,8 +327,8 @@ function StudentCardInner({
   isDragging,
 }: {
   student: UserDataModel;
-  dragListeners?: Record<string, unknown>;
-  dragAttributes?: Record<string, unknown>;
+  dragListeners?: SortableHookResult["listeners"];
+  dragAttributes?: SortableHookResult["attributes"];
   isDragging?: boolean;
 }) {
   const status = getStudentBoardStatus(student);

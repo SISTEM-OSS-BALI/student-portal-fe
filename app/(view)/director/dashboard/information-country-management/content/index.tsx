@@ -42,7 +42,12 @@ type InformationFormValues = {
   description?: string;
 };
 
-const priorityOptions: SelectProps["options"] = [
+type OptionItem = {
+  value: string;
+  label: string;
+};
+
+const priorityOptions: OptionItem[] = [
   { value: "high", label: "High Priority" },
   { value: "medium", label: "Medium Priority" },
   { value: "normal", label: "Normal Priority" },
@@ -104,6 +109,7 @@ function getPriorityTagStyle(value?: string) {
 
 function formatDateTime(value?: string): string {
   if (!value) return "-";
+
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
 
@@ -135,7 +141,7 @@ function InformationFormModal({
   open: boolean;
   mode: "create" | "edit";
   loading: boolean;
-  countries: SelectProps["options"];
+  countries: OptionItem[];
   initialValues?: InformationCountryDataModel | null;
   onCancel: () => void;
   onSubmit: (values: InformationFormValues) => Promise<void> | void;
@@ -157,6 +163,7 @@ function InformationFormModal({
       country_id: initialValues?.country_id ?? undefined,
       description: initialValues?.description ?? "",
     });
+
     slugTouchedRef.current = Boolean(initialValues?.slug);
   }, [form, initialValues, open]);
 
@@ -266,12 +273,20 @@ export default function InformationCountryManagementContent() {
     onDeleteLoading,
   } = useInformationCountries({});
 
-  const countryOptions = useMemo<SelectProps["options"]>(() => {
+  const countryOptions = useMemo<OptionItem[]>(() => {
     return countries.map((country) => ({
-      value: country.id,
-      label: country.name,
+      value: String(country.id),
+      label: String(country.name),
     }));
   }, [countries]);
+
+  const countryFilterOptions = useMemo<OptionItem[]>(() => {
+    return [{ value: "all", label: "All Countries" }, ...countryOptions];
+  }, [countryOptions]);
+
+  const priorityFilterOptions = useMemo<OptionItem[]>(() => {
+    return [{ value: "all", label: "All Priority" }, ...priorityOptions];
+  }, []);
 
   const filteredInformations = useMemo(() => {
     const searchValue = search.trim().toLowerCase();
@@ -331,6 +346,7 @@ export default function InformationCountryManagementContent() {
         await onUpdate({ id: editingItem.id, payload: updatePayload });
         message.success("Information berhasil diperbarui.");
       }
+
       closeModal();
     } catch {
       message.error("Gagal menyimpan information.");
@@ -450,10 +466,7 @@ export default function InformationCountryManagementContent() {
                 value={selectedCountry}
                 onChange={setSelectedCountry}
                 style={{ width: "100%" }}
-                options={[
-                  { value: "all", label: "All Countries" },
-                  ...countryOptions,
-                ]}
+                options={countryFilterOptions}
               />
             </div>
 
@@ -468,10 +481,7 @@ export default function InformationCountryManagementContent() {
                 value={selectedPriority}
                 onChange={setSelectedPriority}
                 style={{ width: "100%" }}
-                options={[
-                  { value: "all", label: "All Priority" },
-                  ...priorityOptions,
-                ]}
+                options={priorityFilterOptions}
               />
             </div>
 

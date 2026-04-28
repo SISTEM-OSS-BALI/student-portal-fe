@@ -144,7 +144,6 @@ export default function StudentLayout({
   });
   const { data: detailUser } = useUser({
     id: user_id,
-    enabled: Boolean(user_id),
   });
   const { onMarkRead } = useMarkMentionRead();
   const { data: ticketMessages = [] } = useTicketMessages({

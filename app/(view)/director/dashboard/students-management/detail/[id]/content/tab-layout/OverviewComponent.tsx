@@ -266,7 +266,9 @@ const useMentionHelpers = (
   };
 };
 
-export default function OverviewComponent({ ...props}: OverviewComponentProps)  {
+export default function OverviewComponent({
+  ...props
+}: OverviewComponentProps) {
   const rawId = props.student_id;
   const studentId = Array.isArray(rawId) ? rawId[0] : rawId;
 
@@ -304,10 +306,11 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
     studentId,
     enabled: Boolean(studentId),
   });
-  const { data: statementDocuments = [] } = useGeneratedStatementLetterAiDocuments({
-    studentId,
-    enabled: Boolean(studentId),
-  });
+  const { data: statementDocuments = [] } =
+    useGeneratedStatementLetterAiDocuments({
+      studentId,
+      enabled: Boolean(studentId),
+    });
   const { data: sponsorDocuments = [] } = useGeneratedSponsorLetterAiDocuments({
     studentId,
     enabled: Boolean(studentId),
@@ -378,7 +381,12 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
         chatMessagesData ?? [],
         (conversation_id && localMessagesByConversation[conversation_id]) || [],
       ),
-    [chatMessagesData, conversation_id, localMessagesByConversation, mergeChatMessages],
+    [
+      chatMessagesData,
+      conversation_id,
+      localMessagesByConversation,
+      mergeChatMessages,
+    ],
   );
 
   const handleIncomingMessage = useCallback(
@@ -424,7 +432,7 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
         {
           type: content ? "text" : "file",
           text: content || undefined,
-          mention_user_ids: mention_user_ids,
+          mention_user_ids,
           context_user_id: studentId ? String(studentId) : undefined,
           context_type: "student",
           attachments: attachments.map((item) => ({
@@ -480,10 +488,13 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
   const handleSendChat = async () => {
     const content = chatText.trim();
     const hasAttachments = pendingAttachments.length > 0;
+
     if (!content && !hasAttachments) return;
+
     const mention_user_ids = extractMentionUserIds(content);
     const peerId = mention_user_ids[0];
     let targetConversationId = conversation_id;
+
     if (!targetConversationId) {
       if (!peerId) {
         notification.warning({
@@ -492,11 +503,13 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
         });
         return;
       }
+
       if (directConversation?.id) {
         setActiveConversationId(directConversation.id);
         targetConversationId = directConversation.id;
       }
     }
+
     if (!targetConversationId) {
       try {
         if (creatingConversationRef.current) {
@@ -506,12 +519,14 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
           });
           return;
         }
+
         creatingConversationRef.current = true;
         const res = await onCreateConversation({
           type: "direct",
           member_ids: [String(peerId)],
         });
         const id = extractConversationId(res.data);
+
         if (id) {
           setActiveConversationId(id);
           targetConversationId = id;
@@ -526,15 +541,18 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
         creatingConversationRef.current = false;
       }
     }
+
     try {
       setChatText("");
       setPendingAttachments([]);
+
       const message = await sendMessageViaApi(
         targetConversationId!,
         content,
         mention_user_ids,
         pendingAttachments,
       );
+
       const key = message.conversation_id;
       if (key) {
         setLocalMessagesByConversation((prev) => ({
@@ -555,25 +573,31 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
   useEffect(() => {
     if (!conversation_id) return;
     if (connected && !lastError) return;
+
     const interval = setInterval(() => {
       queryClient.invalidateQueries({
         queryKey: ["chat-messages", conversation_id],
       });
     }, 4000);
+
     return () => clearInterval(interval);
   }, [conversation_id, connected, lastError, queryClient]);
 
   const formatRelativeTime = useCallback((value?: string | null) => {
     if (!value) return "Updated recently";
+
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return "Updated recently";
 
     const diffMs = Date.now() - date.getTime();
     const minutes = Math.floor(diffMs / 60000);
+
     if (minutes < 1) return "just now";
     if (minutes < 60) return `${minutes} minute${minutes > 1 ? "s" : ""} ago`;
+
     const hours = Math.floor(minutes / 60);
     if (hours < 24) return `${hours} hour${hours > 1 ? "s" : ""} ago`;
+
     const days = Math.floor(hours / 24);
     if (days === 1) return "1 day ago";
     return `${days} days ago`;
@@ -596,13 +620,19 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
 
   const progressSummary = useMemo(() => {
     const totalSteps = stepsSource.length;
-    const visaGranted = String(detailStudentData?.visa_status ?? "").toLowerCase().includes("grant");
+    const visaGranted = String(detailStudentData?.visa_status ?? "")
+      .toLowerCase()
+      .includes("grant");
+
     const completedSteps = visaGranted
       ? totalSteps
       : currentStepIndex >= 0
         ? currentStepIndex
         : 0;
-    const percent = totalSteps ? Math.round((completedSteps / totalSteps) * 100) : 0;
+
+    const percent = totalSteps
+      ? Math.round((completedSteps / totalSteps) * 100)
+      : 0;
 
     return {
       totalSteps,
@@ -611,18 +641,33 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
     };
   }, [currentStepIndex, detailStudentData?.visa_status, stepsSource.length]);
 
+  const currentStepLabel = useMemo(() => {
+    if (!detailStudentData?.current_step_id) return "Step";
+    return (
+      stepsSource.find((step) => step.id === detailStudentData.current_step_id)
+        ?.label ?? "Step"
+    );
+  }, [detailStudentData?.current_step_id, stepsSource]);
+
   const activityItems = useMemo(() => {
-    const items: Array<{ id: string; title: string; meta: string; time: string; sortTime: number }> = [];
+    const items: Array<{
+      id: string;
+      title: string;
+      meta: string;
+      time: string;
+      sortTime: number;
+    }> = [];
 
     translationItems.forEach((item) => {
       const rawTime = item.updated_at ?? item.created_at;
       if (!rawTime) return;
+
       items.push({
         id: `translation-${item.id}`,
         title: item.file_name
           ? `Admission uploaded translated ${item.file_name}`
           : "Admission uploaded translated document",
-        meta: `${detailStudentData?.current_step_id ? (stepsSource.find((step) => step.id === detailStudentData.current_step_id)?.label ?? "Step") : "Step"} • Admission`,
+        meta: `${currentStepLabel} • Admission`,
         time: formatRelativeTime(rawTime),
         sortTime: new Date(rawTime).getTime(),
       });
@@ -631,11 +676,16 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
     answerApprovalItems.forEach((item) => {
       const rawTime = item.reviewed_at ?? item.updated_at ?? item.created_at;
       if (!rawTime) return;
+
       const status = String(item.status ?? "").toLowerCase();
+
       items.push({
         id: `approval-${item.id}`,
-        title: status === "approved" ? "Document approved by Director" : "Document waiting director review",
-        meta: `${detailStudentData?.current_step_id ? (stepsSource.find((step) => step.id === detailStudentData.current_step_id)?.label ?? "Step") : "Step"} • Director`,
+        title:
+          status === "approved"
+            ? "Document approved by Director"
+            : "Document waiting director review",
+        meta: `${currentStepLabel} • Director`,
         time: formatRelativeTime(rawTime),
         sortTime: new Date(rawTime).getTime(),
       });
@@ -644,28 +694,50 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
     cvDocuments.forEach((item) => {
       const rawTime = item.updated_at ?? item.created_at;
       if (!rawTime) return;
+
       items.push({
         id: `cv-${item.id}`,
-        title: String(item.status ?? "").toLowerCase() === "submitted_to_director"
-          ? "CV sent to Director for approval"
-          : "CV updated",
-        meta: `${detailStudentData?.current_step_id ? (stepsSource.find((step) => step.id === detailStudentData.current_step_id)?.label ?? "Step") : "Step"} • Admission`,
+        title:
+          String(item.status ?? "").toLowerCase() === "submitted_to_director"
+            ? "CV sent to Director for approval"
+            : "CV updated",
+        meta: `${currentStepLabel} • Admission`,
         time: formatRelativeTime(rawTime),
         sortTime: new Date(rawTime).getTime(),
       });
     });
 
-    [...statementDocuments, ...sponsorDocuments].forEach((item, index) => {
+    statementDocuments.forEach((item) => {
       const rawTime = item.updated_at ?? item.created_at;
       if (!rawTime) return;
-      const label = index < statementDocuments.length ? "Statement letter" : "Sponsor letter";
+
       const status = String(item.status ?? "").toLowerCase();
+
       items.push({
-        id: `letter-${item.id}`,
-        title: status === "submitted_to_director"
-          ? `${label} sent to Director for approval`
-          : `${label} updated`,
-        meta: `${detailStudentData?.current_step_id ? (stepsSource.find((step) => step.id === detailStudentData.current_step_id)?.label ?? "Step") : "Step"} • Admission`,
+        id: `statement-${item.id}`,
+        title:
+          status === "submitted_to_director"
+            ? "Statement letter sent to Director for approval"
+            : "Statement letter updated",
+        meta: `${currentStepLabel} • Admission`,
+        time: formatRelativeTime(rawTime),
+        sortTime: new Date(rawTime).getTime(),
+      });
+    });
+
+    sponsorDocuments.forEach((item) => {
+      const rawTime = item.updated_at ?? item.created_at;
+      if (!rawTime) return;
+
+      const status = String(item.status ?? "").toLowerCase();
+
+      items.push({
+        id: `sponsor-${item.id}`,
+        title:
+          status === "submitted_to_director"
+            ? "Sponsor letter sent to Director for approval"
+            : "Sponsor letter updated",
+        meta: `${currentStepLabel} • Admission`,
         time: formatRelativeTime(rawTime),
         sortTime: new Date(rawTime).getTime(),
       });
@@ -677,7 +749,9 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
         title: `Student status updated to ${detailStudentData.student_status ?? "On Going"}`,
         meta: `${detailStudentData.student_status_updated_by_name ?? "Admission"} • Student case`,
         time: formatRelativeTime(detailStudentData.student_status_updated_at),
-        sortTime: new Date(detailStudentData.student_status_updated_at).getTime(),
+        sortTime: new Date(
+          detailStudentData.student_status_updated_at,
+        ).getTime(),
       });
     }
 
@@ -697,8 +771,8 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
       .slice(0, 6);
   }, [
     answerApprovalItems,
+    currentStepLabel,
     cvDocuments,
-    detailStudentData?.current_step_id,
     detailStudentData?.id,
     detailStudentData?.student_status,
     detailStudentData?.student_status_updated_at,
@@ -711,7 +785,6 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
     stepsSource,
     translationItems,
   ]);
-
 
   return (
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
@@ -738,8 +811,11 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
                 {`${progressSummary.completedSteps} dari ${progressSummary.totalSteps || 0} tugas selesai`}
               </Typography.Text>
               <Progress percent={progressSummary.percent} showInfo={false} />
-              <Typography.Text type="secondary">{progressSummary.percent}% Complete</Typography.Text>
+              <Typography.Text type="secondary">
+                {progressSummary.percent}% Complete
+              </Typography.Text>
             </div>
+
             <Space direction="vertical" size={10} style={{ width: "100%" }}>
               {stepsSource.length ? (
                 stepsSource.map((step) => (
@@ -782,8 +858,17 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
               }}
             >
               <Typography.Text strong>Recent Activity Summary</Typography.Text>
-              <Typography.Link onClick={() => router.push(`/director/dashboard/students-management/detail/${studentId}?tab=activity-log`)}>View all</Typography.Link>
+              <Typography.Link
+                onClick={() =>
+                  router.push(
+                    `/director/dashboard/students-management/detail/${studentId}?tab=activity-log`,
+                  )
+                }
+              >
+                View all
+              </Typography.Link>
             </div>
+
             <List
               dataSource={activityItems}
               renderItem={(item) => (
@@ -824,11 +909,13 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
               Internal notes and communication log
             </Typography.Text>
           </div>
+
           {!conversation_id && !chatPeerId && (
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
               Gunakan @ untuk memilih siapa yang akan di-mention.
             </Typography.Text>
           )}
+
           <div style={{ maxHeight: 260, overflow: "auto" }}>
             <List
               dataSource={mergedChatMessages}
@@ -852,6 +939,7 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
                 const senderRole =
                   message.sender_role ??
                   (isMine ? (currentUser?.role ?? "ADMISSION") : "STUDENT");
+
                 return (
                   <List.Item style={{ paddingInline: 0, border: "none" }}>
                     <Flex
@@ -873,7 +961,12 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
                           borderRadius: 12,
                         }}
                       >
-                        <Flex align="center" justify="space-between" gap={10} wrap>
+                        <Flex
+                          align="center"
+                          justify="space-between"
+                          gap={10}
+                          wrap
+                        >
                           <Space size={8} align="center" wrap>
                             <Typography.Text strong style={{ fontSize: 12 }}>
                               {senderName}
@@ -891,17 +984,20 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
                             )}
                           </Space>
                         </Flex>
+
                         {message.text && (
                           <Typography.Text style={{ fontSize: 13 }}>
                             {renderMessageText(message.text)}
                           </Typography.Text>
                         )}
+
                         {attachments.length > 0 && (
                           <Space direction="vertical" size={6}>
                             {attachments.map((attachment) => {
                               const isImage =
                                 attachment.mime_type?.startsWith("image/") ??
                                 false;
+
                               if (isImage) {
                                 return (
                                   <Image
@@ -916,6 +1012,7 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
                                   />
                                 );
                               }
+
                               return (
                                 <a
                                   key={attachment.url}
@@ -934,6 +1031,7 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
                             })}
                           </Space>
                         )}
+
                         <Typography.Text
                           type="secondary"
                           style={{ fontSize: 11 }}
@@ -947,6 +1045,7 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
               }}
             />
           </div>
+
           {pendingAttachments.length > 0 && (
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
               {pendingAttachments.map((attachment, index) => (
@@ -975,6 +1074,7 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
               ))}
             </div>
           )}
+
           <Space.Compact style={{ width: "100%" }}>
             <Upload
               multiple
@@ -986,26 +1086,26 @@ export default function OverviewComponent({ ...props}: OverviewComponentProps)  
                 loading={uploadingAttachments}
               />
             </Upload>
+
             <Mentions
               placeholder="Tulis catatan atau pesan... (gunakan @ untuk tag)"
               value={chatText}
               onChange={handleChatTextChange}
               onPressEnter={(event) => {
                 event.preventDefault();
-                handleSendChat();
+                void handleSendChat();
               }}
               disabled={!currentUserId}
-              dropdownStyle={{
-                padding: 8,
-                borderRadius: 14,
-                border: "1px solid #e2e8f0",
-                boxShadow: "0 16px 30px rgba(15, 23, 42, 0.12)",
-                background: "#fff",
-              }}
               style={{ width: "100%" }}
+              styles={{
+                textarea: {
+                  borderRadius: 0,
+                },
+              }}
             >
               {mentionOptionNodes}
             </Mentions>
+
             <Button
               type="primary"
               onClick={handleSendChat}

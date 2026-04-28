@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, type CSSProperties } from "react";
 import {
   Button,
   Card,
@@ -59,15 +59,18 @@ const formatUploadDate = (value?: string | null) => {
 const resolveAccept = (fileType?: string) => {
   if (!fileType) return undefined;
   const normalized = fileType.toLowerCase();
+
   if (normalized.includes("pdf")) return ".pdf";
   if (
     normalized.includes("image") ||
     normalized.includes("jpg") ||
+    normalized.includes("jpeg") ||
     normalized.includes("png")
   ) {
     return "image/*";
   }
   if (normalized.includes("doc")) return ".doc,.docx";
+
   return undefined;
 };
 
@@ -76,7 +79,7 @@ const resolveFileTypeLabel = (fileType?: string) => {
   return fileType;
 };
 
-const normalizeUpload: UploadProps["getValueFromEvent"] = (e) => {
+const normalizeUpload = (e: { fileList?: UploadFile[] } | UploadFile[] | undefined) => {
   if (Array.isArray(e)) return e;
   return e?.fileList ?? [];
 };
@@ -118,14 +121,17 @@ const buildAutoFileName = (
 
   const ext = getFileExt(file.name);
   let next = pattern;
+
   next = next.replaceAll("{studentName}", context.student_name ?? "student");
   next = next.replaceAll("{documentLabel}", context.document_label ?? "document");
   next = next.replaceAll("{internalCode}", context.internal_code ?? "DOC");
   next = next.replaceAll("{country}", context.country_name ?? "country");
   next = next.replaceAll("{ext}", ext.replace(".", ""));
+
   if (ext && !next.toLowerCase().endsWith(ext.toLowerCase())) {
     next = `${next}${ext}`;
   }
+
   return sanitizeFileName(next);
 };
 
@@ -140,6 +146,7 @@ const getDocumentStatusInfo = (
       background: "#eff6ff",
     };
   }
+
   if (draftFile?.status === "done") {
     return {
       label: "Ready to submit",
@@ -147,6 +154,7 @@ const getDocumentStatusInfo = (
       background: "#ecfdf5",
     };
   }
+
   if (draftFile?.status === "error") {
     return {
       label: "Upload failed",
@@ -154,6 +162,7 @@ const getDocumentStatusInfo = (
       background: "#fef2f2",
     };
   }
+
   if (existingFile?.file_url) {
     return {
       label: "Uploaded",
@@ -161,6 +170,7 @@ const getDocumentStatusInfo = (
       background: "#ecfdf5",
     };
   }
+
   return {
     label: "Not uploaded",
     color: "#ef4444",
@@ -172,7 +182,7 @@ const summaryCardStyle = {
   borderRadius: 20,
   borderColor: "#dbe5ff",
   boxShadow: "0 18px 40px rgba(37, 99, 235, 0.08)",
-} satisfies React.CSSProperties;
+} satisfies CSSProperties;
 
 const guidelineItems = [
   "Use a scanner or high-quality camera.",
@@ -185,10 +195,12 @@ const guidelineItems = [
 export default function CountryDocumentComponent() {
   const [docForm] = Form.useForm<DocumentFormValues>();
   const watchedDocuments = Form.useWatch("documents", docForm);
+
   const { user_id } = useAuth();
   const { data: currentUser, fetchLoading: userLoading } = useUser({ id: user_id });
   const { data: stages, fetchLoading: stagesLoading } = useStagesManagement({});
   const { uploadDocument } = useDocumentUpload();
+
   const {
     data: answerDocuments,
     fetchLoading: answerDocumentsLoading,
@@ -202,6 +214,7 @@ export default function CountryDocumentComponent() {
   const countryDocuments = useMemo(() => {
     const countryId = currentUser?.stage?.country_id;
     if (!countryId) return [];
+
     const docs = (stages ?? [])
       .filter((stage) => stage.country_id === countryId)
       .map((stage) => stage.document)
@@ -217,19 +230,24 @@ export default function CountryDocumentComponent() {
 
   const latestAnswerByDocumentId = useMemo(() => {
     const map = new Map<string, AnswerDocumentDataModel>();
+
     (answerDocuments ?? []).forEach((item) => {
       const key = String(item.document_id);
       const existing = map.get(key);
+
       if (!existing) {
         map.set(key, item);
         return;
       }
+
       const existingTime = Date.parse(existing.created_at);
       const nextTime = Date.parse(item.created_at);
+
       if (Number.isNaN(existingTime) || nextTime > existingTime) {
         map.set(key, item);
       }
     });
+
     return map;
   }, [answerDocuments]);
 
@@ -239,7 +257,8 @@ export default function CountryDocumentComponent() {
       const draftFile = watchedDocuments?.[key]?.[0];
       const submittedFile = latestAnswerByDocumentId.get(key);
       const statusInfo = getDocumentStatusInfo(draftFile, submittedFile);
-      const isCompleted = draftFile?.status === "done" || Boolean(submittedFile?.file_url);
+      const isCompleted =
+        draftFile?.status === "done" || Boolean(submittedFile?.file_url);
 
       return {
         doc,
@@ -259,9 +278,10 @@ export default function CountryDocumentComponent() {
   const optionalDocuments = documentsWithState.filter(
     (item) => !item.doc.required,
   ).length;
-  const translationDocuments = documentsWithState.filter(
-    (item) => item.doc.translation_needed === "yes",
+  const translationDocuments = documentsWithState.filter((item) =>
+    String(item.doc.translation_needed ?? "").toUpperCase() === "YES",
   ).length;
+
   const progressPercent = totalDocuments
     ? Math.round((uploadedDocuments / totalDocuments) * 100)
     : 0;
@@ -274,15 +294,17 @@ export default function CountryDocumentComponent() {
     Object.entries(documents).forEach(([document_id, fileList]) => {
       const file = Array.isArray(fileList) ? fileList[0] : undefined;
       if (!file) return;
+
       const response = file.response;
       if (file.status !== "done" || !response?.url) {
         const label = documentMap.get(String(document_id))?.label;
         pendingDocs.push(label ?? String(document_id));
         return;
       }
+
       payload.push({
         document_id: String(document_id),
-        student_id: currentUser?.id,
+        student_id: currentUser?.id != null ? String(currentUser.id) : undefined,
         file_name: file.name,
         file_url: response.url,
         file_path: response.path,
@@ -294,9 +316,7 @@ export default function CountryDocumentComponent() {
     if (pendingDocs.length > 0) {
       notification.error({
         message: "Upload belum selesai",
-        description: `Dokumen berikut belum selesai diunggah: ${pendingDocs.join(
-          ", ",
-        )}`,
+        description: `Dokumen berikut belum selesai diunggah: ${pendingDocs.join(", ")}`,
       });
       return;
     }
@@ -344,6 +364,7 @@ export default function CountryDocumentComponent() {
                 <Text type="secondary">
                   Please upload all required documents to continue your visa process.
                 </Text>
+
                 <Space size={8} wrap>
                   {currentUser?.stage?.country?.name ? (
                     <Tag
@@ -358,6 +379,7 @@ export default function CountryDocumentComponent() {
                       {currentUser.stage.country.name}
                     </Tag>
                   ) : null}
+
                   {currentUser?.visa_type ? (
                     <Tag
                       style={{
@@ -371,6 +393,7 @@ export default function CountryDocumentComponent() {
                       {currentUser.visa_type}
                     </Tag>
                   ) : null}
+
                   <Tag
                     style={{
                       borderRadius: 999,
@@ -397,7 +420,7 @@ export default function CountryDocumentComponent() {
                           borderColor: "#dbe5ff",
                           boxShadow: "0 16px 36px rgba(15, 23, 42, 0.06)",
                         }}
-                        bodyStyle={{ padding: 18 }}
+                        styles={{ body: { padding: 18 } }}
                       >
                         <Space direction="vertical" size={14} style={{ width: "100%" }}>
                           <div
@@ -423,6 +446,7 @@ export default function CountryDocumentComponent() {
                               >
                                 <FileTextOutlined />
                               </div>
+
                               <div>
                                 <Text
                                   strong
@@ -491,6 +515,7 @@ export default function CountryDocumentComponent() {
                                     country_name: currentUser?.stage?.country?.name,
                                   },
                                 );
+
                                 return new File([file], renamed, { type: file.type });
                               }}
                               customRequest={async ({
@@ -499,18 +524,20 @@ export default function CountryDocumentComponent() {
                                 onError,
                               }: CustomRequestOptions) => {
                                 try {
+                                  const typedFile = file as File;
                                   const safeName = sanitizeFileName(
-                                    (file as File).name || "document",
+                                    typedFile.name || "document",
                                   );
                                   const userId = currentUser?.id ?? "anonymous";
                                   const path = `documents/${userId}/${doc.id}/${safeName}`;
 
                                   const result = await uploadDocument({
-                                    file: file as File,
+                                    file: typedFile,
                                     path,
-                                    content_type: (file as File).type,
+                                    content_type: typedFile.type,
                                   });
-                                  onSuccess?.(result, file as File);
+
+                                  onSuccess?.(result, typedFile);
                                 } catch (err: unknown) {
                                   onError?.(
                                     err instanceof Error
@@ -590,7 +617,9 @@ export default function CountryDocumentComponent() {
                                 }}
                               >
                                 <Space size={10} align="start">
-                                  <FileTextOutlined style={{ color: "#64748b", marginTop: 2 }} />
+                                  <FileTextOutlined
+                                    style={{ color: "#64748b", marginTop: 2 }}
+                                  />
                                   <Space direction="vertical" size={0}>
                                     <Text strong style={{ fontSize: 13 }}>
                                       {draftFile?.name ||
@@ -623,6 +652,7 @@ export default function CountryDocumentComponent() {
                                       <CheckCircleFilled /> File ready
                                     </span>
                                   )}
+
                                   {(draftFile?.response?.url || submittedFile?.file_url) && (
                                     <a
                                       href={buildFilePreviewUrl(
@@ -658,7 +688,7 @@ export default function CountryDocumentComponent() {
 
           <Col xs={24} xl={8}>
             <Space direction="vertical" size={16} style={{ width: "100%" }}>
-              <Card style={summaryCardStyle} bodyStyle={{ padding: 18 }}>
+              <Card style={summaryCardStyle} styles={{ body: { padding: 18 } }}>
                 <Space direction="vertical" size={12} style={{ width: "100%" }}>
                   <div
                     style={{
@@ -700,6 +730,7 @@ export default function CountryDocumentComponent() {
                         </Text>
                       </Space>
                     </Col>
+
                     <Col span={12}>
                       <Space direction="vertical" size={0}>
                         <Text strong style={{ fontSize: 24, color: "#111827" }}>
@@ -710,6 +741,7 @@ export default function CountryDocumentComponent() {
                         </Text>
                       </Space>
                     </Col>
+
                     <Col span={12}>
                       <Space direction="vertical" size={0}>
                         <Text strong style={{ fontSize: 24, color: "#111827" }}>
@@ -720,6 +752,7 @@ export default function CountryDocumentComponent() {
                         </Text>
                       </Space>
                     </Col>
+
                     <Col span={12}>
                       <Space direction="vertical" size={0}>
                         <Text strong style={{ fontSize: 24, color: "#111827" }}>
@@ -755,12 +788,13 @@ export default function CountryDocumentComponent() {
                   ...summaryCardStyle,
                   background: "#f8fbff",
                 }}
-                bodyStyle={{ padding: 18 }}
+                styles={{ body: { padding: 18 } }}
               >
                 <Space direction="vertical" size={10} style={{ width: "100%" }}>
                   <Text strong style={{ color: "#1d4ed8" }}>
                     Upload guidelines
                   </Text>
+
                   <ul
                     style={{
                       margin: 0,

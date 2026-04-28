@@ -88,10 +88,13 @@ const formatRelativeTime = (value?: string) => {
   const diffMs = Date.now() - date.getTime();
   const minutes = Math.floor(diffMs / 60000);
   if (minutes < 1) return "Updated just now";
-  if (minutes < 60)
+  if (minutes < 60) {
     return `Updated ${minutes} minute${minutes > 1 ? "s" : ""} ago`;
+  }
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `Updated ${hours} hour${hours > 1 ? "s" : ""} ago`;
+  if (hours < 24) {
+    return `Updated ${hours} hour${hours > 1 ? "s" : ""} ago`;
+  }
   const days = Math.floor(hours / 24);
   if (days === 1) return "Updated yesterday";
   return `Updated ${days} days ago`;
@@ -113,16 +116,26 @@ const buildTicketSummary = (ticket: TicketMessageDataModel) => {
 
 const extractConversationId = (payload: unknown): string | undefined => {
   if (!payload || typeof payload !== "object") return undefined;
+
   const response = payload as {
     id?: unknown;
     data?: { id?: unknown; result?: { id?: unknown } };
     result?: { id?: unknown };
   };
-  if (typeof response.data?.result?.id === "string")
+
+  if (typeof response.data?.result?.id === "string") {
     return response.data.result.id;
-  if (typeof response.data?.id === "string") return response.data.id;
-  if (typeof response.result?.id === "string") return response.result.id;
-  if (typeof response.id === "string") return response.id;
+  }
+  if (typeof response.data?.id === "string") {
+    return response.data.id;
+  }
+  if (typeof response.result?.id === "string") {
+    return response.result.id;
+  }
+  if (typeof response.id === "string") {
+    return response.id;
+  }
+
   return undefined;
 };
 
@@ -132,9 +145,11 @@ const isImageAttachment = (mimeType?: string) => {
 
 const mergeChatMessages = (messages: ChatMessage[]) => {
   const map = new Map<string, ChatMessage>();
+
   messages.forEach((message) => {
     map.set(message.id, message);
   });
+
   return Array.from(map.values()).sort((a, b) => {
     const timeA = Date.parse(a.created_at);
     const timeB = Date.parse(b.created_at);
@@ -145,6 +160,7 @@ const mergeChatMessages = (messages: ChatMessage[]) => {
 export default function ChatComponent() {
   const [form] = Form.useForm<TicketMessagePayloadCreateModel>();
   const { user_id } = useAuth();
+
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [chatText, setChatText] = useState("");
@@ -179,6 +195,11 @@ export default function ChatComponent() {
     enabled: Boolean(user_id),
   });
 
+  const currentUser = useMemo(() => {
+    if (!user_id) return undefined;
+    return users.find((user) => String(user.id) === String(user_id));
+  }, [users, user_id]);
+
   const admissionUsers = useMemo(() => {
     return users.filter(
       (user) =>
@@ -212,6 +233,7 @@ export default function ChatComponent() {
   const handleIncomingMessage = useCallback((message: ChatMessage) => {
     const key = message.conversation_id;
     if (!key) return;
+
     setLocalMessagesByConversation((prev) => ({
       ...prev,
       [key]: mergeChatMessages([...(prev[key] ?? []), message]),
@@ -225,6 +247,7 @@ export default function ChatComponent() {
 
   const mergedMessages = useMemo(() => {
     if (!selectedConversationId) return [] as ChatMessage[];
+
     return mergeChatMessages([
       ...fetchedMessages,
       ...(localMessagesByConversation[selectedConversationId] ?? []),
@@ -246,11 +269,45 @@ export default function ChatComponent() {
     setPendingAttachments([]);
   };
 
+  const sendMessageViaApi = useCallback(
+    async (
+      targetConversationId: string,
+      text: string,
+      attachments: UploadedChatAttachment[],
+      options?: {
+        mention_user_ids?: string[];
+        context_user_id?: string;
+        context_type?: string;
+      },
+    ) => {
+      const result = await api.post(
+        `/api/chats/conversations/${targetConversationId}/messages`,
+        {
+          type: text ? "text" : "file",
+          text: text || undefined,
+          mention_user_ids: options?.mention_user_ids ?? [],
+          context_user_id: options?.context_user_id,
+          context_type: options?.context_type,
+          attachments: attachments.map((item) => ({
+            url: item.url,
+            name: item.name,
+            mime_type: item.mime_type,
+            size: item.size,
+          })),
+        },
+      );
+
+      return (result.data?.result ?? result.data) as ChatMessage;
+    },
+    [],
+  );
+
   const createAdmissionConversation = useCallback(
     async (title: string) => {
       if (!user_id) {
         throw new Error("User login tidak ditemukan.");
       }
+
       if (!admissionUsers.length) {
         throw new Error("Belum ada user admission yang tersedia.");
       }
@@ -272,6 +329,7 @@ export default function ChatComponent() {
       if (!conversationId) {
         throw new Error("Conversation chat tidak mengembalikan id yang valid.");
       }
+
       return conversationId;
     },
     [admissionUsers, createConversation, user_id],
@@ -281,11 +339,13 @@ export default function ChatComponent() {
     async (ticket: TicketMessageDataModel) => {
       const existingConversationId =
         conversationOverrides[ticket.id] ?? ticket.conversation_id;
+
       if (existingConversationId) {
         return existingConversationId;
       }
 
       const conversationId = await createAdmissionConversation(ticket.name);
+
       setConversationOverrides((prev) => ({
         ...prev,
         [ticket.id]: conversationId,
@@ -336,6 +396,7 @@ export default function ChatComponent() {
 
       const createdTicket =
         ticketResponse?.data?.result ?? ticketResponse?.data ?? ticketResponse;
+
       if (createdTicket?.id) {
         setSelectedTicketId(String(createdTicket.id));
         setConversationOverrides((prev) => ({
@@ -393,10 +454,12 @@ export default function ChatComponent() {
 
   const handleAttachmentUpload = useCallback(async (file: File) => {
     setUploadingAttachments(true);
+
     try {
       const uploads = await uploadChatFiles([file], {
         folder: "attachment-chat",
       });
+
       setPendingAttachments((prev) => [...prev, ...uploads]);
     } catch (error) {
       notification.error({
@@ -407,6 +470,7 @@ export default function ChatComponent() {
     } finally {
       setUploadingAttachments(false);
     }
+
     return false;
   }, []);
 
@@ -415,38 +479,6 @@ export default function ChatComponent() {
       prev.filter((_, itemIndex) => itemIndex !== index),
     );
   }, []);
-
-  const sendMessageViaApi = useCallback(
-    async (
-      targetConversationId: string,
-      text: string,
-      attachments: UploadedChatAttachment[],
-      options?: {
-        mention_user_ids?: string[];
-        context_user_id?: string;
-        context_type?: string;
-      },
-    ) => {
-      const result = await api.post(
-        `/api/chats/conversations/${targetConversationId}/messages`,
-        {
-          type: text ? "text" : "file",
-          text: text || undefined,
-          mention_user_ids: options?.mention_user_ids ?? [],
-          context_user_id: options?.context_user_id,
-          context_type: options?.context_type,
-          attachments: attachments.map((item) => ({
-            url: item.url,
-            name: item.name,
-            mime_type: item.mime_type,
-            size: item.size,
-          })),
-        },
-      );
-      return (result.data?.result ?? result.data) as ChatMessage;
-    },
-    [],
-  );
 
   const handleSendMessage = useCallback(async () => {
     if (!selectedTicket) {
@@ -459,10 +491,12 @@ export default function ChatComponent() {
 
     const text = chatText.trim();
     const attachments = [...pendingAttachments];
+
     if (!text && !attachments.length) return;
 
     try {
       setSendingMessage(true);
+
       const conversationId = await ensureConversationForTicket(selectedTicket);
       const message = await sendMessageViaApi(
         conversationId,
@@ -477,6 +511,7 @@ export default function ChatComponent() {
           message,
         ]),
       }));
+
       setChatText("");
       setPendingAttachments([]);
     } catch (error) {
@@ -533,6 +568,7 @@ export default function ChatComponent() {
                     Pilih tiket untuk membuka percakapannya.
                   </Text>
                 </Space>
+
                 <Button
                   type="primary"
                   icon={<PlusOutlined />}
@@ -547,6 +583,7 @@ export default function ChatComponent() {
                 {sortedTickets.length ? (
                   sortedTickets.map((ticket) => {
                     const isSelected = ticket.id === selectedTicket?.id;
+
                     return (
                       <button
                         key={ticket.id}
@@ -594,6 +631,7 @@ export default function ChatComponent() {
                             >
                               On Going
                             </span>
+
                             <Text type="secondary" style={{ fontSize: 12 }}>
                               {getTicketCode(ticket)}
                             </Text>
@@ -611,6 +649,7 @@ export default function ChatComponent() {
                             >
                               {ticket.name}
                             </Text>
+
                             <Paragraph
                               type="secondary"
                               style={{ margin: "8px 0 0", fontSize: 14 }}
@@ -684,9 +723,11 @@ export default function ChatComponent() {
                     >
                       On Going
                     </span>
+
                     <Title level={2} style={{ margin: 0 }}>
                       {selectedTicket.name}
                     </Title>
+
                     <Text type="secondary" style={{ fontSize: 16 }}>
                       {buildTicketSummary(selectedTicket)}
                     </Text>
@@ -748,16 +789,19 @@ export default function ChatComponent() {
                         const bubbleColor = isMine ? "#1f2937" : "#ffffff";
                         const alignItems = isMine ? "flex-start" : "flex-end";
                         const alignSelf = isMine ? "flex-start" : "flex-end";
+
                         const senderName =
                           message.sender_name ??
                           (isMine
                             ? (currentUser?.name ?? "Student")
                             : "Admission Team");
+
                         const senderRole =
                           message.sender_role ??
                           (isMine
                             ? (currentUser?.role ?? "STUDENT")
                             : "ADMISSION");
+
                         const attachments = message.attachments ?? [];
 
                         return (
@@ -791,7 +835,9 @@ export default function ChatComponent() {
                                 >
                                   {getInitials(senderName)}
                                 </Avatar>
+
                                 <Text strong>{senderName}</Text>
+
                                 <Tag
                                   color={getRoleTagColor(senderRole)}
                                   style={{ margin: 0, fontSize: 10 }}
@@ -799,6 +845,7 @@ export default function ChatComponent() {
                                   {formatRoleLabel(senderRole)}
                                 </Tag>
                               </Space>
+
                               <Text type="secondary" style={{ fontSize: 12 }}>
                                 {formatMessageTime(message.created_at)}
                               </Text>
