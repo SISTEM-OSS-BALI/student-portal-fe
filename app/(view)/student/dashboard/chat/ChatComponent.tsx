@@ -46,18 +46,22 @@ import { uploadChatFiles } from "@/app/vendor/chat-upload";
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
+
 const ticketFormStyle = { marginBottom: 14 } satisfies React.CSSProperties;
 
 const getTicketCode = (ticket: TicketMessageDataModel) => {
   const raw = String(ticket.id ?? "")
     .replace(/[^a-zA-Z0-9]/g, "")
     .toUpperCase();
+
   return `TKT-ADMS-${raw.slice(-4).padStart(4, "0")}`;
 };
 
 const getInitials = (value?: string | null) => {
   const text = (value ?? "").trim();
+
   if (!text) return "TK";
+
   const parts = text.split(/\s+/).slice(0, 2);
   return parts.map((item) => item[0]?.toUpperCase() ?? "").join("");
 };
@@ -82,28 +86,35 @@ const getRoleTagColor = (value?: string | null) => {
 
 const formatRelativeTime = (value?: string) => {
   if (!value) return "Updated recently";
+
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "Updated recently";
 
   const diffMs = Date.now() - date.getTime();
   const minutes = Math.floor(diffMs / 60000);
+
   if (minutes < 1) return "Updated just now";
   if (minutes < 60) {
     return `Updated ${minutes} minute${minutes > 1 ? "s" : ""} ago`;
   }
+
   const hours = Math.floor(minutes / 60);
   if (hours < 24) {
     return `Updated ${hours} hour${hours > 1 ? "s" : ""} ago`;
   }
+
   const days = Math.floor(hours / 24);
   if (days === 1) return "Updated yesterday";
+
   return `Updated ${days} days ago`;
 };
 
 const formatMessageTime = (value?: string) => {
   if (!value) return "";
+
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
+
   return date.toLocaleTimeString("en-US", {
     hour: "2-digit",
     minute: "2-digit",
@@ -112,8 +123,10 @@ const formatMessageTime = (value?: string) => {
 
 const formatMessageDate = (value?: string) => {
   if (!value) return "";
+
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
+
   return date.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
@@ -180,10 +193,11 @@ function ChatBubbleItem({
 }) {
   const senderName =
     message.sender_name ??
-    (isMine ? currentUserName ?? "Student" : "Admission Team");
+    (isMine ? (currentUserName ?? "Student") : "Admission Team");
 
   const senderRole =
-    message.sender_role ?? (isMine ? currentUserRole ?? "STUDENT" : "ADMISSION");
+    message.sender_role ??
+    (isMine ? (currentUserRole ?? "STUDENT") : "ADMISSION");
 
   const attachments = message.attachments ?? [];
   const time = formatMessageTime(message.created_at);
@@ -191,9 +205,9 @@ function ChatBubbleItem({
   const timeLabel = [time, date].filter(Boolean).join(" · ");
 
   const avatarBg = isMine ? "#0f4f95" : "#f59e0b";
-  const bubbleBg = isMine ? "#f3f4f6" : "#174f93";
+  const bubbleBg = isMine ? "#f5f5f5" : "#174f93";
   const bubbleText = isMine ? "#334155" : "#ffffff";
-  const bubbleBorder = isMine ? "1px solid #cbd5e1" : "1px solid transparent";
+  const bubbleBorder = isMine ? "1px solid #d5dde8" : "1px solid transparent";
 
   return (
     <div
@@ -208,18 +222,18 @@ function ChatBubbleItem({
           display: "flex",
           flexDirection: isMine ? "row" : "row-reverse",
           alignItems: "flex-end",
-          gap: 14,
+          gap: 12,
           width: "100%",
-          maxWidth: 980,
+          maxWidth: 920,
         }}
       >
         <Avatar
-          size={62}
+          size={44}
           style={{
             background: avatarBg,
             color: "#ffffff",
             fontWeight: 700,
-            fontSize: 18,
+            fontSize: 14,
             flexShrink: 0,
           }}
         >
@@ -240,10 +254,10 @@ function ChatBubbleItem({
               display: "flex",
               alignItems: "center",
               justifyContent: isMine ? "flex-start" : "flex-end",
-              gap: 12,
+              gap: 10,
               flexWrap: "wrap",
               width: "100%",
-              marginBottom: 10,
+              marginBottom: 8,
             }}
           >
             {isMine ? (
@@ -251,8 +265,9 @@ function ChatBubbleItem({
                 <Text
                   strong
                   style={{
-                    fontSize: 18,
+                    fontSize: 14,
                     color: "#334155",
+                    lineHeight: 1.2,
                   }}
                 >
                   {senderName}
@@ -262,12 +277,12 @@ function ChatBubbleItem({
                   color={getRoleTagColor(senderRole)}
                   style={{
                     margin: 0,
-                    borderRadius: 14,
-                    paddingInline: 14,
-                    height: 32,
+                    borderRadius: 12,
+                    paddingInline: 10,
+                    height: 26,
                     display: "inline-flex",
                     alignItems: "center",
-                    fontSize: 12,
+                    fontSize: 11,
                     fontWeight: 600,
                   }}
                 >
@@ -277,8 +292,9 @@ function ChatBubbleItem({
                 <Text
                   type="secondary"
                   style={{
-                    fontSize: 16,
+                    fontSize: 13,
                     color: "#8c8c8c",
+                    lineHeight: 1.2,
                   }}
                 >
                   {timeLabel}
@@ -289,8 +305,9 @@ function ChatBubbleItem({
                 <Text
                   type="secondary"
                   style={{
-                    fontSize: 16,
+                    fontSize: 13,
                     color: "#8c8c8c",
+                    lineHeight: 1.2,
                   }}
                 >
                   {timeLabel}
@@ -299,8 +316,9 @@ function ChatBubbleItem({
                 <Text
                   strong
                   style={{
-                    fontSize: 18,
+                    fontSize: 14,
                     color: "#334155",
+                    lineHeight: 1.2,
                   }}
                 >
                   {senderName}
@@ -310,12 +328,12 @@ function ChatBubbleItem({
                   color={getRoleTagColor(senderRole)}
                   style={{
                     margin: 0,
-                    borderRadius: 14,
-                    paddingInline: 14,
-                    height: 32,
+                    borderRadius: 12,
+                    paddingInline: 10,
+                    height: 26,
                     display: "inline-flex",
                     alignItems: "center",
-                    fontSize: 12,
+                    fontSize: 11,
                     fontWeight: 600,
                   }}
                 >
@@ -327,23 +345,22 @@ function ChatBubbleItem({
 
           <div
             style={{
-              maxWidth: "82%",
-              minWidth: 220,
+              maxWidth: "72%",
+              minWidth: attachments.length && !message.text ? 180 : 160,
               background: bubbleBg,
               color: bubbleText,
               border: bubbleBorder,
-              borderRadius: 40,
-              padding: attachments.length && !message.text ? "16px 22px" : "18px 26px",
-              boxShadow: isMine
-                ? "none"
-                : "0 10px 24px rgba(23,79,147,0.16)",
+              borderRadius: 28,
+              padding:
+                attachments.length && !message.text ? "14px 18px" : "14px 20px",
+              boxShadow: isMine ? "none" : "0 8px 18px rgba(23,79,147,0.14)",
             }}
           >
             {message.text ? (
               <Text
                 style={{
                   color: bubbleText,
-                  fontSize: 18,
+                  fontSize: 14,
                   lineHeight: 1.7,
                   whiteSpace: "pre-wrap",
                   wordBreak: "break-word",
@@ -358,8 +375,8 @@ function ChatBubbleItem({
                 style={{
                   display: "flex",
                   flexDirection: "column",
-                  gap: 12,
-                  marginTop: message.text ? 14 : 0,
+                  gap: 10,
+                  marginTop: message.text ? 10 : 0,
                 }}
               >
                 {attachments.map((attachment) =>
@@ -368,12 +385,12 @@ function ChatBubbleItem({
                       key={attachment.url}
                       src={attachment.url}
                       alt={attachment.name}
-                      width={260}
+                      width={220}
                       style={{
-                        borderRadius: 18,
+                        borderRadius: 14,
                         border: isMine
                           ? "1px solid #dbe2ea"
-                          : "1px solid rgba(255,255,255,0.25)",
+                          : "1px solid rgba(255,255,255,0.22)",
                         objectFit: "cover",
                       }}
                     />
@@ -388,15 +405,15 @@ function ChatBubbleItem({
                         textDecoration: "none",
                         display: "flex",
                         alignItems: "center",
-                        gap: 12,
-                        fontSize: 18,
+                        gap: 10,
+                        fontSize: 14,
                         lineHeight: 1.5,
                         wordBreak: "break-all",
                       }}
                     >
                       <AttachmentIcon
                         style={{
-                          fontSize: 24,
+                          fontSize: 18,
                           color: bubbleText,
                           flexShrink: 0,
                         }}
@@ -1038,10 +1055,10 @@ export default function ChatComponent() {
                       style={{
                         display: "flex",
                         flexDirection: "column",
-                        gap: 34,
+                        gap: 26,
                         width: "100%",
-                        paddingTop: 6,
-                        paddingBottom: 8,
+                        paddingTop: 4,
+                        paddingBottom: 4,
                       }}
                     >
                       {mergedMessages.map((message) => {
