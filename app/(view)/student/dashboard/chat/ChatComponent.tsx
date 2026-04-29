@@ -22,10 +22,10 @@ import {
 import {
   ClockCircleOutlined,
   CloseOutlined,
-  MessageOutlined,
   PaperClipOutlined,
   PlusOutlined,
   TagOutlined,
+  PaperClipOutlined as AttachmentIcon,
 } from "@ant-design/icons";
 import api from "@/lib/api";
 import { useTicketMessages } from "@/app/hooks/use-ticket-message";
@@ -110,6 +110,16 @@ const formatMessageTime = (value?: string) => {
   });
 };
 
+const formatMessageDate = (value?: string) => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
+};
+
 const buildTicketSummary = (ticket: TicketMessageDataModel) => {
   return `Percakapan untuk ${ticket.name.toLowerCase()} dan tindak lanjut admission.`;
 };
@@ -156,6 +166,253 @@ const mergeChatMessages = (messages: ChatMessage[]) => {
     return timeA - timeB;
   });
 };
+
+function ChatBubbleItem({
+  message,
+  isMine,
+  currentUserName,
+  currentUserRole,
+}: {
+  message: ChatMessage;
+  isMine: boolean;
+  currentUserName?: string;
+  currentUserRole?: string;
+}) {
+  const senderName =
+    message.sender_name ??
+    (isMine ? currentUserName ?? "Student" : "Admission Team");
+
+  const senderRole =
+    message.sender_role ?? (isMine ? currentUserRole ?? "STUDENT" : "ADMISSION");
+
+  const attachments = message.attachments ?? [];
+  const time = formatMessageTime(message.created_at);
+  const date = formatMessageDate(message.created_at);
+  const timeLabel = [time, date].filter(Boolean).join(" · ");
+
+  const avatarBg = isMine ? "#0f4f95" : "#f59e0b";
+  const bubbleBg = isMine ? "#f3f4f6" : "#174f93";
+  const bubbleText = isMine ? "#334155" : "#ffffff";
+  const bubbleBorder = isMine ? "1px solid #cbd5e1" : "1px solid transparent";
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: isMine ? "flex-start" : "flex-end",
+        width: "100%",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          flexDirection: isMine ? "row" : "row-reverse",
+          alignItems: "flex-end",
+          gap: 14,
+          width: "100%",
+          maxWidth: 980,
+        }}
+      >
+        <Avatar
+          size={62}
+          style={{
+            background: avatarBg,
+            color: "#ffffff",
+            fontWeight: 700,
+            fontSize: 18,
+            flexShrink: 0,
+          }}
+        >
+          {getInitials(senderName)}
+        </Avatar>
+
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: isMine ? "flex-start" : "flex-end",
+            flex: 1,
+            minWidth: 0,
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: isMine ? "flex-start" : "flex-end",
+              gap: 12,
+              flexWrap: "wrap",
+              width: "100%",
+              marginBottom: 10,
+            }}
+          >
+            {isMine ? (
+              <>
+                <Text
+                  strong
+                  style={{
+                    fontSize: 18,
+                    color: "#334155",
+                  }}
+                >
+                  {senderName}
+                </Text>
+
+                <Tag
+                  color={getRoleTagColor(senderRole)}
+                  style={{
+                    margin: 0,
+                    borderRadius: 14,
+                    paddingInline: 14,
+                    height: 32,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    fontSize: 12,
+                    fontWeight: 600,
+                  }}
+                >
+                  {formatRoleLabel(senderRole)}
+                </Tag>
+
+                <Text
+                  type="secondary"
+                  style={{
+                    fontSize: 16,
+                    color: "#8c8c8c",
+                  }}
+                >
+                  {timeLabel}
+                </Text>
+              </>
+            ) : (
+              <>
+                <Text
+                  type="secondary"
+                  style={{
+                    fontSize: 16,
+                    color: "#8c8c8c",
+                  }}
+                >
+                  {timeLabel}
+                </Text>
+
+                <Text
+                  strong
+                  style={{
+                    fontSize: 18,
+                    color: "#334155",
+                  }}
+                >
+                  {senderName}
+                </Text>
+
+                <Tag
+                  color={getRoleTagColor(senderRole)}
+                  style={{
+                    margin: 0,
+                    borderRadius: 14,
+                    paddingInline: 14,
+                    height: 32,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    fontSize: 12,
+                    fontWeight: 600,
+                  }}
+                >
+                  {formatRoleLabel(senderRole)}
+                </Tag>
+              </>
+            )}
+          </div>
+
+          <div
+            style={{
+              maxWidth: "82%",
+              minWidth: 220,
+              background: bubbleBg,
+              color: bubbleText,
+              border: bubbleBorder,
+              borderRadius: 40,
+              padding: attachments.length && !message.text ? "16px 22px" : "18px 26px",
+              boxShadow: isMine
+                ? "none"
+                : "0 10px 24px rgba(23,79,147,0.16)",
+            }}
+          >
+            {message.text ? (
+              <Text
+                style={{
+                  color: bubbleText,
+                  fontSize: 18,
+                  lineHeight: 1.7,
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                }}
+              >
+                {message.text}
+              </Text>
+            ) : null}
+
+            {attachments.length ? (
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 12,
+                  marginTop: message.text ? 14 : 0,
+                }}
+              >
+                {attachments.map((attachment) =>
+                  isImageAttachment(attachment.mime_type) ? (
+                    <Image
+                      key={attachment.url}
+                      src={attachment.url}
+                      alt={attachment.name}
+                      width={260}
+                      style={{
+                        borderRadius: 18,
+                        border: isMine
+                          ? "1px solid #dbe2ea"
+                          : "1px solid rgba(255,255,255,0.25)",
+                        objectFit: "cover",
+                      }}
+                    />
+                  ) : (
+                    <a
+                      key={attachment.url}
+                      href={attachment.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{
+                        color: bubbleText,
+                        textDecoration: "none",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 12,
+                        fontSize: 18,
+                        lineHeight: 1.5,
+                        wordBreak: "break-all",
+                      }}
+                    >
+                      <AttachmentIcon
+                        style={{
+                          fontSize: 24,
+                          color: bubbleText,
+                          flexShrink: 0,
+                        }}
+                      />
+                      <span>{attachment.name}</span>
+                    </a>
+                  ),
+                )}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function ChatComponent() {
   const [form] = Form.useForm<TicketMessagePayloadCreateModel>();
@@ -777,148 +1034,31 @@ export default function ChatComponent() {
               <Space direction="vertical" size={16} style={{ width: "100%" }}>
                 {selectedTicket ? (
                   mergedMessages.length ? (
-                    <Space
-                      direction="vertical"
-                      size={18}
-                      style={{ width: "100%" }}
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 34,
+                        width: "100%",
+                        paddingTop: 6,
+                        paddingBottom: 8,
+                      }}
                     >
                       {mergedMessages.map((message) => {
                         const isMine =
                           String(message.sender_id) === String(user_id);
-                        const bubbleBg = isMine ? "#ffffff" : "#174f93";
-                        const bubbleColor = isMine ? "#1f2937" : "#ffffff";
-                        const alignItems = isMine ? "flex-start" : "flex-end";
-                        const alignSelf = isMine ? "flex-start" : "flex-end";
-
-                        const senderName =
-                          message.sender_name ??
-                          (isMine
-                            ? (currentUser?.name ?? "Student")
-                            : "Admission Team");
-
-                        const senderRole =
-                          message.sender_role ??
-                          (isMine
-                            ? (currentUser?.role ?? "STUDENT")
-                            : "ADMISSION");
-
-                        const attachments = message.attachments ?? [];
 
                         return (
-                          <div
+                          <ChatBubbleItem
                             key={message.id}
-                            style={{
-                              display: "flex",
-                              flexDirection: "column",
-                              alignItems,
-                              width: "100%",
-                            }}
-                          >
-                            <div
-                              style={{
-                                display: "flex",
-                                justifyContent: "space-between",
-                                alignItems: "center",
-                                gap: 12,
-                                width: "100%",
-                                marginBottom: 8,
-                              }}
-                            >
-                              <Space size={8} align="center" wrap>
-                                <Avatar
-                                  size={30}
-                                  style={{
-                                    background: isMine ? "#1d4f91" : "#f59e0b",
-                                    color: "#ffffff",
-                                    fontWeight: 700,
-                                  }}
-                                >
-                                  {getInitials(senderName)}
-                                </Avatar>
-
-                                <Text strong>{senderName}</Text>
-
-                                <Tag
-                                  color={getRoleTagColor(senderRole)}
-                                  style={{ margin: 0, fontSize: 10 }}
-                                >
-                                  {formatRoleLabel(senderRole)}
-                                </Tag>
-                              </Space>
-
-                              <Text type="secondary" style={{ fontSize: 12 }}>
-                                {formatMessageTime(message.created_at)}
-                              </Text>
-                            </div>
-
-                            <div
-                              style={{
-                                alignSelf,
-                                maxWidth: "86%",
-                                borderRadius: 22,
-                                padding: "14px 16px",
-                                background: bubbleBg,
-                                color: bubbleColor,
-                                border: isMine ? "1px solid #dbe5ff" : "none",
-                                boxShadow: "0 12px 24px rgba(15, 23, 42, 0.08)",
-                              }}
-                            >
-                              {message.text ? (
-                                <Text
-                                  style={{ color: bubbleColor, fontSize: 15 }}
-                                >
-                                  {message.text}
-                                </Text>
-                              ) : null}
-
-                              {attachments.length ? (
-                                <div
-                                  style={{
-                                    marginTop: message.text ? 12 : 0,
-                                    display: "flex",
-                                    flexDirection: "column",
-                                    gap: 10,
-                                  }}
-                                >
-                                  {attachments.map((attachment) =>
-                                    isImageAttachment(attachment.mime_type) ? (
-                                      <Image
-                                        key={attachment.url}
-                                        src={attachment.url}
-                                        alt={attachment.name}
-                                        width={220}
-                                        style={{
-                                          borderRadius: 12,
-                                          border:
-                                            "1px solid rgba(226,232,240,0.7)",
-                                          objectFit: "cover",
-                                        }}
-                                      />
-                                    ) : (
-                                      <a
-                                        key={attachment.url}
-                                        href={attachment.url}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        style={{
-                                          color: bubbleColor,
-                                          display: "inline-flex",
-                                          gap: 8,
-                                          alignItems: "center",
-                                        }}
-                                      >
-                                        <MessageOutlined />
-                                        {attachment.name}
-                                      </a>
-                                    ),
-                                  )}
-                                </div>
-                              ) : null}
-                            </div>
-                          </div>
+                            message={message}
+                            isMine={isMine}
+                            currentUserName={currentUser?.name}
+                            currentUserRole={currentUser?.role}
+                          />
                         );
                       })}
-                    </Space>
+                    </div>
                   ) : (
                     <div
                       style={{

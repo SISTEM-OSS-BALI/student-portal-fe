@@ -22,7 +22,6 @@ import {
   ClockCircleOutlined,
   CloseOutlined,
   DeleteOutlined,
-  MessageOutlined,
   PaperClipOutlined,
   TagOutlined,
 } from "@ant-design/icons";
