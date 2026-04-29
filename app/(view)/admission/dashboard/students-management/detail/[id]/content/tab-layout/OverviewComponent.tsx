@@ -1,6 +1,11 @@
 "use client";
 
 import { useUsers } from "@/app/hooks/use-users";
+import { useDocumentTranslations } from "@/app/hooks/use-document-translations";
+import { useAnswerApprovals } from "@/app/hooks/use-answer-approvals";
+import { useGeneratedCvAiDocuments } from "@/app/hooks/use-generated-cv-ai-documents";
+import { useGeneratedStatementLetterAiDocuments } from "@/app/hooks/use-generated-statement-letter-ai-documents";
+import { useGeneratedSponsorLetterAiDocuments } from "@/app/hooks/use-generated-sponsor-letter-ai-documents";
 import { useAuth } from "@/app/utils/use-auth";
 import {
   useChatConversations,
@@ -32,6 +37,7 @@ import api from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 import type { UploadedChatAttachment } from "@/app/vendor/chat-upload";
 import { uploadChatFiles } from "@/app/vendor/chat-upload";
+import { useRouter } from "next/navigation";
 
 interface OverviewComponentProps {
   detailStudent: UserDataModel;
@@ -258,6 +264,7 @@ export default function OverviewComponent({
   const detailStudentData = props.detailStudent;
 
   const { notification } = App.useApp();
+  const router = useRouter();
   const queryClient = useQueryClient();
   const { user_id: currentUserId } = useAuth();
   const { data: usersData } = useUsers({ enabled: Boolean(currentUserId) });
@@ -276,6 +283,28 @@ export default function OverviewComponent({
     UploadedChatAttachment[]
   >([]);
   const [uploadingAttachments, setUploadingAttachments] = useState(false);
+
+  const { data: translationItems = [] } = useDocumentTranslations({
+    queryString: studentId ? `student_id=${studentId}` : undefined,
+    enabled: Boolean(studentId),
+  });
+  const { data: answerApprovalItems = [] } = useAnswerApprovals({
+    queryString: studentId ? `student_id=${studentId}` : undefined,
+    enabled: Boolean(studentId),
+  });
+  const { data: cvDocuments = [] } = useGeneratedCvAiDocuments({
+    studentId,
+    enabled: Boolean(studentId),
+  });
+  const { data: statementDocuments = [] } =
+    useGeneratedStatementLetterAiDocuments({
+      studentId,
+      enabled: Boolean(studentId),
+    });
+  const { data: sponsorDocuments = [] } = useGeneratedSponsorLetterAiDocuments({
+    studentId,
+    enabled: Boolean(studentId),
+  });
 
   const { mentionOptions, extractMentionUserIds, renderMessageText } =
     useMentionHelpers(usersData, currentUserId);
@@ -611,6 +640,26 @@ export default function OverviewComponent({
     return () => clearInterval(interval);
   }, [conversation_id, connected, lastError, queryClient]);
 
+  const formatRelativeTime = useCallback((value?: string | null) => {
+    if (!value) return "Updated recently";
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "Updated recently";
+
+    const diffMs = Date.now() - date.getTime();
+    const minutes = Math.floor(diffMs / 60000);
+
+    if (minutes < 1) return "just now";
+    if (minutes < 60) return `${minutes} minute${minutes > 1 ? "s" : ""} ago`;
+
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours} hour${hours > 1 ? "s" : ""} ago`;
+
+    const days = Math.floor(hours / 24);
+    if (days === 1) return "1 day ago";
+    return `${days} days ago`;
+  }, []);
+
   const stepsSource = useMemo(() => {
     const raw = detailStudentData?.stage?.country?.steps ?? [];
 
@@ -621,23 +670,179 @@ export default function OverviewComponent({
     });
   }, [detailStudentData?.stage?.country?.steps]);
 
-  const activityItems = [
-    {
-      title: "Student uploaded passport",
-      meta: "Step 1 • Ngurah Manik Mahardika",
-      time: "2 hours ago",
-    },
-    {
-      title: "Admission uploaded translated transcript",
-      meta: "Step 2 • Kimfa",
-      time: "5 hours ago",
-    },
-    {
-      title: "CV sent to Director for approval",
-      meta: "Step 3 • Kimfa",
-      time: "1 day ago",
-    },
-  ];
+  const currentStepIndex = useMemo(() => {
+    const currentStepId = String(detailStudentData?.current_step_id ?? "");
+    if (!currentStepId) return -1;
+    return stepsSource.findIndex((step) => step.id === currentStepId);
+  }, [detailStudentData?.current_step_id, stepsSource]);
+
+  const progressSummary = useMemo(() => {
+    const totalSteps = stepsSource.length;
+    const visaGranted = String(detailStudentData?.visa_status ?? "")
+      .toLowerCase()
+      .includes("grant");
+
+    const completedSteps = visaGranted
+      ? totalSteps
+      : currentStepIndex >= 0
+        ? currentStepIndex
+        : 0;
+
+    const percent = totalSteps
+      ? Math.round((completedSteps / totalSteps) * 100)
+      : 0;
+
+    return {
+      totalSteps,
+      completedSteps,
+      percent,
+    };
+  }, [currentStepIndex, detailStudentData?.visa_status, stepsSource.length]);
+
+  const currentStepLabel = useMemo(() => {
+    if (!detailStudentData?.current_step_id) return "Step";
+    return (
+      stepsSource.find((step) => step.id === detailStudentData.current_step_id)
+        ?.label ?? "Step"
+    );
+  }, [detailStudentData?.current_step_id, stepsSource]);
+
+  const activityItems = useMemo(() => {
+    const items: Array<{
+      id: string;
+      title: string;
+      meta: string;
+      time: string;
+      sortTime: number;
+    }> = [];
+
+    translationItems.forEach((item) => {
+      const rawTime = item.updated_at ?? item.created_at;
+      if (!rawTime) return;
+
+      items.push({
+        id: `translation-${item.id}`,
+        title: item.file_name
+          ? `Admission uploaded translated ${item.file_name}`
+          : "Admission uploaded translated document",
+        meta: `${currentStepLabel} • Admission`,
+        time: formatRelativeTime(rawTime),
+        sortTime: new Date(rawTime).getTime(),
+      });
+    });
+
+    answerApprovalItems.forEach((item) => {
+      const rawTime = item.reviewed_at ?? item.updated_at ?? item.created_at;
+      if (!rawTime) return;
+
+      const status = String(item.status ?? "").toLowerCase();
+
+      items.push({
+        id: `approval-${item.id}`,
+        title:
+          status === "approved"
+            ? "Document approved by Director"
+            : "Document waiting director review",
+        meta: `${currentStepLabel} • Director`,
+        time: formatRelativeTime(rawTime),
+        sortTime: new Date(rawTime).getTime(),
+      });
+    });
+
+    cvDocuments.forEach((item) => {
+      const rawTime = item.updated_at ?? item.created_at;
+      if (!rawTime) return;
+
+      items.push({
+        id: `cv-${item.id}`,
+        title:
+          String(item.status ?? "").toLowerCase() === "submitted_to_director"
+            ? "CV sent to Director for approval"
+            : "CV updated",
+        meta: `${currentStepLabel} • Admission`,
+        time: formatRelativeTime(rawTime),
+        sortTime: new Date(rawTime).getTime(),
+      });
+    });
+
+    statementDocuments.forEach((item) => {
+      const rawTime = item.updated_at ?? item.created_at;
+      if (!rawTime) return;
+
+      const status = String(item.status ?? "").toLowerCase();
+
+      items.push({
+        id: `statement-${item.id}`,
+        title:
+          status === "submitted_to_director"
+            ? "Statement letter sent to Director for approval"
+            : "Statement letter updated",
+        meta: `${currentStepLabel} • Admission`,
+        time: formatRelativeTime(rawTime),
+        sortTime: new Date(rawTime).getTime(),
+      });
+    });
+
+    sponsorDocuments.forEach((item) => {
+      const rawTime = item.updated_at ?? item.created_at;
+      if (!rawTime) return;
+
+      const status = String(item.status ?? "").toLowerCase();
+
+      items.push({
+        id: `sponsor-${item.id}`,
+        title:
+          status === "submitted_to_director"
+            ? "Sponsor letter sent to Director for approval"
+            : "Sponsor letter updated",
+        meta: `${currentStepLabel} • Admission`,
+        time: formatRelativeTime(rawTime),
+        sortTime: new Date(rawTime).getTime(),
+      });
+    });
+
+    if (detailStudentData?.student_status_updated_at) {
+      items.push({
+        id: `student-status-${detailStudentData.id}`,
+        title: `Student status updated to ${detailStudentData.student_status ?? "On Going"}`,
+        meta: `${detailStudentData.student_status_updated_by_name ?? "Admission"} • Student case`,
+        time: formatRelativeTime(detailStudentData.student_status_updated_at),
+        sortTime: new Date(
+          detailStudentData.student_status_updated_at,
+        ).getTime(),
+      });
+    }
+
+    if (detailStudentData?.visa_granted_at) {
+      items.push({
+        id: `visa-${detailStudentData.id}`,
+        title: `Visa status updated to ${detailStudentData.visa_status ?? "Grant"}`,
+        meta: `${stepsSource.at(-1)?.label ?? "Final Step"} • System`,
+        time: formatRelativeTime(detailStudentData.visa_granted_at),
+        sortTime: new Date(detailStudentData.visa_granted_at).getTime(),
+      });
+    }
+
+    return items
+      .filter((item) => !Number.isNaN(item.sortTime))
+      .sort((a, b) => b.sortTime - a.sortTime)
+      .slice(0, 6);
+  }, [
+    answerApprovalItems,
+    currentStepLabel,
+    cvDocuments,
+    detailStudentData?.id,
+    detailStudentData?.student_status,
+    detailStudentData?.student_status_updated_at,
+    detailStudentData?.student_status_updated_by_name,
+    detailStudentData?.visa_granted_at,
+    detailStudentData?.visa_status,
+    formatRelativeTime,
+    sponsorDocuments,
+    statementDocuments,
+    stepsSource,
+    translationItems,
+  ]);
 
   return (
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
@@ -661,10 +866,12 @@ export default function OverviewComponent({
             <div>
               <Typography.Text strong>Progress Ringkasan</Typography.Text>
               <Typography.Text type="secondary" style={{ display: "block" }}>
-                3 dari 6 tugas selesai
+                {`${progressSummary.completedSteps} dari ${progressSummary.totalSteps || 0} tugas selesai`}
               </Typography.Text>
-              <Progress percent={50} showInfo={false} />
-              <Typography.Text type="secondary">50% Complete</Typography.Text>
+              <Progress percent={progressSummary.percent} showInfo={false} />
+              <Typography.Text type="secondary">
+                {progressSummary.percent}% Complete
+              </Typography.Text>
             </div>
 
             <Space direction="vertical" size={10} style={{ width: "100%" }}>
@@ -709,11 +916,20 @@ export default function OverviewComponent({
               }}
             >
               <Typography.Text strong>Recent Activity Summary</Typography.Text>
-              <Typography.Link>View all</Typography.Link>
+              <Typography.Link
+                onClick={() =>
+                  router.push(
+                    `/admission/dashboard/students-management/detail/${studentId}?tab=activity-log`,
+                  )
+                }
+              >
+                View all
+              </Typography.Link>
             </div>
 
             <List
               dataSource={activityItems}
+              locale={{ emptyText: "Belum ada aktivitas" }}
               renderItem={(item) => (
                 <List.Item style={{ paddingInline: 0 }}>
                   <Space

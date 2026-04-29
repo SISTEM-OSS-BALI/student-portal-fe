@@ -297,11 +297,11 @@ export default function AdmissionLayout({
                   setOpenGlobalSearch(true);
                 }}
               />
-              <Badge count={3} size="small" className={styles.badge}>
+              {/* <Badge count={3} size="small" className={styles.badge}>
                 <button className={styles.iconButton} type="button">
                   <BellOutlined />
                 </button>
-              </Badge>
+              </Badge> */}
               <Badge
                 count={unreadCount}
                 size="small"

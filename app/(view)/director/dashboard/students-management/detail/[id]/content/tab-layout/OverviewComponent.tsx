@@ -871,6 +871,7 @@ export default function OverviewComponent({
 
             <List
               dataSource={activityItems}
+              locale={{ emptyText: "Belum ada aktivitas" }}
               renderItem={(item) => (
                 <List.Item style={{ paddingInline: 0 }}>
                   <Space
