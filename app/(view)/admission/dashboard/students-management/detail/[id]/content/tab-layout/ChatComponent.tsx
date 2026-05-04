@@ -17,7 +17,7 @@ import {
   Typography,
   Upload,
   notification,
-} from "antd";
+} from "antd"
 import {
   ClockCircleOutlined,
   CloseOutlined,

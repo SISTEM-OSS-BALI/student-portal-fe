@@ -13,6 +13,7 @@ import {
   Empty,
   Flex,
   Input,
+  Modal,
   Pagination,
   Select,
   Space,
@@ -20,6 +21,8 @@ import {
   Typography,
 } from "antd";
 import {
+  DeleteOutlined,
+  ExclamationCircleOutlined,
   FilterOutlined,
   HolderOutlined,
   PlusOutlined,
@@ -135,22 +138,11 @@ function normalizeStudentResponse(value: unknown): UserDataModel[] {
       }
     | undefined;
 
-  if (!response) {
-    return [];
-  }
+  if (!response) return [];
 
-  if (Array.isArray(response.data)) {
-    return response.data as UserDataModel[];
-  }
-
-  if (Array.isArray(response.result)) {
-    return response.result as UserDataModel[];
-  }
-
-  if (Array.isArray(response.users)) {
-    return response.users as UserDataModel[];
-  }
-
+  if (Array.isArray(response.data)) return response.data as UserDataModel[];
+  if (Array.isArray(response.result)) return response.result as UserDataModel[];
+  if (Array.isArray(response.users)) return response.users as UserDataModel[];
   if (Array.isArray(response.students)) {
     return response.students as UserDataModel[];
   }
@@ -296,9 +288,7 @@ function getStudentInitials(student: UserDataModel): string {
     .filter(Boolean)
     .slice(0, 2);
 
-  if (!parts.length) {
-    return "ST";
-  }
+  if (!parts.length) return "ST";
 
   return parts.map((item) => item.charAt(0).toUpperCase()).join("");
 }
@@ -325,11 +315,15 @@ function StudentCardInner({
   dragListeners,
   dragAttributes,
   isDragging,
+  onDelete,
+  deleteLoading,
 }: {
   student: UserDataModel;
   dragListeners?: SortableHookResult["listeners"];
   dragAttributes?: SortableHookResult["attributes"];
   isDragging?: boolean;
+  onDelete?: (student: UserDataModel) => void;
+  deleteLoading?: boolean;
 }) {
   const status = getStudentBoardStatus(student);
   const statusMeta = getStatusTagMeta(status);
@@ -447,6 +441,30 @@ function StudentCardInner({
             <HolderOutlined />
           </div>
 
+          {onDelete ? (
+            <Button
+              danger
+              type="text"
+              size="small"
+              icon={<DeleteOutlined />}
+              loading={deleteLoading}
+              disabled={deleteLoading}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onDelete(student);
+              }}
+              style={{
+                width: 34,
+                height: 34,
+                borderRadius: 12,
+                display: "grid",
+                placeItems: "center",
+              }}
+              title="Delete student"
+            />
+          ) : null}
+
           <Tag
             style={{
               marginRight: 0,
@@ -471,11 +489,15 @@ function StudentCardInner({
 function SortableStudentCard({
   student,
   onClick,
+  onDelete,
   disabled,
+  deleteLoading,
 }: {
   student: UserDataModel;
   onClick: () => void;
+  onDelete: (student: UserDataModel) => void;
   disabled?: boolean;
+  deleteLoading?: boolean;
 }) {
   const {
     attributes,
@@ -494,6 +516,7 @@ function SortableStudentCard({
       ref={setNodeRef}
       type="button"
       onClick={onClick}
+      disabled={deleteLoading}
       style={{
         width: "100%",
         border: "none",
@@ -503,6 +526,7 @@ function SortableStudentCard({
         textAlign: "left",
         transform: CSS.Transform.toString(transform),
         transition,
+        opacity: deleteLoading ? 0.7 : 1,
       }}
     >
       <StudentCardInner
@@ -510,6 +534,8 @@ function SortableStudentCard({
         dragAttributes={attributes}
         dragListeners={listeners}
         isDragging={isDragging}
+        onDelete={onDelete}
+        deleteLoading={deleteLoading}
       />
     </button>
   );
@@ -523,8 +549,10 @@ function BoardColumn({
   pageSize,
   onPageChange,
   onClickStudent,
+  onDeleteStudent,
   isHighlighted,
   disableInteraction,
+  deletingStudentId,
 }: {
   column: BoardColumnConfig;
   students: UserDataModel[];
@@ -533,8 +561,10 @@ function BoardColumn({
   pageSize: number;
   onPageChange: (page: number) => void;
   onClickStudent: (student: UserDataModel) => void;
+  onDeleteStudent: (student: UserDataModel) => void;
   isHighlighted: boolean;
   disableInteraction?: boolean;
+  deletingStudentId?: string | null;
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: column.key,
@@ -659,6 +689,8 @@ function BoardColumn({
                 student={student}
                 disabled={disableInteraction}
                 onClick={() => onClickStudent(student)}
+                onDelete={onDeleteStudent}
+                deleteLoading={deletingStudentId === getStudentId(student)}
               />
             ))
           )}
@@ -705,6 +737,9 @@ export default function StudentsManagementContent() {
   const [selectedStudent, setSelectedStudent] = useState<UserDataModel | null>(
     null,
   );
+  const [deleteTargetStudent, setDeleteTargetStudent] =
+    useState<UserDataModel | null>(null);
+
   const [keyword, setKeyword] = useState("");
   const [showFilters, setShowFilters] = useState(true);
   const [selectedCountry, setSelectedCountry] = useState<string | undefined>();
@@ -714,6 +749,10 @@ export default function StudentsManagementContent() {
   const [dragOverStatus, setDragOverStatus] =
     useState<StudentBoardStatus | null>(null);
   const [movingStudentId, setMovingStudentId] = useState<string | null>(null);
+  const [deletingStudentId, setDeletingStudentId] = useState<string | null>(
+    null,
+  );
+
   const [studentOverrides, setStudentOverrides] = useState<
     Record<string, Partial<UserDataModel>>
   >({});
@@ -732,7 +771,6 @@ export default function StudentsManagementContent() {
   const { onDelete, onDeleteLoading } = useDeleteUser();
   const { onUpdate: onUpdateStudentStatus, onUpdateLoading } =
     useUpdateStudentStatusUser();
-
   const { data: rawStudentsRoleData } = useUserRoleStudents();
   const { data: stagesData } = useStagesManagement({});
 
@@ -801,9 +839,7 @@ export default function StudentsManagementContent() {
   ]);
 
   useEffect(() => {
-    if (!studentsRoleData.length) {
-      return;
-    }
+    if (!studentsRoleData.length) return;
 
     setStudentOverrides((prev) => {
       let changed = false;
@@ -813,9 +849,7 @@ export default function StudentsManagementContent() {
         const id = getStudentId(student);
         const override = next[id];
 
-        if (!override) {
-          continue;
-        }
+        if (!override) continue;
 
         const serverStatus = getStudentBoardStatus(student);
         const overrideStatus = resolveBoardStatus(
@@ -856,14 +890,43 @@ export default function StudentsManagementContent() {
   );
 
   const handleDelete = useCallback(async () => {
-    if (!selectedStudent) {
-      return;
-    }
+    if (!selectedStudent) return;
 
-    await onDelete(selectedStudent.id);
-    closeModal();
-    resetPagination();
+    const studentId = getStudentId(selectedStudent);
+    setDeletingStudentId(studentId);
+
+    try {
+      await onDelete(studentId);
+      closeModal();
+      resetPagination();
+    } finally {
+      setDeletingStudentId(null);
+    }
   }, [closeModal, onDelete, resetPagination, selectedStudent]);
+
+  const openDeleteConfirm = useCallback((student: UserDataModel) => {
+    setDeleteTargetStudent(student);
+  }, []);
+
+  const closeDeleteConfirm = useCallback(() => {
+    if (onDeleteLoading || deletingStudentId) return;
+    setDeleteTargetStudent(null);
+  }, [deletingStudentId, onDeleteLoading]);
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!deleteTargetStudent) return;
+
+    const studentId = getStudentId(deleteTargetStudent);
+    setDeletingStudentId(studentId);
+
+    try {
+      await onDelete(studentId);
+      setDeleteTargetStudent(null);
+      resetPagination();
+    } finally {
+      setDeletingStudentId(null);
+    }
+  }, [deleteTargetStudent, onDelete, resetPagination]);
 
   const countryOptions = useMemo<SelectOption[]>(() => {
     const map = new Map<string, SelectOption>();
@@ -923,9 +986,7 @@ export default function StudentsManagementContent() {
   }, [studentsRoleData, studentOverrides]);
 
   const filteredStudents = useMemo<UserDataModel[]>(() => {
-    if (!hasActiveFilter) {
-      return effectiveStudents;
-    }
+    if (!hasActiveFilter) return effectiveStudents;
 
     return effectiveStudents.filter((student) => {
       const haystack = [
@@ -1029,9 +1090,7 @@ export default function StudentsManagementContent() {
     (
       overId: UniqueIdentifier | null | undefined,
     ): StudentBoardStatus | null => {
-      if (!overId) {
-        return null;
-      }
+      if (!overId) return null;
 
       const candidate = String(overId);
 
@@ -1066,15 +1125,11 @@ export default function StudentsManagementContent() {
       setActiveStudentId(null);
       setDragOverStatus(null);
 
-      if (!draggedStudent || !nextStatus) {
-        return;
-      }
+      if (!draggedStudent || !nextStatus) return;
 
       const currentStatus = getEffectiveBoardStatus(draggedStudent);
 
-      if (currentStatus === nextStatus) {
-        return;
-      }
+      if (currentStatus === nextStatus) return;
 
       setStudentOverrides((prev) => ({
         ...prev,
@@ -1106,7 +1161,6 @@ export default function StudentsManagementContent() {
         setStudentOverrides((prev) => {
           const next = { ...prev };
           delete next[draggedId];
-
           return next;
         });
       } finally {
@@ -1355,10 +1409,13 @@ export default function StudentsManagementContent() {
                     handleColumnPageChange(column.key, page)
                   }
                   onClickStudent={goToStudentDetail}
+                  onDeleteStudent={openDeleteConfirm}
                   isHighlighted={dragOverStatus === column.key}
                   disableInteraction={
-                    onUpdateLoading && movingStudentId !== null
+                    (onUpdateLoading && movingStudentId !== null) ||
+                    Boolean(deletingStudentId)
                   }
+                  deletingStudentId={deletingStudentId}
                 />
               ))}
             </div>
@@ -1381,10 +1438,65 @@ export default function StudentsManagementContent() {
         onDelete={handleDelete}
         onCancel={closeModal}
         loading={onCreateLoading}
-        deleteLoading={onDeleteLoading}
+        deleteLoading={onDeleteLoading || Boolean(deletingStudentId)}
         selectedStudent={selectedStudent}
         stagesData={stagesData ?? []}
       />
+
+      <Modal
+        open={Boolean(deleteTargetStudent)}
+        title="Delete Student"
+        centered
+        width={460}
+        okText="Ya, Delete"
+        cancelText="Batal"
+        okButtonProps={{
+          danger: true,
+          loading: onDeleteLoading || Boolean(deletingStudentId),
+        }}
+        cancelButtonProps={{
+          disabled: onDeleteLoading || Boolean(deletingStudentId),
+        }}
+        onOk={handleConfirmDelete}
+        onCancel={closeDeleteConfirm}
+      >
+        <Flex gap={14} align="flex-start">
+          <div
+            style={{
+              width: 42,
+              height: 42,
+              borderRadius: 14,
+              display: "grid",
+              placeItems: "center",
+              color: "#b42318",
+              background: "#fff1f0",
+              border: "1px solid #ffccc7",
+              flexShrink: 0,
+              fontSize: 18,
+            }}
+          >
+            <ExclamationCircleOutlined />
+          </div>
+
+          <div style={{ minWidth: 0 }}>
+            <Text strong style={{ display: "block", fontSize: 15 }}>
+              Yakin ingin menghapus student ini?
+            </Text>
+
+            <Text
+              type="secondary"
+              style={{ display: "block", marginTop: 8, lineHeight: 1.7 }}
+            >
+              Data student
+              {deleteTargetStudent?.name ? (
+                <Text strong> {deleteTargetStudent.name}</Text>
+              ) : null}{" "}
+              akan dihapus dari sistem. Tindakan ini tidak bisa dibatalkan dari
+              halaman ini.
+            </Text>
+          </div>
+        </Flex>
+      </Modal>
     </div>
   );
 }
