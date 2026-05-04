@@ -1,7 +1,7 @@
 "use client";
 
 import SearchBarComponent from "@/app/components/common/search-bar";
-import { Button, Card, Col, Row, Space, Tag, Typography } from "antd";
+import { App, Button, Card, Col, Row, Space, Tag, Typography } from "antd";
 import ModalCountryComponent from "./ModalCountryComponent";
 import { useCallback, useMemo, useState } from "react";
 import type {
@@ -18,6 +18,7 @@ import ModalConfirm from "@/app/components/common/modal-confirm";
 import { useRouter } from "next/navigation";
 
 export default function StagesManagementContent() {
+  const { notification } = App.useApp();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedCountry, setSelectedCountry] =
     useState<CountryManagementDataModel | null>(null);
@@ -77,6 +78,16 @@ export default function StagesManagementContent() {
 
   const confirmDeleteCountry = useCallback(
     (country: CountryManagementDataModel, onDone?: () => void) => {
+      const documentTotal = Number(country.document_total ?? 0);
+      const stepTotal = Number(country.step_total ?? 0);
+      if (documentTotal > 0 || stepTotal > 0) {
+        notification.warning({
+          message: "Tidak bisa hapus negara",
+          description:
+            "Negara ini masih terhubung dengan data lain (dokumen/langkah). Hapus data terkait dulu atau ubah constraint database menjadi CASCADE.",
+        });
+        return;
+      }
       ModalConfirm({
         title: country.name,
         description: `ID: ${country.id}`,
@@ -92,7 +103,7 @@ export default function StagesManagementContent() {
         },
       });
     },
-    [onDelete],
+    [notification, onDelete],
   );
 
   const handleDeleteCountry = useCallback(
