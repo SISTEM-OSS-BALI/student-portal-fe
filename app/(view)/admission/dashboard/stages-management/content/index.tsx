@@ -84,7 +84,7 @@ export default function StagesManagementContent() {
         notification.warning({
           message: "Tidak bisa hapus negara",
           description:
-            "Negara ini masih terhubung dengan data lain (dokumen/langkah). Hapus data terkait dulu atau ubah constraint database menjadi CASCADE.",
+            "Negara ini masih terhubung dengan data lain (seperti dokumen atau langkah).",
         });
         return;
       }
@@ -97,6 +97,15 @@ export default function StagesManagementContent() {
           try {
             await onDelete(country.id);
             onDone?.();
+          } catch (err) {
+            const message =
+              err && typeof err === "object" && "message" in err
+                ? String((err as { message?: unknown }).message)
+                : "Terjadi kesalahan saat menghapus negara.";
+            notification.error({
+              message: "Gagal menghapus negara",
+              description: message,
+            });
           } finally {
             setDeletingId(null);
           }
