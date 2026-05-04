@@ -1,13 +1,31 @@
-import { Button, Form, Input, InputNumber, Select, Switch, Space } from "antd";
-import type { QuestionPayloadCreateModel } from "@/app/models/question";
+import { Button, Form, Input, InputNumber, Select, Switch, Space, Divider, Alert } from "antd";
+import type { QuestionDataModel, QuestionPayloadCreateModel, QuestionOptionItemDataModel } from "@/app/models/question";
+import { useEffect, useMemo } from "react";
+import api from "@/lib/api";
+import { useQueryClient } from "@tanstack/react-query";
+import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
 
 interface FormQuestionComponentProps {
-  onSubmit: (values: QuestionPayloadCreateModel) => void | Promise<void>;
+  onSubmit: (values: QuestionPayloadCreateModel) => Promise<QuestionDataModel>;
   initialValues?: Partial<QuestionPayloadCreateModel>;
   loading?: boolean;
   base_id?: string;
   submitLabel?: string;
+  questionId?: string;
+  initialOptions?: QuestionOptionItemDataModel[];
 }
+
+type QuestionOptionFormValue = {
+  id?: string;
+  label?: string;
+  value?: string;
+  order?: number;
+  active?: boolean;
+};
+
+type QuestionFormValues = QuestionPayloadCreateModel & {
+  options?: QuestionOptionFormValue[];
+};
 
 const QUESTION_TYPES = [
   { value: "TEXT", label: "Text" },
@@ -25,9 +43,40 @@ const QUESTION_TYPES = [
 export default function FormQuestionManagement(
   props: FormQuestionComponentProps,
 ) {
-  const [form] = Form.useForm<QuestionPayloadCreateModel>();
+  const [form] = Form.useForm<QuestionFormValues>();
+  const queryClient = useQueryClient();
+  const inputType = Form.useWatch("input_type", form);
 
-  const handleFinish = async (values: QuestionPayloadCreateModel) => {
+  const inputTypeKey = String(inputType ?? "").toUpperCase();
+  const isOptionType = useMemo(
+    () => ["SELECT", "RADIO", "CHECKBOX"].includes(inputTypeKey),
+    [inputTypeKey],
+  );
+  const supportsPlaceholder = useMemo(
+    () =>
+      ["TEXT", "TEXTAREA", "NUMBER", "EMAIL", "PHONE"].includes(inputTypeKey),
+    [inputTypeKey],
+  );
+  const supportsMinMaxLength = useMemo(
+    () => ["TEXT", "TEXTAREA"].includes(inputTypeKey),
+    [inputTypeKey],
+  );
+
+  useEffect(() => {
+    if (!supportsPlaceholder) {
+      form.setFieldValue("placeholder", "");
+    }
+    if (!supportsMinMaxLength) {
+      form.setFieldValue("min_length", undefined);
+      form.setFieldValue("max_length", undefined);
+    }
+    if (!isOptionType) {
+      // @ts-expect-error - dynamic fields
+      form.setFieldValue("options", []);
+    }
+  }, [form, isOptionType, supportsMinMaxLength, supportsPlaceholder]);
+
+  const handleFinish = async (values: QuestionFormValues) => {
     const payload: QuestionPayloadCreateModel = {
       base_id: props.base_id ?? values.base_id,
       text: values.text?.trim() ?? "",
@@ -57,7 +106,81 @@ export default function FormQuestionManagement(
       return;
     }
 
-    await props.onSubmit(payload);
+    if (isOptionType) {
+      const options = (values.options ?? [])
+        .map((opt, index) => ({
+          id: opt.id,
+          label: (opt.label ?? "").trim(),
+          value: (opt.value ?? "").trim(),
+          order: typeof opt.order === "number" ? opt.order : index + 1,
+          active: opt.active ?? true,
+        }))
+        .filter((opt) => opt.label || opt.value);
+
+      if (options.length === 0) {
+        // @ts-expect-error - dynamic field
+        form.setFields([{ name: ["options"], errors: ["Minimal 1 option"] }]);
+        return;
+      }
+      for (const opt of options) {
+        if (!opt.label || !opt.value) {
+          // @ts-expect-error - dynamic field
+          form.setFields([{ name: ["options"], errors: ["Label & Value wajib diisi"] }]);
+          return;
+        }
+      }
+    }
+
+    const saved = await props.onSubmit(payload);
+
+    // sync options for SELECT/RADIO/CHECKBOX
+    if (isOptionType) {
+      const questionId = props.questionId ?? saved.id;
+      const submitted = (values.options ?? []).map((opt, index) => ({
+        id: opt.id,
+        label: (opt.label ?? "").trim(),
+        value: (opt.value ?? "").trim(),
+        order: typeof opt.order === "number" ? opt.order : index + 1,
+        active: opt.active ?? true,
+      })).filter((opt) => opt.label || opt.value);
+
+      // fetch existing options from API to know deletions
+      const existingRes = await api.get(`/api/question-options?question_id=${encodeURIComponent(questionId)}`);
+      const existing = (existingRes.data?.result ?? existingRes.data) as QuestionOptionItemDataModel[];
+      const existingById = new Map(existing.filter((o) => o.id).map((o) => [o.id, o]));
+      const submittedIds = new Set(submitted.filter((o) => o.id).map((o) => String(o.id)));
+
+      // delete removed options
+      for (const opt of existing) {
+        if (opt.id && !submittedIds.has(String(opt.id))) {
+          await api.delete(`/api/question-options/${opt.id}`);
+        }
+      }
+
+      // create/update submitted options
+      for (const opt of submitted) {
+        if (opt.id && existingById.has(String(opt.id))) {
+          await api.put(`/api/question-options/${opt.id}`, {
+            label: opt.label,
+            value: opt.value,
+            order: opt.order,
+            active: opt.active,
+            question_id: questionId,
+          });
+        } else {
+          await api.post(`/api/question-options`, {
+            question_id: questionId,
+            label: opt.label,
+            value: opt.value,
+            order: opt.order,
+            active: opt.active,
+          });
+        }
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["question-options"] });
+      queryClient.invalidateQueries({ queryKey: ["questions"] });
+    }
   };
 
   return (
@@ -76,6 +199,14 @@ export default function FormQuestionManagement(
         min_length: props.initialValues?.min_length ?? undefined,
         max_length: props.initialValues?.max_length ?? undefined,
         active: props.initialValues?.active ?? true,
+        // @ts-expect-error - dynamic fields
+        options: props.initialOptions?.map((opt) => ({
+          id: opt.id,
+          label: opt.label,
+          value: opt.value,
+          order: opt.order,
+          active: opt.active,
+        })) ?? [],
       }}
       style={{ width: "100%" }}
     >
@@ -117,9 +248,11 @@ export default function FormQuestionManagement(
         />
       </Form.Item>
 
-      <Form.Item label="Placeholder" name="placeholder">
-        <Input placeholder="Placeholder input (opsional)" />
-      </Form.Item>
+      {supportsPlaceholder ? (
+        <Form.Item label="Placeholder" name="placeholder">
+          <Input placeholder="Placeholder input (opsional)" />
+        </Form.Item>
+      ) : null}
 
       <Space size={16} wrap style={{ width: "100%" }}>
         <Form.Item
@@ -130,14 +263,93 @@ export default function FormQuestionManagement(
           <InputNumber min={1} style={{ width: 160 }} />
         </Form.Item>
 
-        <Form.Item label="Min Length" name="min_length">
-          <InputNumber min={0} style={{ width: 160 }} />
-        </Form.Item>
+        {supportsMinMaxLength ? (
+          <>
+            <Form.Item label="Min Length" name="min_length">
+              <InputNumber min={0} style={{ width: 160 }} />
+            </Form.Item>
 
-        <Form.Item label="Max Length" name="max_length">
-          <InputNumber min={0} style={{ width: 160 }} />
-        </Form.Item>
+            <Form.Item label="Max Length" name="max_length">
+              <InputNumber min={0} style={{ width: 160 }} />
+            </Form.Item>
+          </>
+        ) : null}
       </Space>
+
+      {isOptionType ? (
+        <>
+          <Divider style={{ margin: "12px 0" }} />
+          <Alert
+            type="info"
+            showIcon={false}
+            message="Untuk tipe input Select/Radio/Checkbox, kamu perlu mengisi options."
+          />
+
+          <Form.List name={"options" as never}>
+            {(fields, { add, remove }) => (
+              <div style={{ marginTop: 12 }}>
+                {fields.map((field) => (
+                  <Space
+                    key={field.key}
+                    align="start"
+                    style={{ display: "flex", marginBottom: 8 }}
+                  >
+                    {/* @ts-expect-error - dynamic fields */}
+                    <Form.Item name={[field.name, "id"]} hidden>
+                      <Input />
+                    </Form.Item>
+
+                    {/* @ts-expect-error - dynamic fields */}
+                    <Form.Item
+                      name={[field.name, "label"]}
+                      rules={[{ required: true, message: "Label wajib" }]}
+                    >
+                      <Input placeholder="Label" style={{ width: 180 }} />
+                    </Form.Item>
+
+                    {/* @ts-expect-error - dynamic fields */}
+                    <Form.Item
+                      name={[field.name, "value"]}
+                      rules={[{ required: true, message: "Value wajib" }]}
+                    >
+                      <Input placeholder="Value" style={{ width: 180 }} />
+                    </Form.Item>
+
+                    {/* @ts-expect-error - dynamic fields */}
+                    <Form.Item name={[field.name, "order"]}>
+                      <InputNumber min={1} placeholder="Order" style={{ width: 120 }} />
+                    </Form.Item>
+
+                    {/* @ts-expect-error - dynamic fields */}
+                    <Form.Item
+                      name={[field.name, "active"]}
+                      valuePropName="checked"
+                      style={{ marginTop: 6 }}
+                    >
+                      <Switch />
+                    </Form.Item>
+
+                    <Button
+                      danger
+                      icon={<DeleteOutlined />}
+                      onClick={() => remove(field.name)}
+                    />
+                  </Space>
+                ))}
+
+                <Button
+                  type="dashed"
+                  icon={<PlusOutlined />}
+                  onClick={() => add({ active: true })}
+                  block
+                >
+                  Add Option
+                </Button>
+              </div>
+            )}
+          </Form.List>
+        </>
+      ) : null}
 
       <Space size={24} wrap>
         <Form.Item label="Required" name="required" valuePropName="checked">

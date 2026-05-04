@@ -29,7 +29,11 @@ export const useQuestions = ({ queryString }: { queryString?: string }) => {
 
   const { mutateAsync: onCreate, isPending: onCreateLoading } = useMutation({
     mutationFn: async (payload: QuestionPayloadCreateModel) =>
-      api.post(questionsUrl, payload),
+      api
+        .post(questionsUrl, payload)
+        .then(
+          (res) => (res.data?.result ?? res.data) as QuestionDataModel,
+        ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [queryKey] });
       notify({ type: "success", entity, action: "created" });
@@ -81,7 +85,12 @@ export const useQuestion = ({ id }: { id: string | number }) => {
     }: {
       id: string | number;
       payload: QuestionPayloadUpdateModel;
-    }) => api.put(`${questionsUrl}/${updateId}`, payload),
+    }) =>
+      api
+        .put(`${questionsUrl}/${updateId}`, payload)
+        .then(
+          (res) => (res.data?.result ?? res.data) as QuestionDataModel,
+        ),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: [queryKey] });
       queryClient.invalidateQueries({ queryKey: [entity, variables.id] });

@@ -84,19 +84,22 @@ export default function DetailQuestionComponent() {
         ...data,
         base_id: resolvedBaseId,
       };
-      await onUpdateQuestion({ id: editingQuestion.id, payload });
+      const updated = await onUpdateQuestion({ id: editingQuestion.id, payload });
       setEditingQuestion(null);
       setIsModalOpen(false);
-      return;
+      return updated;
     }
 
-    if (!resolvedBaseId) return;
+    if (!resolvedBaseId) {
+      throw new Error("base_id is required");
+    }
     const payload: QuestionPayloadCreateModel = {
       ...data,
       base_id: resolvedBaseId,
     };
-    await onCreateQuestion(payload);
+    const created = await onCreateQuestion(payload);
     setIsModalOpen(false);
+    return created;
   };
 
   return (
@@ -221,6 +224,8 @@ export default function DetailQuestionComponent() {
         }}
         onSubmit={handleSubmit}
         base_id={base_id ? String(base_id) : undefined}
+        questionId={editingQuestion?.id}
+        initialOptions={editingQuestion?.options}
         initialValues={
           editingQuestion
             ? {
