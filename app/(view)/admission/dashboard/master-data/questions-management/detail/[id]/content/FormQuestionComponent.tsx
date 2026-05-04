@@ -1,5 +1,19 @@
-import { Button, Form, Input, InputNumber, Select, Switch, Space, Divider, Alert } from "antd";
-import type { QuestionDataModel, QuestionPayloadCreateModel, QuestionOptionItemDataModel } from "@/app/models/question";
+import {
+  Button,
+  Form,
+  Input,
+  InputNumber,
+  Select,
+  Switch,
+  Space,
+  Divider,
+  Alert,
+} from "antd";
+import type {
+  QuestionDataModel,
+  QuestionPayloadCreateModel,
+  QuestionOptionItemDataModel,
+} from "@/app/models/question";
 import { useEffect, useMemo } from "react";
 import api from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
@@ -71,7 +85,6 @@ export default function FormQuestionManagement(
       form.setFieldValue("max_length", undefined);
     }
     if (!isOptionType) {
-      // @ts-expect-error - dynamic fields
       form.setFieldValue("options", []);
     }
   }, [form, isOptionType, supportsMinMaxLength, supportsPlaceholder]);
@@ -118,14 +131,14 @@ export default function FormQuestionManagement(
         .filter((opt) => opt.label || opt.value);
 
       if (options.length === 0) {
-        // @ts-expect-error - dynamic field
         form.setFields([{ name: ["options"], errors: ["Minimal 1 option"] }]);
         return;
       }
       for (const opt of options) {
         if (!opt.label || !opt.value) {
-          // @ts-expect-error - dynamic field
-          form.setFields([{ name: ["options"], errors: ["Label & Value wajib diisi"] }]);
+          form.setFields([
+            { name: ["options"], errors: ["Label & Value wajib diisi"] },
+          ]);
           return;
         }
       }
@@ -136,19 +149,28 @@ export default function FormQuestionManagement(
     // sync options for SELECT/RADIO/CHECKBOX
     if (isOptionType) {
       const questionId = props.questionId ?? saved.id;
-      const submitted = (values.options ?? []).map((opt, index) => ({
-        id: opt.id,
-        label: (opt.label ?? "").trim(),
-        value: (opt.value ?? "").trim(),
-        order: typeof opt.order === "number" ? opt.order : index + 1,
-        active: opt.active ?? true,
-      })).filter((opt) => opt.label || opt.value);
+      const submitted = (values.options ?? [])
+        .map((opt, index) => ({
+          id: opt.id,
+          label: (opt.label ?? "").trim(),
+          value: (opt.value ?? "").trim(),
+          order: typeof opt.order === "number" ? opt.order : index + 1,
+          active: opt.active ?? true,
+        }))
+        .filter((opt) => opt.label || opt.value);
 
       // fetch existing options from API to know deletions
-      const existingRes = await api.get(`/api/question-options?question_id=${encodeURIComponent(questionId)}`);
-      const existing = (existingRes.data?.result ?? existingRes.data) as QuestionOptionItemDataModel[];
-      const existingById = new Map(existing.filter((o) => o.id).map((o) => [o.id, o]));
-      const submittedIds = new Set(submitted.filter((o) => o.id).map((o) => String(o.id)));
+      const existingRes = await api.get(
+        `/api/question-options?question_id=${encodeURIComponent(questionId)}`,
+      );
+      const existing = (existingRes.data?.result ??
+        existingRes.data) as QuestionOptionItemDataModel[];
+      const existingById = new Map(
+        existing.filter((o) => o.id).map((o) => [o.id, o]),
+      );
+      const submittedIds = new Set(
+        submitted.filter((o) => o.id).map((o) => String(o.id)),
+      );
 
       // delete removed options
       for (const opt of existing) {
@@ -199,14 +221,14 @@ export default function FormQuestionManagement(
         min_length: props.initialValues?.min_length ?? undefined,
         max_length: props.initialValues?.max_length ?? undefined,
         active: props.initialValues?.active ?? true,
-        // @ts-expect-error - dynamic fields
-        options: props.initialOptions?.map((opt) => ({
-          id: opt.id,
-          label: opt.label,
-          value: opt.value,
-          order: opt.order,
-          active: opt.active,
-        })) ?? [],
+        options:
+          props.initialOptions?.map((opt) => ({
+            id: opt.id,
+            label: opt.label,
+            value: opt.value,
+            order: opt.order,
+            active: opt.active,
+          })) ?? [],
       }}
       style={{ width: "100%" }}
     >
@@ -294,12 +316,10 @@ export default function FormQuestionManagement(
                     align="start"
                     style={{ display: "flex", marginBottom: 8 }}
                   >
-                    {/* @ts-expect-error - dynamic fields */}
                     <Form.Item name={[field.name, "id"]} hidden>
                       <Input />
                     </Form.Item>
 
-                    {/* @ts-expect-error - dynamic fields */}
                     <Form.Item
                       name={[field.name, "label"]}
                       rules={[{ required: true, message: "Label wajib" }]}
@@ -307,7 +327,6 @@ export default function FormQuestionManagement(
                       <Input placeholder="Label" style={{ width: 180 }} />
                     </Form.Item>
 
-                    {/* @ts-expect-error - dynamic fields */}
                     <Form.Item
                       name={[field.name, "value"]}
                       rules={[{ required: true, message: "Value wajib" }]}
@@ -315,12 +334,14 @@ export default function FormQuestionManagement(
                       <Input placeholder="Value" style={{ width: 180 }} />
                     </Form.Item>
 
-                    {/* @ts-expect-error - dynamic fields */}
                     <Form.Item name={[field.name, "order"]}>
-                      <InputNumber min={1} placeholder="Order" style={{ width: 120 }} />
+                      <InputNumber
+                        min={1}
+                        placeholder="Order"
+                        style={{ width: 120 }}
+                      />
                     </Form.Item>
 
-                    {/* @ts-expect-error - dynamic fields */}
                     <Form.Item
                       name={[field.name, "active"]}
                       valuePropName="checked"
