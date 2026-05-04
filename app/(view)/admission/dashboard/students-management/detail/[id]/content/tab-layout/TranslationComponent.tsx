@@ -20,6 +20,7 @@ import {
 import {
   CloudUploadOutlined,
   DeleteOutlined,
+  DownloadOutlined,
   EyeOutlined,
   FileTextOutlined,
   PlusOutlined,
@@ -109,6 +110,18 @@ const sanitizeFileName = (name: string) =>
 const getFileExt = (name: string) => {
   const idx = name.lastIndexOf(".");
   return idx >= 0 ? name.slice(idx) : "";
+};
+
+const downloadBlob = (blob: Blob, fileName: string) => {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  a.rel = "noreferrer";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 };
 
 // function countRemainingTranslations(translation_quota: number, count_page: number) {
@@ -267,6 +280,15 @@ export default function TranslationComponent({
         label: docLabelMap.get(String(doc.document_id)) ?? doc.document_id,
       }));
   }, [answerDocuments, docLabelMap, translationDocIdSet]);
+
+  const originalUploadMap = useMemo(() => {
+    const map = new Map<string, TranslationRow>();
+    originalUploads.forEach((item) => {
+      if (!item.document_id) return;
+      map.set(String(item.document_id), item as TranslationRow);
+    });
+    return map;
+  }, [originalUploads]);
 
   const translationMap = useMemo(() => {
     const map = new Map<string, (typeof documentTranslations)[number]>();
@@ -444,6 +466,61 @@ export default function TranslationComponent({
     [notification, onDelete, queryClient, student_id],
   );
 
+  const handleDownloadMerged = useCallback(
+    async (row: TranslationRow) => {
+      if (!row.document_id) return;
+      const original = originalUploadMap.get(String(row.document_id));
+      const originalUrl = original ? getDocumentUrl(original) : null;
+      const translationUrl = getDocumentUrl(row);
+
+      if (!originalUrl || !translationUrl) {
+        notification.warning({
+          message: "Tidak bisa download",
+          description: "Dokumen asli atau terjemahan belum tersedia.",
+        });
+        return;
+      }
+
+      try {
+        const pattern = docPatternMap.get(row.document_id);
+        const mergedFile = new File([], "merged.pdf", {
+          type: "application/pdf",
+        });
+        const safeName = buildAutoFileName(pattern, mergedFile, {
+          student_name: student_name ?? student_id,
+          document_label: row.label,
+          internal_code: docInternalCodeMap.get(row.document_id),
+          country_name: student_country,
+        });
+        const response = await api.post(
+          "/api/documents/merge-pdf",
+          {
+            original_url: originalUrl,
+            translation_url: translationUrl,
+            file_name: safeName,
+          },
+          { responseType: "blob" },
+        );
+        downloadBlob(response.data as Blob, safeName);
+      } catch (error) {
+        const err = error as ApiError;
+        notification.error({
+          message: "Gagal download",
+          description: err?.message ?? "Terjadi kesalahan saat merge dokumen.",
+        });
+      }
+    },
+    [
+      docInternalCodeMap,
+      docPatternMap,
+      notification,
+      originalUploadMap,
+      student_country,
+      student_id,
+      student_name,
+    ],
+  );
+
   const translationColumns: ColumnsType<TranslationRow> = useMemo(
     () => [
       {
@@ -496,6 +573,11 @@ export default function TranslationComponent({
         key: "actions",
         render: (_, record) => {
           const fileUrl = getDocumentUrl(record);
+          const original = record.document_id
+            ? originalUploadMap.get(String(record.document_id))
+            : undefined;
+          const originalUrl = original ? getDocumentUrl(original) : null;
+          const canDownloadMerged = Boolean(originalUrl && fileUrl);
           const isUploading = uploadingId === record.document_id;
           const canDelete = Boolean(record.translation_id);
           return (
@@ -513,6 +595,11 @@ export default function TranslationComponent({
                     : undefined
                 }
                 target={fileUrl ? "_blank" : undefined}
+              />
+              <Button
+                icon={<DownloadOutlined />}
+                disabled={!canDownloadMerged}
+                onClick={() => handleDownloadMerged(record)}
               />
               <Upload
                 showUploadList={false}
@@ -546,7 +633,7 @@ export default function TranslationComponent({
         },
       },
     ],
-    [handleDelete, handleUpload, uploadingId],
+    [handleDelete, handleDownloadMerged, handleUpload, originalUploadMap, uploadingId],
   );
 
   const originalColumns: ColumnsType<TranslationRow> = useMemo(
