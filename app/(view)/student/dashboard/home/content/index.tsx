@@ -115,10 +115,16 @@ type RejectedFeedbackItem = {
   reviewed_at?: string | null;
 };
 
+type StudentTaskPriority =
+  | "Current Step"
+  | "Upcoming Step"
+  | "Required Document"
+  | "Revision Required";
+
 type StudentTaskItem = {
   id: string;
   title: string;
-  priority: "Current Step" | "Upcoming Step" | "Required Document" | "Revision Required";
+  priority: StudentTaskPriority;
 };
 
 function extractStepNumber(label: string): number {
@@ -171,7 +177,11 @@ function getStepsData(user?: StudentUser) {
         ? currentIndex
         : 0;
 
-  const pendingTasks = sortedSteps
+  const pendingTasks: Array<{
+    id: string;
+    title: string;
+    priority: "Current Step" | "Upcoming Step";
+  }> = sortedSteps
     .filter((step) => {
       const index = sortedSteps.findIndex((item) => item.id === step.id);
       return visaGranted ? false : index >= currentStep;
@@ -181,7 +191,9 @@ function getStepsData(user?: StudentUser) {
         id: child.id,
         title: child.label,
         priority:
-          step.id === user?.current_step_id ? "Current Step" : "Upcoming Step",
+          step.id === user?.current_step_id
+            ? ("Current Step" as const)
+            : ("Upcoming Step" as const),
       })),
     );
 
