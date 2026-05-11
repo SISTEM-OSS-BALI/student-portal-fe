@@ -1,6 +1,5 @@
 import type { StudentFormValues, UserDataModel } from "@/app/models/user";
 import { Modal } from "antd";
-import FormStudentComponent from "./FormStudentComponent";
 import { StagesManagementDataModel } from "@/app/models/stages-management";
 
 interface ModalStudentComponentProps {
@@ -34,7 +33,7 @@ export default function ModalStudentComponent({
       title={selectedStudent ? "Edit Student" : "Tambah Student"}
       destroyOnClose
     >
-      <FormStudentComponent
+      {/* <FormStudentComponent
         onSubmit={onSubmit}
         onDelete={onDelete}
         onCancel={onCancel}
@@ -42,7 +41,7 @@ export default function ModalStudentComponent({
         deleteLoading={deleteLoading}
         selectedStudent={selectedStudent}
         stagesData={stagesData ?? []}
-      />
+      /> */}
     </Modal>
   );
 }
