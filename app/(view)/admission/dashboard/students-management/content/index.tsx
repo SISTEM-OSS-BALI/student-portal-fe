@@ -1,18 +1,14 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type CSSProperties,
-} from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { CSSProperties } from "react";
 import {
   Button,
   Card,
   Empty,
   Flex,
   Input,
+  message,
   Modal,
   Pagination,
   Select,
@@ -22,12 +18,13 @@ import {
 } from "antd";
 import {
   DeleteOutlined,
-  ExclamationCircleOutlined,
+  EditOutlined,
   FilterOutlined,
   HolderOutlined,
   PlusOutlined,
   SearchOutlined,
 } from "@ant-design/icons";
+import type { StudentFormValues } from "@/app/models/user";
 import {
   closestCorners,
   DndContext,
@@ -48,24 +45,29 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useRouter } from "next/navigation";
+import FormStudentComponent from "./FormStudentComponent";
+import { useStagesManagement } from "@/app/hooks/use-stages-management";
+import { useVisaTypes } from "@/app/hooks/use-visa-type-management";
 
-import ModalStudentComponent from "./ModalStudentComponent";
 import {
   useCreateUser,
   useDeleteUser,
   useUpdateStudentStatusUser,
+  useUpdateUser,
   useUserRoleStudents,
 } from "@/app/hooks/use-users";
-import { useStagesManagement } from "@/app/hooks/use-stages-management";
-import type { UserDataModel, UserPayloadCreateModel } from "@/app/models/user";
+import type {
+  UserDataModel,
+  UserPayloadCreateModel,
+  UserPayloadUpdateModel,
+} from "@/app/models/user";
 
 const { Text, Title } = Typography;
 
 const PAGE_SIZE = 10;
 
 const filterStyle: CSSProperties = {
-  minWidth: 180,
-  borderRadius: 999,
+  width: "100%",
 };
 
 type StudentBoardStatus = "ONGOING" | "POSTPONE" | "CANCEL";
@@ -179,16 +181,16 @@ function getCountryName(student: UserDataModel): string {
   return String(student.stage?.country?.name ?? "").trim();
 }
 
-function getVisaName(student: UserDataModel): string {
-  return String(student.visa_type ?? "").trim();
-}
-
 function getDegreeLabel(student: UserDataModel): string {
   return String(student.degree || student.name_degree || "").trim();
 }
 
 function getCampusName(student: UserDataModel): string {
   return String(student.name_campus ?? "").trim();
+}
+
+function getVisaType(student: UserDataModel): string {
+  return String(student.visa_type_name ?? student.visa_type ?? "").trim();
 }
 
 function getStudentId(student: UserDataModel): string {
@@ -278,7 +280,33 @@ function getStatusTagMeta(status: StudentBoardStatus): {
 }
 
 function formatVisaType(value: string): string {
-  return value ? value.replace(/_/g, " ").toUpperCase() : "Visa belum dipilih";
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) return "Visa belum dipilih";
+
+  // If backend already provides a human-readable name, keep casing.
+  if (trimmed.includes(" ") && !trimmed.includes("_")) {
+    return trimmed;
+  }
+
+  return trimmed.replace(/_/g, " ").toUpperCase();
+}
+
+function getFilterSummaryLabel({
+  country,
+  visa,
+  degree,
+}: {
+  country?: string;
+  visa?: string;
+  degree?: string;
+}): string {
+  const parts = [
+    country ? `Negara: ${country}` : null,
+    visa ? `Visa: ${formatVisaType(visa)}` : null,
+    degree ? `Jenjang: ${degree}` : null,
+  ].filter(Boolean);
+
+  return parts.length ? parts.join(" • ") : "Menampilkan semua student";
 }
 
 function getStudentInitials(student: UserDataModel): string {
@@ -294,18 +322,17 @@ function getStudentInitials(student: UserDataModel): string {
 }
 
 function buildStudentMetaLine(student: UserDataModel): string {
-  const parts = [getCountryName(student), getCampusName(student)].filter(
-    Boolean,
-  );
+  const parts = [getCountryName(student), getCampusName(student)]
+    .map((item) => item.trim())
+    .filter(Boolean);
 
   return parts.join(" • ") || "Profil student belum lengkap";
 }
 
 function buildStudentSecondaryLine(student: UserDataModel): string {
-  const parts = [
-    getDegreeLabel(student),
-    String(student.no_phone ?? "").trim(),
-  ].filter(Boolean);
+  const parts = [getDegreeLabel(student), student.no_phone]
+    .map((item) => String(item ?? "").trim())
+    .filter(Boolean);
 
   return parts.join(" • ") || student.email || "Belum ada detail tambahan";
 }
@@ -315,15 +342,15 @@ function StudentCardInner({
   dragListeners,
   dragAttributes,
   isDragging,
+  onEdit,
   onDelete,
-  deleteLoading,
 }: {
   student: UserDataModel;
   dragListeners?: SortableHookResult["listeners"];
   dragAttributes?: SortableHookResult["attributes"];
   isDragging?: boolean;
+  onEdit?: (student: UserDataModel) => void;
   onDelete?: (student: UserDataModel) => void;
-  deleteLoading?: boolean;
 }) {
   const status = getStudentBoardStatus(student);
   const statusMeta = getStatusTagMeta(status);
@@ -335,43 +362,43 @@ function StudentCardInner({
         textAlign: "left",
         border: isDragging ? "1px solid #818cf8" : "1px solid #e7eaf0",
         background: "linear-gradient(180deg, #ffffff 0%, #fbfcff 100%)",
-        borderRadius: 20,
-        padding: 16,
+        borderRadius: 18,
+        padding: 14,
         boxShadow: isDragging
-          ? "0 22px 36px rgba(79, 70, 229, 0.18)"
-          : "0 12px 30px rgba(15, 23, 42, 0.06)",
+          ? "0 18px 30px rgba(79, 70, 229, 0.18)"
+          : "0 10px 24px rgba(15, 23, 42, 0.045)",
         opacity: isDragging ? 0.95 : 1,
         transition: "all 0.18s ease",
       }}
     >
-      <Flex justify="space-between" align="flex-start" gap={14}>
-        <Flex gap={12} align="flex-start" style={{ minWidth: 0, flex: 1 }}>
+      <Flex justify="space-between" align="flex-start" gap={12}>
+        <Flex gap={10} align="flex-start" style={{ minWidth: 0, flex: 1 }}>
           <div
             style={{
-              width: 44,
-              height: 44,
-              borderRadius: 16,
+              width: 40,
+              height: 40,
+              borderRadius: 14,
               background: "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)",
               color: "#fff",
               display: "grid",
               placeItems: "center",
-              fontSize: 15,
+              fontSize: 14,
               fontWeight: 700,
-              letterSpacing: 0.4,
+              letterSpacing: 0.3,
               flexShrink: 0,
-              boxShadow: "0 12px 24px rgba(79, 70, 229, 0.22)",
+              boxShadow: "0 10px 20px rgba(79, 70, 229, 0.2)",
             }}
           >
             {getStudentInitials(student)}
           </div>
 
           <div style={{ minWidth: 0, flex: 1 }}>
-            <Flex align="center" gap={8} wrap style={{ marginBottom: 6 }}>
+            <Flex align="center" gap={6} wrap style={{ marginBottom: 5 }}>
               <Text
                 strong
                 ellipsis
                 style={{
-                  fontSize: 15,
+                  fontSize: 14,
                   lineHeight: 1.35,
                   color: "#111827",
                   minWidth: 0,
@@ -385,8 +412,8 @@ function StudentCardInner({
                 style={{
                   marginRight: 0,
                   borderRadius: 999,
-                  padding: "2px 10px",
-                  fontSize: 11,
+                  padding: "1px 8px",
+                  fontSize: 10,
                   fontWeight: 600,
                   color: statusMeta.color,
                   background: statusMeta.background,
@@ -398,12 +425,13 @@ function StudentCardInner({
             </Flex>
 
             <Text
+              ellipsis
               style={{
                 display: "block",
                 color: "#475467",
-                fontSize: 13,
+                fontSize: 12,
                 lineHeight: 1.45,
-                marginBottom: 4,
+                marginBottom: 3,
               }}
             >
               {buildStudentMetaLine(student)}
@@ -411,26 +439,52 @@ function StudentCardInner({
 
             <Text
               type="secondary"
-              style={{ display: "block", fontSize: 12, lineHeight: 1.5 }}
+              ellipsis
+              style={{
+                display: "block",
+                fontSize: 11,
+                lineHeight: 1.45,
+                marginBottom: 8,
+              }}
             >
               {buildStudentSecondaryLine(student)}
             </Text>
+
+            <Tag
+              style={{
+                marginRight: 0,
+                borderRadius: 999,
+                padding: "5px 10px",
+                fontSize: 10,
+                fontWeight: 700,
+                color: "#3153d4",
+                background: "#eef4ff",
+                borderColor: "#bfd2ff",
+                letterSpacing: 0.25,
+                maxWidth: "100%",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              {formatVisaType(getVisaType(student))}
+            </Tag>
           </div>
         </Flex>
 
-        <Flex vertical align="flex-end" gap={10} style={{ flexShrink: 0 }}>
-          <div
+        <Flex vertical align="flex-end" gap={8} style={{ flexShrink: 0 }}>
+          <button
+            type="button"
             {...dragAttributes}
             {...dragListeners}
             style={{
-              width: 34,
-              height: 34,
-              borderRadius: 12,
+              width: 30,
+              height: 30,
+              borderRadius: 11,
               border: "1px solid #e5e7eb",
               color: "#98a2b3",
               display: "grid",
               placeItems: "center",
-              fontSize: 15,
+              fontSize: 14,
               cursor: isDragging ? "grabbing" : "grab",
               touchAction: "none",
               background: "#fff",
@@ -439,47 +493,63 @@ function StudentCardInner({
             title="Drag handle"
           >
             <HolderOutlined />
-          </div>
+          </button>
 
-          {onDelete ? (
-            <Button
-              danger
-              type="text"
-              size="small"
-              icon={<DeleteOutlined />}
-              loading={deleteLoading}
-              disabled={deleteLoading}
-              onClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                onDelete(student);
-              }}
-              style={{
-                width: 34,
-                height: 34,
-                borderRadius: 12,
-                display: "grid",
-                placeItems: "center",
-              }}
-              title="Delete student"
-            />
-          ) : null}
-
-          <Tag
-            style={{
-              marginRight: 0,
-              borderRadius: 999,
-              padding: "6px 12px",
-              fontSize: 11,
-              fontWeight: 700,
-              color: "#3153d4",
-              background: "#eef4ff",
-              borderColor: "#bfd2ff",
-              letterSpacing: 0.3,
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
             }}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onEdit?.(student);
+            }}
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 999,
+              border: "1px solid #c7d2fe",
+              background: "#eef2ff",
+              color: "#4338ca",
+              display: "grid",
+              placeItems: "center",
+              cursor: "pointer",
+              boxShadow: "0 8px 18px rgba(67, 56, 202, 0.12)",
+            }}
+            title="Edit student"
           >
-            {formatVisaType(getVisaName(student))}
-          </Tag>
+            <EditOutlined />
+          </button>
+
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onDelete?.(student);
+            }}
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 999,
+              border: "1px solid #fecaca",
+              background: "#fff1f2",
+              color: "#dc2626",
+              display: "grid",
+              placeItems: "center",
+              cursor: "pointer",
+              boxShadow: "0 8px 18px rgba(220, 38, 38, 0.1)",
+            }}
+            title="Delete student"
+          >
+            <DeleteOutlined />
+          </button>
         </Flex>
       </Flex>
     </div>
@@ -489,15 +559,15 @@ function StudentCardInner({
 function SortableStudentCard({
   student,
   onClick,
+  onEdit,
   onDelete,
   disabled,
-  deleteLoading,
 }: {
   student: UserDataModel;
   onClick: () => void;
+  onEdit: (student: UserDataModel) => void;
   onDelete: (student: UserDataModel) => void;
   disabled?: boolean;
-  deleteLoading?: boolean;
 }) {
   const {
     attributes,
@@ -512,11 +582,16 @@ function SortableStudentCard({
   });
 
   return (
-    <button
+    <div
       ref={setNodeRef}
-      type="button"
+      role="button"
+      tabIndex={0}
       onClick={onClick}
-      disabled={deleteLoading}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          onClick();
+        }
+      }}
       style={{
         width: "100%",
         border: "none",
@@ -526,7 +601,7 @@ function SortableStudentCard({
         textAlign: "left",
         transform: CSS.Transform.toString(transform),
         transition,
-        opacity: deleteLoading ? 0.7 : 1,
+        outline: "none",
       }}
     >
       <StudentCardInner
@@ -534,10 +609,10 @@ function SortableStudentCard({
         dragAttributes={attributes}
         dragListeners={listeners}
         isDragging={isDragging}
+        onEdit={onEdit}
         onDelete={onDelete}
-        deleteLoading={deleteLoading}
       />
-    </button>
+    </div>
   );
 }
 
@@ -546,25 +621,23 @@ function BoardColumn({
   students,
   paginatedStudents,
   currentPage,
-  pageSize,
   onPageChange,
   onClickStudent,
+  onEditStudent,
   onDeleteStudent,
   isHighlighted,
   disableInteraction,
-  deletingStudentId,
 }: {
   column: BoardColumnConfig;
   students: UserDataModel[];
   paginatedStudents: UserDataModel[];
   currentPage: number;
-  pageSize: number;
   onPageChange: (page: number) => void;
   onClickStudent: (student: UserDataModel) => void;
+  onEditStudent: (student: UserDataModel) => void;
   onDeleteStudent: (student: UserDataModel) => void;
   isHighlighted: boolean;
   disableInteraction?: boolean;
-  deletingStudentId?: string | null;
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: column.key,
@@ -573,8 +646,8 @@ function BoardColumn({
   const isActive = isHighlighted || isOver;
 
   const startNumber =
-    students.length === 0 ? 0 : (currentPage - 1) * pageSize + 1;
-  const endNumber = Math.min(currentPage * pageSize, students.length);
+    students.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
+  const endNumber = Math.min(currentPage * PAGE_SIZE, students.length);
 
   return (
     <div
@@ -587,7 +660,7 @@ function BoardColumn({
         flexDirection: "column",
         transition: "all 0.18s ease",
         border: `1px solid ${isActive ? column.borderColor : "#e8ebf2"}`,
-        borderRadius: 28,
+        borderRadius: 26,
         boxShadow: isActive
           ? "0 18px 40px rgba(79, 70, 229, 0.08)"
           : "0 14px 32px rgba(15, 23, 42, 0.04)",
@@ -596,7 +669,7 @@ function BoardColumn({
     >
       <div
         style={{
-          padding: 18,
+          padding: 16,
           borderBottom: "1px solid #edf0f5",
           background: "rgba(255,255,255,0.94)",
           backdropFilter: "blur(8px)",
@@ -607,26 +680,26 @@ function BoardColumn({
       >
         <div
           style={{
-            height: 6,
-            width: 92,
+            height: 5,
+            width: 82,
             borderRadius: 999,
             background: column.accent,
-            marginBottom: 14,
+            marginBottom: 12,
           }}
         />
 
         <Flex justify="space-between" align="center" gap={12}>
           <div style={{ minWidth: 0 }}>
-            <Text strong style={{ fontSize: 19, color: "#111827" }}>
+            <Text strong style={{ fontSize: 17, color: "#111827" }}>
               {column.title}
             </Text>
 
             <Text
               style={{
                 display: "block",
-                marginTop: 4,
+                marginTop: 3,
                 color: "#667085",
-                fontSize: 13,
+                fontSize: 12,
               }}
             >
               {students.length} student{students.length === 1 ? "" : "s"}
@@ -635,15 +708,16 @@ function BoardColumn({
 
           <div
             style={{
-              minWidth: 42,
-              height: 42,
+              minWidth: 38,
+              height: 38,
               borderRadius: 14,
               background: column.softBg,
               color: column.color,
               border: `1px solid ${column.borderColor}`,
               display: "grid",
               placeItems: "center",
-              fontWeight: 700,
+              fontWeight: 800,
+              fontSize: 13,
             }}
           >
             {students.length}
@@ -657,10 +731,10 @@ function BoardColumn({
       >
         <div
           style={{
-            padding: 16,
+            padding: 14,
             display: "flex",
             flexDirection: "column",
-            gap: 14,
+            gap: 12,
             flex: 1,
             overflowY: "auto",
             overscrollBehavior: "contain",
@@ -669,11 +743,11 @@ function BoardColumn({
           {students.length === 0 ? (
             <div
               style={{
-                borderRadius: 24,
+                borderRadius: 22,
                 border: isActive
                   ? `1px dashed ${column.borderColor}`
                   : "1px dashed #e5e7eb",
-                minHeight: 220,
+                minHeight: 190,
                 display: "grid",
                 placeItems: "center",
                 transition: "border-color 0.18s ease",
@@ -689,8 +763,8 @@ function BoardColumn({
                 student={student}
                 disabled={disableInteraction}
                 onClick={() => onClickStudent(student)}
+                onEdit={onEditStudent}
                 onDelete={onDeleteStudent}
-                deleteLoading={deletingStudentId === getStudentId(student)}
               />
             ))
           )}
@@ -699,9 +773,9 @@ function BoardColumn({
 
       <div
         style={{
-          padding: "12px 16px 16px",
+          padding: "12px 14px 14px",
           borderTop: "1px solid #edf0f5",
-          background: "rgba(255,255,255,0.96)",
+          background: "rgba(255,255,255,0.95)",
         }}
       >
         <Flex align="center" justify="space-between" gap={10} wrap>
@@ -720,7 +794,7 @@ function BoardColumn({
           <Pagination
             size="small"
             current={currentPage}
-            pageSize={pageSize}
+            pageSize={PAGE_SIZE}
             total={students.length}
             onChange={onPageChange}
             showSizeChanger={false}
@@ -733,15 +807,10 @@ function BoardColumn({
 }
 
 export default function StudentsManagementContent() {
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedStudent, setSelectedStudent] = useState<UserDataModel | null>(
-    null,
-  );
-  const [deleteTargetStudent, setDeleteTargetStudent] =
-    useState<UserDataModel | null>(null);
+  const router = useRouter();
 
   const [keyword, setKeyword] = useState("");
-  const [showFilters, setShowFilters] = useState(true);
+  const [showFilters, setShowFilters] = useState(false);
   const [selectedCountry, setSelectedCountry] = useState<string | undefined>();
   const [selectedVisa, setSelectedVisa] = useState<string | undefined>();
   const [selectedDegree, setSelectedDegree] = useState<string | undefined>();
@@ -749,10 +818,12 @@ export default function StudentsManagementContent() {
   const [dragOverStatus, setDragOverStatus] =
     useState<StudentBoardStatus | null>(null);
   const [movingStudentId, setMovingStudentId] = useState<string | null>(null);
-  const [deletingStudentId, setDeletingStudentId] = useState<string | null>(
+  const [editingStudent, setEditingStudent] = useState<UserDataModel | null>(
     null,
   );
-
+  const [isStudentModalOpen, setIsStudentModalOpen] = useState(false);
+  const [deleteTargetStudent, setDeleteTargetStudent] =
+    useState<UserDataModel | null>(null);
   const [studentOverrides, setStudentOverrides] = useState<
     Record<string, Partial<UserDataModel>>
   >({});
@@ -765,14 +836,21 @@ export default function StudentsManagementContent() {
     CANCEL: 1,
   });
 
-  const router = useRouter();
-
   const { onCreate, onCreateLoading } = useCreateUser();
-  const { onDelete, onDeleteLoading } = useDeleteUser();
+
   const { onUpdate: onUpdateStudentStatus, onUpdateLoading } =
     useUpdateStudentStatusUser();
+
+  const {
+    onUpdate: updateStudentUser,
+    onUpdateLoading: updateStudentUserLoading,
+  } = useUpdateUser();
+
+  const { onDelete, onDeleteLoading } = useDeleteUser();
+
   const { data: rawStudentsRoleData } = useUserRoleStudents();
-  const { data: stagesData } = useStagesManagement({});
+  const { data: stagesData = [] } = useStagesManagement({});
+  const { data: visaTypesData = [] } = useVisaTypes({});
 
   const studentsRoleData = useMemo<UserDataModel[]>(() => {
     return normalizeStudentResponse(rawStudentsRoleData);
@@ -795,6 +873,126 @@ export default function StudentsManagementContent() {
     }),
   );
 
+  const resetPagination = useCallback(() => {
+    setPageByStatus({
+      ONGOING: 1,
+      POSTPONE: 1,
+      CANCEL: 1,
+    });
+  }, []);
+
+  const openCreateModal = useCallback(() => {
+    setEditingStudent(null);
+    setIsStudentModalOpen(true);
+  }, []);
+
+  const openEditModal = useCallback((student: UserDataModel) => {
+    setEditingStudent(student);
+    setIsStudentModalOpen(true);
+  }, []);
+
+  const closeStudentModal = useCallback(() => {
+    setIsStudentModalOpen(false);
+    setEditingStudent(null);
+  }, []);
+
+  const openDeleteModal = useCallback((student: UserDataModel) => {
+    setDeleteTargetStudent(student);
+  }, []);
+
+  const closeDeleteModal = useCallback(() => {
+    setDeleteTargetStudent(null);
+  }, []);
+
+  const handleSubmitStudent = useCallback(
+    async (values: StudentFormValues) => {
+      if (editingStudent?.id) {
+        const studentId = String(editingStudent.id);
+
+        const payload: UserPayloadUpdateModel = {
+          ...values,
+        };
+
+        const response = await updateStudentUser({
+          id: studentId,
+          payload,
+        });
+
+        const updatedStudent = (response?.data?.result ?? response?.data) as
+          | UserDataModel
+          | undefined;
+
+        setStudentOverrides((prev) => ({
+          ...prev,
+          [studentId]: {
+            ...prev[studentId],
+            ...values,
+            ...(updatedStudent ?? {}),
+          },
+        }));
+
+        closeStudentModal();
+        resetPagination();
+        return;
+      }
+
+      const { password, ...rest } = values;
+      if (!password) {
+        message.error("Password wajib diisi untuk membuat student baru.");
+        return;
+      }
+
+      const payload: UserPayloadCreateModel = { ...rest, password, role: "student" };
+
+      await onCreate(payload);
+
+      closeStudentModal();
+      resetPagination();
+    },
+    [
+      closeStudentModal,
+      editingStudent,
+      onCreate,
+      resetPagination,
+      updateStudentUser,
+    ],
+  );
+
+  const handleConfirmDeleteStudent = useCallback(async () => {
+    if (!deleteTargetStudent?.id) return;
+
+    const studentId = getStudentId(deleteTargetStudent);
+
+    await onDelete(deleteTargetStudent.id);
+
+    setStudentOverrides((prev) => {
+      const next = { ...prev };
+      delete next[studentId];
+      return next;
+    });
+
+    if (editingStudent && getStudentId(editingStudent) === studentId) {
+      closeStudentModal();
+    }
+
+    closeDeleteModal();
+    resetPagination();
+  }, [
+    closeDeleteModal,
+    closeStudentModal,
+    deleteTargetStudent,
+    editingStudent,
+    onDelete,
+    resetPagination,
+  ]);
+
+  const isUpdatingStudent =
+    onUpdateLoading ||
+    updateStudentUserLoading ||
+    onCreateLoading ||
+    onDeleteLoading ||
+    movingStudentId !== null;
+
   const activeCountryFilter = sanitizeFilterValue(selectedCountry);
   const activeVisaFilter = sanitizeFilterValue(selectedVisa);
   const activeDegreeFilter = sanitizeFilterValue(selectedDegree);
@@ -806,14 +1004,6 @@ export default function StudentsManagementContent() {
     activeVisaFilter ||
     activeDegreeFilter,
   );
-
-  const resetPagination = useCallback(() => {
-    setPageByStatus({
-      ONGOING: 1,
-      POSTPONE: 1,
-      CANCEL: 1,
-    });
-  }, []);
 
   const resetFilters = useCallback(() => {
     setSelectedCountry(undefined);
@@ -866,68 +1056,6 @@ export default function StudentsManagementContent() {
     });
   }, [studentsRoleData]);
 
-  const openCreateModal = useCallback(() => {
-    setSelectedStudent(null);
-    setIsModalOpen(true);
-  }, []);
-
-  const closeModal = useCallback(() => {
-    setIsModalOpen(false);
-    setSelectedStudent(null);
-  }, []);
-
-  const handleSubmit = useCallback(
-    async (values: UserPayloadCreateModel) => {
-      await onCreate({
-        ...values,
-        role: "student",
-      });
-
-      closeModal();
-      resetPagination();
-    },
-    [closeModal, onCreate, resetPagination],
-  );
-
-  const handleDelete = useCallback(async () => {
-    if (!selectedStudent) return;
-
-    const studentId = getStudentId(selectedStudent);
-    setDeletingStudentId(studentId);
-
-    try {
-      await onDelete(studentId);
-      closeModal();
-      resetPagination();
-    } finally {
-      setDeletingStudentId(null);
-    }
-  }, [closeModal, onDelete, resetPagination, selectedStudent]);
-
-  const openDeleteConfirm = useCallback((student: UserDataModel) => {
-    setDeleteTargetStudent(student);
-  }, []);
-
-  const closeDeleteConfirm = useCallback(() => {
-    if (onDeleteLoading || deletingStudentId) return;
-    setDeleteTargetStudent(null);
-  }, [deletingStudentId, onDeleteLoading]);
-
-  const handleConfirmDelete = useCallback(async () => {
-    if (!deleteTargetStudent) return;
-
-    const studentId = getStudentId(deleteTargetStudent);
-    setDeletingStudentId(studentId);
-
-    try {
-      await onDelete(studentId);
-      setDeleteTargetStudent(null);
-      resetPagination();
-    } finally {
-      setDeletingStudentId(null);
-    }
-  }, [deleteTargetStudent, onDelete, resetPagination]);
-
   const countryOptions = useMemo<SelectOption[]>(() => {
     const map = new Map<string, SelectOption>();
 
@@ -946,21 +1074,34 @@ export default function StudentsManagementContent() {
   }, [studentsRoleData]);
 
   const visaOptions = useMemo<SelectOption[]>(() => {
-    const map = new Map<string, SelectOption>();
+    // Filter should use visa NAME (human-readable) to avoid mixing ids vs names.
+    // This keeps it consistent with Visa Type Management display.
+    const options: SelectOption[] = (visaTypesData ?? [])
+      .filter((visa) => visa?.name)
+      .map((visa) => {
+        const name = String(visa.name).trim();
+        return { value: name, label: name };
+      })
+      .filter((opt) => opt.value);
 
+    const byLabelKey = new Map<string, SelectOption>();
+    for (const opt of options) {
+      byLabelKey.set(normalizeText(opt.label), opt);
+    }
+
+    // Backward compatibility: include any visa labels found on students that
+    // don't exist in the management table.
     studentsRoleData.forEach((student) => {
-      const visa = getVisaName(student);
-
-      if (visa) {
-        map.set(visa, {
-          value: visa,
-          label: formatVisaType(visa),
-        });
-      }
+      const visa = getVisaType(student);
+      if (!visa) return;
+      const key = normalizeText(visa);
+      if (byLabelKey.has(key)) return;
+      const label = formatVisaType(visa);
+      byLabelKey.set(key, { value: visa, label });
     });
 
-    return Array.from(map.values());
-  }, [studentsRoleData]);
+    return Array.from(byLabelKey.values());
+  }, [studentsRoleData, visaTypesData]);
 
   const degreeOptions = useMemo<SelectOption[]>(() => {
     const map = new Map<string, SelectOption>();
@@ -983,10 +1124,12 @@ export default function StudentsManagementContent() {
     return studentsRoleData.map((student) =>
       mergeStudentData(student, studentOverrides[getStudentId(student)]),
     );
-  }, [studentsRoleData, studentOverrides]);
+  }, [studentOverrides, studentsRoleData]);
 
   const filteredStudents = useMemo<UserDataModel[]>(() => {
-    if (!hasActiveFilter) return effectiveStudents;
+    if (!hasActiveFilter) {
+      return effectiveStudents;
+    }
 
     return effectiveStudents.filter((student) => {
       const haystack = [
@@ -994,9 +1137,9 @@ export default function StudentsManagementContent() {
         student.email,
         student.no_phone,
         getCountryName(student),
-        getVisaName(student),
         getDegreeLabel(student),
         getCampusName(student),
+        getVisaType(student),
       ]
         .map((item) => normalizeText(item))
         .join(" ");
@@ -1011,7 +1154,7 @@ export default function StudentsManagementContent() {
 
       const matchVisa =
         !activeVisaFilter ||
-        normalizeText(getVisaName(student)) === normalizeText(activeVisaFilter);
+        normalizeText(getVisaType(student)) === normalizeText(activeVisaFilter);
 
       const matchDegree =
         !activeDegreeFilter ||
@@ -1021,12 +1164,12 @@ export default function StudentsManagementContent() {
       return matchKeyword && matchCountry && matchVisa && matchDegree;
     });
   }, [
+    activeCountryFilter,
+    activeDegreeFilter,
+    activeKeyword,
+    activeVisaFilter,
     effectiveStudents,
     hasActiveFilter,
-    activeKeyword,
-    activeCountryFilter,
-    activeVisaFilter,
-    activeDegreeFilter,
   ]);
 
   const studentMap = useMemo(() => {
@@ -1201,53 +1344,50 @@ export default function StudentsManagementContent() {
 
   return (
     <div>
-      <Space direction="vertical" size={20} style={{ width: "100%" }}>
-        <div
+      <Space direction="vertical" size={18} style={{ width: "100%" }}>
+        <Card
+          bodyStyle={{ padding: 20 }}
           style={{
-            borderRadius: 30,
-            padding: 20,
+            borderRadius: 28,
             border: "1px solid #e6eaf2",
-            boxShadow: "0 22px 48px rgba(15, 23, 42, 0.06)",
+            boxShadow: "0 18px 42px rgba(15, 23, 42, 0.055)",
+            background: "#ffffff",
           }}
         >
           <Flex justify="space-between" align="flex-start" gap={18} wrap>
-            <div style={{ maxWidth: 620 }}>
-              <Title
-                level={3}
-                style={{ margin: "8px 0 6px", color: "#101828" }}
-              >
-                Student Pipeline Management
+            <div style={{ maxWidth: 680 }}>
+              <Title level={3} style={{ margin: "0 0 6px", color: "#101828" }}>
+                Pipeline Management
               </Title>
 
-              <Text style={{ color: "#667085", fontSize: 15, lineHeight: 1.7 }}>
-                Kelola progres student dengan tampilan board yang lebih jelas.
-                Drag and drop antar status akan langsung menyimpan perubahan ke
-                sistem.
+              <Text style={{ color: "#667085", fontSize: 14, lineHeight: 1.7 }}>
+                Kelola progres student berdasarkan status, visa, negara tujuan,
+                dan jenjang pendidikan.
               </Text>
             </div>
 
-            <Flex gap={12} wrap>
+            <Flex gap={10} wrap>
               {boardSummary.map((item) => (
                 <div
                   key={item.key}
                   style={{
-                    minWidth: 138,
-                    borderRadius: 22,
-                    padding: 16,
+                    minWidth: 128,
+                    borderRadius: 20,
+                    padding: 14,
                     background: item.softBg,
                     border: `1px solid ${item.borderColor}`,
                   }}
                 >
-                  <Text type="secondary" style={{ fontSize: 12 }}>
+                  <Text type="secondary" style={{ fontSize: 11 }}>
                     {item.title}
                   </Text>
 
                   <div
                     style={{
-                      marginTop: 8,
-                      fontSize: 28,
+                      marginTop: 7,
+                      fontSize: 26,
                       lineHeight: 1,
-                      fontWeight: 700,
+                      fontWeight: 800,
                       color: "#111827",
                     }}
                   >
@@ -1264,7 +1404,7 @@ export default function StudentsManagementContent() {
               gap: 12,
               alignItems: "center",
               flexWrap: "wrap",
-              marginTop: 20,
+              marginTop: 18,
             }}
           >
             <Input
@@ -1278,7 +1418,7 @@ export default function StudentsManagementContent() {
                 flex: 1,
                 minWidth: 260,
                 borderRadius: 16,
-                height: 54,
+                height: 52,
                 background: "#fff",
               }}
             />
@@ -1288,10 +1428,10 @@ export default function StudentsManagementContent() {
               icon={<FilterOutlined />}
               onClick={toggleFilters}
               style={{
-                minWidth: 122,
+                minWidth: 120,
                 borderRadius: 16,
-                height: 54,
-                fontWeight: 600,
+                height: 52,
+                fontWeight: 700,
                 borderColor: showFilters ? "#c7d2fe" : undefined,
                 color: showFilters ? "#4338ca" : undefined,
                 background: showFilters ? "#eef2ff" : "#fff",
@@ -1306,70 +1446,160 @@ export default function StudentsManagementContent() {
               icon={<PlusOutlined />}
               onClick={openCreateModal}
               style={{
-                minWidth: 170,
+                minWidth: 150,
                 borderRadius: 16,
-                height: 54,
+                height: 52,
                 fontWeight: 700,
-                background: "linear-gradient(135deg, #5b4de6 0%, #4338ca 100%)",
-                boxShadow: "0 14px 26px rgba(79, 70, 229, 0.2)",
+                background: "linear-gradient(135deg, #4f46e5 0%, #4338ca 100%)",
+                boxShadow: "0 14px 26px rgba(79, 70, 229, 0.18)",
               }}
             >
               Add Student
             </Button>
           </div>
-        </div>
+        </Card>
 
         {showFilters && (
           <Card
             bodyStyle={{ padding: 18 }}
             style={{
               borderRadius: 24,
-              border: "1px solid #e5e7eb",
-              boxShadow: "0 12px 30px rgba(15, 23, 42, 0.05)",
-              background: "linear-gradient(180deg, #ffffff 0%, #fafbff 100%)",
+              border: "1px solid #e6e9f4",
+              boxShadow: "0 10px 26px rgba(15, 23, 42, 0.045)",
+              background:
+                "linear-gradient(135deg, #ffffff 0%, #fbfcff 55%, #f7f8ff 100%)",
             }}
           >
-            <Space size={12} wrap style={{ width: "100%" }}>
-              <Select
-                placeholder="Country"
-                allowClear
-                value={selectedCountry}
-                onChange={(value) =>
-                  setSelectedCountry(sanitizeFilterValue(value))
-                }
-                style={filterStyle}
-                options={countryOptions}
-              />
+            <Flex
+              justify="space-between"
+              align="center"
+              gap={16}
+              wrap
+              style={{ marginBottom: 14 }}
+            >
+              <div>
+                <Text
+                  strong
+                  style={{
+                    display: "block",
+                    color: "#111827",
+                    fontSize: 14,
+                    marginBottom: 4,
+                  }}
+                >
+                  Filter Student
+                </Text>
 
-              <Select
-                placeholder="Visa"
-                allowClear
-                value={selectedVisa}
-                onChange={(value) =>
-                  setSelectedVisa(sanitizeFilterValue(value))
-                }
-                style={filterStyle}
-                options={visaOptions}
-              />
-
-              <Select
-                placeholder="Degree"
-                allowClear
-                value={selectedDegree}
-                onChange={(value) =>
-                  setSelectedDegree(sanitizeFilterValue(value))
-                }
-                style={filterStyle}
-                options={degreeOptions}
-              />
+                <Text style={{ color: "#667085", fontSize: 12 }}>
+                  {getFilterSummaryLabel({
+                    country: selectedCountry,
+                    visa: selectedVisa,
+                    degree: selectedDegree,
+                  })}
+                </Text>
+              </div>
 
               <Button
                 onClick={resetFilters}
-                style={{ borderRadius: 999, fontWeight: 600 }}
+                style={{
+                  borderRadius: 999,
+                  fontWeight: 700,
+                  height: 38,
+                  paddingInline: 18,
+                  borderColor: "#d7ddff",
+                  color: "#4338ca",
+                  background: "#f4f6ff",
+                }}
               >
                 Reset Filter
               </Button>
-            </Space>
+            </Flex>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                gap: 12,
+              }}
+            >
+              <div>
+                <Text
+                  style={{
+                    display: "block",
+                    fontSize: 12,
+                    color: "#667085",
+                    marginBottom: 6,
+                    fontWeight: 600,
+                  }}
+                >
+                  Negara Tujuan
+                </Text>
+
+                <Select
+                  placeholder="Semua negara"
+                  allowClear
+                  value={selectedCountry}
+                  onChange={(value) =>
+                    setSelectedCountry(sanitizeFilterValue(value))
+                  }
+                  style={filterStyle}
+                  size="large"
+                  options={countryOptions}
+                />
+              </div>
+
+              <div>
+                <Text
+                  style={{
+                    display: "block",
+                    fontSize: 12,
+                    color: "#667085",
+                    marginBottom: 6,
+                    fontWeight: 600,
+                  }}
+                >
+                  Jenis Visa
+                </Text>
+
+                <Select
+                  placeholder="Semua visa"
+                  allowClear
+                  value={selectedVisa}
+                  onChange={(value) =>
+                    setSelectedVisa(sanitizeFilterValue(value))
+                  }
+                  style={filterStyle}
+                  size="large"
+                  options={visaOptions}
+                />
+              </div>
+
+              <div>
+                <Text
+                  style={{
+                    display: "block",
+                    fontSize: 12,
+                    color: "#667085",
+                    marginBottom: 6,
+                    fontWeight: 600,
+                  }}
+                >
+                  Jenjang Pendidikan
+                </Text>
+
+                <Select
+                  placeholder="Semua jenjang"
+                  allowClear
+                  value={selectedDegree}
+                  onChange={(value) =>
+                    setSelectedDegree(sanitizeFilterValue(value))
+                  }
+                  style={filterStyle}
+                  size="large"
+                  options={degreeOptions}
+                />
+              </div>
+            </div>
           </Card>
         )}
 
@@ -1404,18 +1634,14 @@ export default function StudentsManagementContent() {
                   students={groupedStudents[column.key]}
                   paginatedStudents={paginatedGroupedStudents[column.key]}
                   currentPage={pageByStatus[column.key]}
-                  pageSize={PAGE_SIZE}
                   onPageChange={(page) =>
                     handleColumnPageChange(column.key, page)
                   }
                   onClickStudent={goToStudentDetail}
-                  onDeleteStudent={openDeleteConfirm}
+                  onEditStudent={openEditModal}
+                  onDeleteStudent={openDeleteModal}
                   isHighlighted={dragOverStatus === column.key}
-                  disableInteraction={
-                    (onUpdateLoading && movingStudentId !== null) ||
-                    Boolean(deletingStudentId)
-                  }
-                  deletingStudentId={deletingStudentId}
+                  disableInteraction={isUpdatingStudent}
                 />
               ))}
             </div>
@@ -1423,7 +1649,7 @@ export default function StudentsManagementContent() {
 
           <DragOverlay>
             {activeStudent ? (
-              <div style={{ width: 360, maxWidth: "92vw" }}>
+              <div style={{ width: 340, maxWidth: "92vw" }}>
                 <StudentCardInner student={activeStudent} isDragging />
               </div>
             ) : null}
@@ -1431,71 +1657,68 @@ export default function StudentsManagementContent() {
         </DndContext>
       </Space>
 
-      <ModalStudentComponent
-        open={isModalOpen}
-        onClose={closeModal}
-        onSubmit={handleSubmit}
-        onDelete={handleDelete}
-        onCancel={closeModal}
-        loading={onCreateLoading}
-        deleteLoading={onDeleteLoading || Boolean(deletingStudentId)}
-        selectedStudent={selectedStudent}
-        stagesData={stagesData ?? []}
-      />
+      <Modal
+        open={isStudentModalOpen}
+        title={editingStudent ? "Edit Student" : "Add Student"}
+        onCancel={closeStudentModal}
+        footer={null}
+        destroyOnClose={false}
+        width={680}
+      >
+        <FormStudentComponent
+          selectedStudent={editingStudent}
+          stagesData={stagesData}
+          loading={updateStudentUserLoading || onCreateLoading}
+          deleteLoading={onDeleteLoading}
+          onCancel={closeStudentModal}
+          onDelete={() => {
+            if (editingStudent) {
+              openDeleteModal(editingStudent);
+            }
+          }}
+          onSubmit={handleSubmitStudent}
+        />
+      </Modal>
 
       <Modal
         open={Boolean(deleteTargetStudent)}
-        title="Delete Student"
-        centered
+        title="Hapus Student"
+        onCancel={closeDeleteModal}
+        footer={null}
+        destroyOnClose
         width={460}
-        okText="Ya, Delete"
-        cancelText="Batal"
-        okButtonProps={{
-          danger: true,
-          loading: onDeleteLoading || Boolean(deletingStudentId),
-        }}
-        cancelButtonProps={{
-          disabled: onDeleteLoading || Boolean(deletingStudentId),
-        }}
-        onOk={handleConfirmDelete}
-        onCancel={closeDeleteConfirm}
       >
-        <Flex gap={14} align="flex-start">
+        <Space direction="vertical" size={16} style={{ width: "100%" }}>
           <div
             style={{
-              width: 42,
-              height: 42,
-              borderRadius: 14,
-              display: "grid",
-              placeItems: "center",
-              color: "#b42318",
-              background: "#fff1f0",
-              border: "1px solid #ffccc7",
-              flexShrink: 0,
-              fontSize: 18,
+              borderRadius: 16,
+              background: "#fff1f2",
+              border: "1px solid #fecdd3",
+              padding: 16,
             }}
           >
-            <ExclamationCircleOutlined />
+            <Typography.Text style={{ color: "#9f1239" }}>
+              Data student{" "}
+              <strong>
+                {deleteTargetStudent?.name || deleteTargetStudent?.email || "-"}
+              </strong>{" "}
+              akan dihapus. Tindakan ini tidak dapat dibatalkan.
+            </Typography.Text>
           </div>
 
-          <div style={{ minWidth: 0 }}>
-            <Text strong style={{ display: "block", fontSize: 15 }}>
-              Yakin ingin menghapus student ini?
-            </Text>
-
-            <Text
-              type="secondary"
-              style={{ display: "block", marginTop: 8, lineHeight: 1.7 }}
+          <Flex justify="flex-end" gap={10}>
+            <Button onClick={closeDeleteModal}>Batal</Button>
+            <Button
+              danger
+              type="primary"
+              icon={<DeleteOutlined />}
+              loading={onDeleteLoading}
+              onClick={handleConfirmDeleteStudent}
             >
-              Data student
-              {deleteTargetStudent?.name ? (
-                <Text strong> {deleteTargetStudent.name}</Text>
-              ) : null}{" "}
-              akan dihapus dari sistem. Tindakan ini tidak bisa dibatalkan dari
-              halaman ini.
-            </Text>
-          </div>
-        </Flex>
+              Ya, Hapus
+            </Button>
+          </Flex>
+        </Space>
       </Modal>
     </div>
   );

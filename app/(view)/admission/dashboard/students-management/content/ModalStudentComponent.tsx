@@ -1,4 +1,4 @@
-import { UserDataModel, UserPayloadCreateModel } from "@/app/models/user";
+import type { StudentFormValues, UserDataModel } from "@/app/models/user";
 import { Modal } from "antd";
 import FormStudentComponent from "./FormStudentComponent";
 import { StagesManagementDataModel } from "@/app/models/stages-management";
@@ -6,7 +6,7 @@ import { StagesManagementDataModel } from "@/app/models/stages-management";
 interface ModalStudentComponentProps {
   open: boolean;
   onClose: () => void;
-  onSubmit: (values: UserPayloadCreateModel) => void;
+  onSubmit: (values: StudentFormValues) => void | Promise<void>;
   onDelete: () => void;
   onCancel: () => void;
   loading: boolean;

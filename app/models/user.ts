@@ -10,8 +10,10 @@ export interface UserDataModel {
   stage_id?: string | null;
   current_step_id?: string | null;
   visa_status?: string;
+  visa_type_name?: string | null;
   status?: string;
   student_status?: string;
+  name_consultant?: string | null;
 
   name_campus?: string;
   degree?: string;
@@ -84,6 +86,12 @@ export interface UserPayloadUpdateModel {
   translation_quota?: number;
   no_phone?: string | null;
 }
+
+// Used by create/edit student forms where password is required only on create.
+export type StudentFormValues = Omit<UserPayloadCreateModel, "password"> &
+  Partial<UserPayloadUpdateModel> & {
+    password?: string;
+  };
 
 export interface UserLoginModel {
   email: string;

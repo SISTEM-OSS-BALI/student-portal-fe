@@ -39,6 +39,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useRouter } from "next/navigation";
+import { useVisaTypes } from "@/app/hooks/use-visa-type-management";
 
 import {
   useUpdateStudentStatusUser,
@@ -48,7 +49,6 @@ import type { UserDataModel } from "@/app/models/user";
 
 const { Text, Title } = Typography;
 
-const DEFAULT_VISA_TYPE = "student_visa_500";
 const PAGE_SIZE = 10;
 
 const filterStyle: CSSProperties = {
@@ -112,9 +112,7 @@ function sanitizeFilterValue(value?: string | null): string | undefined {
 }
 
 function normalizeStudentResponse(value: unknown): UserDataModel[] {
-  if (Array.isArray(value)) {
-    return value as UserDataModel[];
-  }
+  if (Array.isArray(value)) return value as UserDataModel[];
 
   const response = value as
     | {
@@ -175,7 +173,7 @@ function getCampusName(student: UserDataModel): string {
 }
 
 function getVisaType(student: UserDataModel): string {
-  return String(student.visa_type ?? "").trim();
+  return String(student.visa_type_name ?? student.visa_type ?? "").trim();
 }
 
 function getStudentId(student: UserDataModel): string {
@@ -265,7 +263,12 @@ function getStatusTagMeta(status: StudentBoardStatus): {
 }
 
 function formatVisaType(value: string): string {
-  return value ? value.replace(/_/g, " ").toUpperCase() : "Visa belum dipilih";
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) return "Visa belum dipilih";
+  if (trimmed.includes(" ") && !trimmed.includes("_")) {
+    return trimmed;
+  }
+  return trimmed.replace(/_/g, " ").toUpperCase();
 }
 
 function getFilterSummaryLabel({
@@ -417,10 +420,30 @@ function StudentCardInner({
                 display: "block",
                 fontSize: 11,
                 lineHeight: 1.45,
+                marginBottom: 8,
               }}
             >
               {buildStudentSecondaryLine(student)}
             </Text>
+
+            <Tag
+              style={{
+                marginRight: 0,
+                borderRadius: 999,
+                padding: "5px 10px",
+                fontSize: 10,
+                fontWeight: 700,
+                color: "#3153d4",
+                background: "#eef4ff",
+                borderColor: "#bfd2ff",
+                letterSpacing: 0.25,
+                maxWidth: "100%",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              {formatVisaType(getVisaType(student))}
+            </Tag>
           </div>
         </Flex>
 
@@ -446,25 +469,6 @@ function StudentCardInner({
           >
             <HolderOutlined />
           </div>
-
-          <Tag
-            style={{
-              marginRight: 0,
-              borderRadius: 999,
-              padding: "5px 10px",
-              fontSize: 10,
-              fontWeight: 700,
-              color: "#3153d4",
-              background: "#eef4ff",
-              borderColor: "#bfd2ff",
-              letterSpacing: 0.25,
-              maxWidth: 132,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-          >
-            {formatVisaType(getVisaType(student))}
-          </Tag>
         </Flex>
       </Flex>
     </div>
@@ -706,11 +710,9 @@ export default function StudentsManagementContent() {
   const router = useRouter();
 
   const [keyword, setKeyword] = useState("");
-  const [showFilters, setShowFilters] = useState(true);
+  const [showFilters, setShowFilters] = useState(false);
   const [selectedCountry, setSelectedCountry] = useState<string | undefined>();
-  const [selectedVisa, setSelectedVisa] = useState<string | undefined>(
-    DEFAULT_VISA_TYPE,
-  );
+  const [selectedVisa, setSelectedVisa] = useState<string | undefined>();
   const [selectedDegree, setSelectedDegree] = useState<string | undefined>();
   const [activeStudentId, setActiveStudentId] = useState<string | null>(null);
   const [dragOverStatus, setDragOverStatus] =
@@ -732,6 +734,7 @@ export default function StudentsManagementContent() {
     useUpdateStudentStatusUser();
 
   const { data: rawStudentsRoleData } = useUserRoleStudents();
+  const { data: visaTypesData = [] } = useVisaTypes({});
 
   const studentsRoleData = useMemo<UserDataModel[]>(() => {
     return normalizeStudentResponse(rawStudentsRoleData);
@@ -776,7 +779,7 @@ export default function StudentsManagementContent() {
 
   const resetFilters = useCallback(() => {
     setSelectedCountry(undefined);
-    setSelectedVisa(DEFAULT_VISA_TYPE);
+    setSelectedVisa(undefined);
     setSelectedDegree(undefined);
     setKeyword("");
     resetPagination();
@@ -798,9 +801,7 @@ export default function StudentsManagementContent() {
   ]);
 
   useEffect(() => {
-    if (!studentsRoleData.length) {
-      return;
-    }
+    if (!studentsRoleData.length) return;
 
     setStudentOverrides((prev) => {
       let changed = false;
@@ -810,9 +811,7 @@ export default function StudentsManagementContent() {
         const id = getStudentId(student);
         const override = next[id];
 
-        if (!override) {
-          continue;
-        }
+        if (!override) continue;
 
         const serverStatus = getStudentBoardStatus(student);
         const overrideStatus = resolveBoardStatus(
@@ -853,28 +852,30 @@ export default function StudentsManagementContent() {
   }, [studentsRoleData]);
 
   const visaOptions = useMemo<SelectOption[]>(() => {
-    const map = new Map<string, SelectOption>();
+    const options: SelectOption[] = (visaTypesData ?? [])
+      .filter((visa) => visa?.name)
+      .map((visa) => {
+        const name = String(visa.name).trim();
+        return { value: name, label: name };
+      })
+      .filter((opt) => opt.value);
+
+    const byLabelKey = new Map<string, SelectOption>();
+    for (const opt of options) {
+      byLabelKey.set(normalizeText(opt.label), opt);
+    }
 
     studentsRoleData.forEach((student) => {
       const visa = getVisaType(student);
-
-      if (visa) {
-        map.set(visa, {
-          value: visa,
-          label: formatVisaType(visa),
-        });
-      }
+      if (!visa) return;
+      const key = normalizeText(visa);
+      if (byLabelKey.has(key)) return;
+      const label = formatVisaType(visa);
+      byLabelKey.set(key, { value: visa, label });
     });
 
-    if (!map.has(DEFAULT_VISA_TYPE)) {
-      map.set(DEFAULT_VISA_TYPE, {
-        value: DEFAULT_VISA_TYPE,
-        label: formatVisaType(DEFAULT_VISA_TYPE),
-      });
-    }
-
-    return Array.from(map.values());
-  }, [studentsRoleData]);
+    return Array.from(byLabelKey.values());
+  }, [studentsRoleData, visaTypesData]);
 
   const degreeOptions = useMemo<SelectOption[]>(() => {
     const map = new Map<string, SelectOption>();
@@ -900,9 +901,7 @@ export default function StudentsManagementContent() {
   }, [studentOverrides, studentsRoleData]);
 
   const filteredStudents = useMemo<UserDataModel[]>(() => {
-    if (!hasActiveFilter) {
-      return effectiveStudents;
-    }
+    if (!hasActiveFilter) return effectiveStudents;
 
     return effectiveStudents.filter((student) => {
       const haystack = [
@@ -1006,9 +1005,7 @@ export default function StudentsManagementContent() {
     (
       overId: UniqueIdentifier | null | undefined,
     ): StudentBoardStatus | null => {
-      if (!overId) {
-        return null;
-      }
+      if (!overId) return null;
 
       const candidate = String(overId);
 
@@ -1043,15 +1040,11 @@ export default function StudentsManagementContent() {
       setActiveStudentId(null);
       setDragOverStatus(null);
 
-      if (!draggedStudent || !nextStatus) {
-        return;
-      }
+      if (!draggedStudent || !nextStatus) return;
 
       const currentStatus = getEffectiveBoardStatus(draggedStudent);
 
-      if (currentStatus === nextStatus) {
-        return;
-      }
+      if (currentStatus === nextStatus) return;
 
       setStudentOverrides((prev) => ({
         ...prev,
@@ -1325,7 +1318,8 @@ export default function StudentsManagementContent() {
                 </Text>
 
                 <Select
-                  placeholder="Pilih jenis visa"
+                  placeholder="Semua visa type"
+                  allowClear
                   value={selectedVisa}
                   onChange={(value) =>
                     setSelectedVisa(sanitizeFilterValue(value))

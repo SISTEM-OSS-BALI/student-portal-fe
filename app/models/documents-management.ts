@@ -6,6 +6,7 @@ export interface DocumentDataModel {
   internal_code: string;
   file_type: string;
   category: string;
+  example_url?: string | null;
   translation_needed: TranslationNeededValue;
   required: boolean;
   auto_rename_pattern: string;
@@ -19,6 +20,7 @@ export interface DocumentPayloadCreateModel {
   internal_code: string;
   file_type: string;
   category: string;
+  example_url?: string | null;
   translation_needed: TranslationNeededValue;
   required: boolean;
   auto_rename_pattern: string;
@@ -30,6 +32,7 @@ export interface DocumentPayloadUpdateModel {
   internal_code?: string;
   file_type?: string;
   category?: string;
+  example_url?: string | null;
   translation_needed?: TranslationNeededValue;
   required?: boolean;
   auto_rename_pattern?: string;

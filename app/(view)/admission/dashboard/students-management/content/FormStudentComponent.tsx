@@ -1,12 +1,18 @@
 "use client";
 
+import { useVisaTypes } from "@/app/hooks/use-visa-type-management";
 import { StagesManagementDataModel } from "@/app/models/stages-management";
-import { UserDataModel, UserPayloadCreateModel } from "@/app/models/user";
+import {
+  UserDataModel,
+  StudentFormValues,
+} from "@/app/models/user";
 import { Button, Form, Input, InputNumber, Select, Space } from "antd";
 import { useEffect, useMemo } from "react";
 
 interface FormStudentComponentProps {
-  onSubmit: (values: UserPayloadCreateModel) => void;
+  onSubmit: (
+    values: StudentFormValues,
+  ) => void | Promise<void>;
   onDelete: () => void;
   onCancel: () => void;
   loading: boolean;
@@ -24,22 +30,38 @@ export default function FormStudentComponent({
   selectedStudent,
   stagesData,
 }: FormStudentComponentProps) {
-  const [form] = Form.useForm<UserPayloadCreateModel>();
+  const [form] = Form.useForm<StudentFormValues>();
   const selectedTypeVisa = Form.useWatch("visa_type", form);
+
+  const { data: visaTypes } = useVisaTypes({});
+
+  const selectedVisa = useMemo(() => {
+    return (visaTypes ?? []).find((visa) => visa.id === selectedTypeVisa);
+  }, [visaTypes, selectedTypeVisa]);
+
+  const isStudentVisa = useMemo(() => {
+    return String(selectedVisa?.name ?? "")
+      .toLowerCase()
+      .includes("student");
+  }, [selectedVisa]);
 
   const countryOptions = useMemo(() => {
     const map = new Map<
       string,
       { name: string; total: number; stage_id: string }
     >();
+
     (stagesData ?? []).forEach((stage) => {
       const country_id = stage.country_id;
       const name = stage.country?.name ?? country_id;
+
       if (!map.has(country_id)) {
         map.set(country_id, { name, total: 0, stage_id: stage.id });
       }
+
       map.get(country_id)!.total += 1;
     });
+
     return Array.from(map.entries()).map(([id, value]) => ({
       id: value.stage_id,
       name: value.name,
@@ -59,11 +81,23 @@ export default function FormStudentComponent({
         visa_type: selectedStudent.visa_type ?? undefined,
         translation_quota: selectedStudent.translation_quota ?? 0,
         no_phone: selectedStudent.no_phone ?? undefined,
+        name_consultant: selectedStudent.name_consultant ?? undefined,
       });
       return;
     }
+
     form.resetFields();
   }, [form, selectedStudent]);
+
+  useEffect(() => {
+    if (!isStudentVisa) {
+      form.setFieldsValue({
+        name_campus: undefined,
+        degree: undefined,
+        name_degree: undefined,
+      });
+    }
+  }, [form, isStudentVisa]);
 
   return (
     <Form form={form} layout="vertical" onFinish={onSubmit}>
@@ -91,7 +125,7 @@ export default function FormStudentComponent({
         label="No. HP"
         rules={[
           {
-            pattern: /^[0-9+()\\-\\s]*$/,
+            pattern: /^[0-9+()\-\s]*$/,
             message: "Nomor HP hanya boleh angka dan simbol +()-",
           },
         ]}
@@ -112,23 +146,18 @@ export default function FormStudentComponent({
         label="Tipe Visa"
         rules={[{ required: true, message: "Tipe visa wajib dipilih" }]}
       >
-        <Select placeholder="Pilih tipe visa">
-          <Select.Option value="student_visa_500">
-            Student Visa • Subclass 500
-          </Select.Option>
-          <Select.Option value="student_guardian_590">
-            Student Guardian • Subclass 590
-          </Select.Option>
-          <Select.Option value="temporary_grad_485">
-            Temporary Graduate • Subclass 485
-          </Select.Option>
-          <Select.Option value="visitor_600">
-            Visitor • Subclass 600
-          </Select.Option>
-        </Select>
+        <Select
+          placeholder="Pilih tipe visa"
+          showSearch
+          optionFilterProp="label"
+          options={(visaTypes ?? []).map((visa) => ({
+            value: visa.id,
+            label: visa.name,
+          }))}
+        />
       </Form.Item>
 
-      {selectedTypeVisa == "student_visa_500" && (
+      {isStudentVisa && (
         <>
           <Form.Item
             name="name_campus"
@@ -183,6 +212,19 @@ export default function FormStudentComponent({
       </Form.Item>
 
       <Form.Item
+        name="source"
+        label="Sumber Leads"
+      >
+        <Select>
+          <Select.Option value="instagram">Instagram</Select.Option>
+          <Select.Option value="facebook">Facebook</Select.Option>
+          <Select.Option value="tiktok">TikTok</Select.Option>
+          <Select.Option value="walkin">Walk-in</Select.Option>
+          <Select.Option value="website">Website</Select.Option>
+        </Select>
+      </Form.Item>
+
+      <Form.Item
         name="stage_id"
         label="Negara"
         rules={[{ required: true, message: "Pilih negara" }]}
@@ -196,12 +238,9 @@ export default function FormStudentComponent({
         </Select>
       </Form.Item>
 
-      {/* <Form.Item label="Role">
-        <Input value="Student" disabled />
-      </Form.Item> */}
-
       <Space style={{ width: "100%", justifyContent: "flex-end" }}>
         <Button onClick={onCancel}>Batal</Button>
+
         <Button
           danger
           onClick={onDelete}
@@ -210,6 +249,7 @@ export default function FormStudentComponent({
         >
           Hapus
         </Button>
+
         <Button type="primary" htmlType="submit" loading={loading}>
           {selectedStudent ? "Simpan Perubahan" : "Simpan"}
         </Button>

@@ -3,6 +3,7 @@ import {
   DocumentDataModel,
   DocumentPayloadCreateModel,
 } from "@/app/models/documents-management";
+import { useDocumentUpload } from "@/app/hooks/use-document-uploads";
 import {
   Button,
   Col,
@@ -15,8 +16,11 @@ import {
   Space,
   Switch,
   Typography,
+  Upload,
 } from "antd";
 import { useEffect, useMemo } from "react";
+import type { UploadFile } from "antd";
+import type { UploadRequestOption } from "rc-upload/lib/interface";
 
 const { Text } = Typography;
 const { useBreakpoint } = Grid;
@@ -75,11 +79,16 @@ type DocumentFormValues = DocumentPayloadCreateModel & {
   autoRenameMode: AutoRenameMode;
 };
 
+const sanitizeFileName = (name: string) => {
+  return String(name || "file").replace(/[^a-zA-Z0-9.\-_]/g, "_");
+};
+
 const defaultValues: DocumentFormValues = {
   label: "",
   internal_code: "",
   file_type: "pdf",
   category: "identity",
+  example_url: "",
   translation_needed: "no",
   required: true,
   auto_rename_pattern: "NONE",
@@ -117,6 +126,9 @@ export default function FormDocumentComponent({
   const autoRenameMode = Form.useWatch("autoRenameMode", form);
   const labelValue = Form.useWatch("label", form);
   const auto_rename_pattern = Form.useWatch("auto_rename_pattern", form);
+  const exampleUrl = Form.useWatch("example_url", form);
+  const internalCodeValue = Form.useWatch("internal_code", form);
+  const { uploadDocument, uploading } = useDocumentUpload();
 
   const labelToken = useMemo(
     () => normalizeLabelToken(labelValue),
@@ -159,9 +171,11 @@ export default function FormDocumentComponent({
   }, [form, selectedDocument]);
 
   const handleFinish = (values: DocumentFormValues) => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { autoRenameMode: _autoRenameMode, ...payload } = values;
     onSubmit?.({
       ...payload,
+      example_url: payload.example_url?.trim() || null,
       notes: payload.notes?.trim() || "",
     });
   };
@@ -309,6 +323,67 @@ export default function FormDocumentComponent({
           />
         </Form.Item>
         <Text type="secondary">Hanya terlihat oleh tim internal</Text>
+
+        <Divider style={{ margin: "16px 0" }} />
+
+        <Form.Item label="Contoh Dokumen (opsional)" name="example_url">
+          <Upload
+            accept=".pdf,.png,.jpg,.jpeg"
+            maxCount={1}
+            showUploadList
+            fileList={
+              exampleUrl
+                ? ([
+                    {
+                      uid: "example",
+                      name: "example-file",
+                      status: "done",
+                      url: exampleUrl,
+                    } satisfies UploadFile,
+                  ] as UploadFile[])
+                : []
+            }
+            onRemove={() => {
+              form.setFieldValue("example_url", "");
+              return true;
+            }}
+            onPreview={(file) => {
+              const url = String(file.url ?? "");
+              if (!url) return;
+              window.open(url, "_blank", "noreferrer");
+            }}
+            customRequest={async (options: UploadRequestOption) => {
+              try {
+                const file = options.file as File;
+                const safeName = sanitizeFileName(file.name || "example");
+                const internalCode = sanitizeFileName(
+                  String(internalCodeValue || "document"),
+                );
+                const unique = `${Date.now()}-${Math.random()
+                  .toString(16)
+                  .slice(2)}`;
+                const path = `examples/documents-management/${internalCode}/${unique}-${safeName}`;
+
+                const result = await uploadDocument({
+                  file,
+                  path,
+                  content_type: file.type,
+                });
+
+                form.setFieldValue("example_url", result.url);
+                options.onSuccess?.(result, file);
+              } catch (err) {
+                options.onError?.(
+                  err instanceof Error ? err : new Error("Upload gagal"),
+                );
+              }
+            }}
+          >
+            <Button loading={uploading} block={isMobile}>
+              Upload Contoh
+            </Button>
+          </Upload>
+        </Form.Item>
 
         <Divider style={{ margin: "16px 0" }} />
 
