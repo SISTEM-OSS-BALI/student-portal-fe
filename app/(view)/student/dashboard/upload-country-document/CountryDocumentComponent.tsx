@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, type CSSProperties } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
+import Image from "next/image";
 import {
   Button,
   Card,
@@ -77,6 +78,27 @@ const resolveAccept = (fileType?: string) => {
 const resolveFileTypeLabel = (fileType?: string) => {
   if (!fileType) return "Semua tipe file";
   return fileType;
+};
+
+const getPreviewKind = (url?: string, fileName?: string, fileType?: string) => {
+  const normalizedUrl = String(url ?? "").toLowerCase();
+  const normalizedName = String(fileName ?? "").toLowerCase();
+  const normalizedType = String(fileType ?? "").toLowerCase();
+
+  const isPdf =
+    normalizedType.includes("pdf") ||
+    normalizedUrl.includes(".pdf") ||
+    normalizedName.endsWith(".pdf");
+  if (isPdf) return "pdf";
+
+  const isImage =
+    normalizedType.startsWith("image/") ||
+    [".png", ".jpg", ".jpeg", ".webp", ".gif"].some(
+      (ext) => normalizedUrl.includes(ext) || normalizedName.endsWith(ext),
+    );
+  if (isImage) return "image";
+
+  return "other";
 };
 
 const normalizeUpload = (e: { fileList?: UploadFile[] } | UploadFile[] | undefined) => {
@@ -195,6 +217,7 @@ const guidelineItems = [
 export default function CountryDocumentComponent() {
   const [docForm] = Form.useForm<DocumentFormValues>();
   const watchedDocuments = Form.useWatch("documents", docForm);
+  const [activeDocumentId, setActiveDocumentId] = useState<string>("");
 
   const { user_id } = useAuth();
   const { data: currentUser, fetchLoading: userLoading } = useUser({ id: user_id });
@@ -269,6 +292,22 @@ export default function CountryDocumentComponent() {
       };
     });
   }, [countryDocuments, latestAnswerByDocumentId, watchedDocuments]);
+
+  const effectiveActiveDocumentId = useMemo(() => {
+    if (!documentsWithState.length) return "";
+    const hasCurrent = documentsWithState.some(
+      (item) => String(item.doc.id) === String(activeDocumentId),
+    );
+    if (hasCurrent) return String(activeDocumentId);
+    return String(documentsWithState[0].doc.id);
+  }, [activeDocumentId, documentsWithState]);
+
+  const visibleDocuments = useMemo(() => {
+    if (!effectiveActiveDocumentId) return documentsWithState.slice(0, 1);
+    return documentsWithState.filter(
+      (item) => String(item.doc.id) === String(effectiveActiveDocumentId),
+    );
+  }, [documentsWithState, effectiveActiveDocumentId]);
 
   const totalDocuments = documentsWithState.length;
   const uploadedDocuments = documentsWithState.filter((item) => item.isCompleted).length;
@@ -410,7 +449,79 @@ export default function CountryDocumentComponent() {
 
               <Space direction="vertical" size={16} style={{ width: "100%" }}>
                 {documentsWithState.length ? (
-                  documentsWithState.map(
+                  <>
+                    <Card
+                      style={{
+                        borderRadius: 16,
+                        borderColor: "#dbe5ff",
+                        boxShadow: "0 10px 26px rgba(15, 23, 42, 0.05)",
+                      }}
+                      styles={{ body: { padding: 12 } }}
+                    >
+                      <Space direction="vertical" size={8} style={{ width: "100%" }}>
+                        <Text strong style={{ fontSize: 12, color: "#475569" }}>
+                          Pilih Dokumen
+                        </Text>
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))",
+                            gap: 8,
+                          }}
+                        >
+                          {documentsWithState.map(
+                            ({ doc, statusInfo, isCompleted, submittedFile, draftFile }) => {
+                              const key = String(doc.id);
+                              const isActive =
+                                key === String(effectiveActiveDocumentId);
+                              return (
+                                <button
+                                  key={key}
+                                  type="button"
+                                  onClick={() => setActiveDocumentId(key)}
+                                  style={{
+                                    width: "100%",
+                                    border: `1px solid ${isActive ? "#93c5fd" : "#e5e7eb"}`,
+                                    background: isActive ? "#eff6ff" : "#fff",
+                                    borderRadius: 10,
+                                    padding: "9px 10px",
+                                    textAlign: "left",
+                                    cursor: "pointer",
+                                  }}
+                                >
+                                  <Text strong style={{ fontSize: 12, display: "block" }}>
+                                    {String(doc.label).toUpperCase()}
+                                  </Text>
+                                  <Text
+                                    type="secondary"
+                                    style={{ fontSize: 11, display: "block", marginTop: 2 }}
+                                  >
+                                    {draftFile?.status === "done" || submittedFile?.file_url
+                                      ? "Sudah upload"
+                                      : "Belum upload"}
+                                  </Text>
+                                  <span
+                                    style={{
+                                      display: "inline-block",
+                                      marginTop: 4,
+                                      fontSize: 11,
+                                      color: statusInfo.color,
+                                      background: statusInfo.background,
+                                      borderRadius: 999,
+                                      padding: "2px 8px",
+                                      fontWeight: 600,
+                                    }}
+                                  >
+                                    {isCompleted ? "Done" : "Pending"}
+                                  </span>
+                                </button>
+                              );
+                            },
+                          )}
+                        </div>
+                      </Space>
+                    </Card>
+                  {visibleDocuments.map(
                     ({ doc, draftFile, submittedFile, statusInfo, isCompleted }) => (
                       <Card
                         key={doc.id}
@@ -423,6 +534,23 @@ export default function CountryDocumentComponent() {
                         styles={{ body: { padding: 18 } }}
                       >
                         <Space direction="vertical" size={14} style={{ width: "100%" }}>
+                          {(() => {
+                            const previewUrl =
+                              draftFile?.response?.url || submittedFile?.file_url || "";
+                            const previewName =
+                              draftFile?.name ||
+                              submittedFile?.file_name ||
+                              `${doc.label}.pdf`;
+                            const previewType =
+                              draftFile?.type || submittedFile?.file_type || "";
+                            const previewKind = getPreviewKind(
+                              previewUrl,
+                              previewName,
+                              previewType,
+                            );
+
+                            return (
+                              <>
                           <div
                             style={{
                               display: "flex",
@@ -530,11 +658,15 @@ export default function CountryDocumentComponent() {
                                   );
                                   const userId = currentUser?.id ?? "anonymous";
                                   const path = `documents/${userId}/${doc.id}/${safeName}`;
+                                  const studentFolderKey = `${
+                                    currentUser?.name ?? "student"
+                                  }-${userId}`;
 
                                   const result = await uploadDocument({
                                     file: typedFile,
                                     path,
                                     content_type: typedFile.type,
+                                    student_folder_key: studentFolderKey,
                                   });
 
                                   onSuccess?.(result, typedFile);
@@ -598,6 +730,90 @@ export default function CountryDocumentComponent() {
                                 System will auto-rename your file to{" "}
                                 <strong>{doc.auto_rename_pattern}</strong> for consistency.
                               </span>
+                            </div>
+                          ) : null}
+
+                          {doc.example_url ? (
+                            <div
+                              style={{
+                                border: "1px solid #e0e7ff",
+                                borderRadius: 12,
+                                background: "#f8faff",
+                                overflow: "hidden",
+                              }}
+                            >
+                              <div
+                                style={{
+                                  padding: "10px 12px",
+                                  borderBottom: "1px solid #e5e7eb",
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "center",
+                                  gap: 10,
+                                }}
+                              >
+                                <Text strong style={{ fontSize: 12 }}>
+                                  Contoh
+                                </Text>
+                                <a
+                                  href={buildFilePreviewUrl(
+                                    doc.example_url,
+                                    `${doc.label}-example`,
+                                  )}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  style={{ fontSize: 12 }}
+                                >
+                                  Buka Contoh
+                                </a>
+                              </div>
+                              {(() => {
+                                const kind = getPreviewKind(
+                                  doc.example_url ?? "",
+                                  `${doc.label}-example`,
+                                  "",
+                                );
+                                if (kind === "image") {
+                                  return (
+                                    <Image
+                                      src={doc.example_url}
+                                      alt={`${doc.label} example`}
+                                      width={1400}
+                                      height={900}
+                                      unoptimized
+                                      style={{
+                                        width: "100%",
+                                        height: "auto",
+                                        maxHeight: 320,
+                                        objectFit: "contain",
+                                      }}
+                                    />
+                                  );
+                                }
+                                if (kind === "pdf") {
+                                  return (
+                                    <iframe
+                                      src={buildFilePreviewUrl(
+                                        doc.example_url,
+                                        `${doc.label}-example.pdf`,
+                                      )}
+                                      title={`${doc.label} example`}
+                                      style={{
+                                        width: "100%",
+                                        height: 320,
+                                        border: "none",
+                                      }}
+                                    />
+                                  );
+                                }
+                                return (
+                                  <div style={{ padding: 12 }}>
+                                    <Text type="secondary" style={{ fontSize: 12 }}>
+                                      Preview contoh dokumen tidak tersedia.
+                                    </Text>
+                                  </div>
+                                );
+                              })()}
                             </div>
                           ) : null}
 
@@ -673,10 +889,76 @@ export default function CountryDocumentComponent() {
                               </div>
                             </>
                           ) : null}
+                          {previewUrl ? (
+                            <div
+                              style={{
+                                border: "1px solid #e5e7eb",
+                                borderRadius: 12,
+                                background: "#ffffff",
+                                overflow: "hidden",
+                              }}
+                            >
+                              {previewKind === "image" ? (
+                                <Image
+                                  src={previewUrl}
+                                  alt={previewName}
+                                  width={1400}
+                                  height={900}
+                                  unoptimized
+                                  style={{
+                                    width: "100%",
+                                    height: "auto",
+                                    maxHeight: 420,
+                                    objectFit: "contain",
+                                  }}
+                                />
+                              ) : null}
+
+                              {previewKind === "pdf" ? (
+                                <iframe
+                                  src={buildFilePreviewUrl(previewUrl, previewName)}
+                                  title={previewName}
+                                  style={{
+                                    width: "100%",
+                                    height: 420,
+                                    border: "none",
+                                  }}
+                                />
+                              ) : null}
+
+                              {previewKind === "other" ? (
+                                <div
+                                  style={{
+                                    padding: 14,
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    alignItems: "center",
+                                    gap: 12,
+                                  }}
+                                >
+                                  <Text type="secondary" style={{ fontSize: 12 }}>
+                                    Preview tidak tersedia untuk tipe file ini.
+                                  </Text>
+                                  <a
+                                    href={buildFilePreviewUrl(previewUrl, previewName)}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                  >
+                                    Buka file
+                                  </a>
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : null}
+                              </>
+                            );
+                          })()}
                         </Space>
                       </Card>
                     ),
                   )
+                  }
+                  </>
                 ) : (
                   <Card style={{ borderRadius: 18, borderColor: "#e5e7eb" }}>
                     <Text type="secondary">Belum ada dokumen untuk negara ini.</Text>

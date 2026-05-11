@@ -4,8 +4,8 @@ import { supabase } from "@/app/vendor/supabase-client";
 export type UploadDocumentInput = {
   file: File;
   path: string;
-  bucket?: string;
   content_type?: string;
+  student_folder_key?: string;
 };
 
 export type UploadDocumentResult = {
@@ -18,10 +18,21 @@ export const useDocumentUpload = () => {
     mutationFn: async ({
       file,
       path,
-      bucket = "student-portal",
       content_type,
+      student_folder_key,
     }: UploadDocumentInput): Promise<UploadDocumentResult> => {
-      const { error } = await supabase.storage.from(bucket).upload(path, file, {
+      const bucket = "student-portal";
+      const normalizedStudentFolderKey = String(student_folder_key ?? "")
+        .trim()
+        .replace(/^\/+|\/+$/g, "")
+        .replace(/[^a-zA-Z0-9.\-_]/g, "_");
+      const normalizedPath = String(path ?? "").trim().replace(/^\/+/, "");
+      const finalPath =
+        normalizedStudentFolderKey && !normalizedPath.startsWith("students/")
+          ? `students/${normalizedStudentFolderKey}/${normalizedPath}`
+          : normalizedPath;
+
+      const { error } = await supabase.storage.from(bucket).upload(finalPath, file, {
         contentType: content_type ?? file.type,
         upsert: true,
       });
@@ -29,8 +40,8 @@ export const useDocumentUpload = () => {
         throw error;
       }
 
-      const { data } = supabase.storage.from(bucket).getPublicUrl(path);
-      return { url: data?.publicUrl ?? "", path };
+      const { data } = supabase.storage.from(bucket).getPublicUrl(finalPath);
+      return { url: data?.publicUrl ?? "", path: finalPath };
     },
   });
 

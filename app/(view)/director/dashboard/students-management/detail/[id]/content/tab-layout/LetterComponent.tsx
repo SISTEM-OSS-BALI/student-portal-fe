@@ -714,10 +714,12 @@ export default function LetterComponent() {
 
       const generatedAt = Date.now();
       const uploadPath = `${folder}/${studentId}/${generatedAt}-${generatedFileName}`;
+      const studentFolderKey = `${studentData?.name ?? "student"}-${studentId}`;
       const uploaded = await uploadDocument({
         file: wordFile,
         path: uploadPath,
         content_type: generatedMimeType,
+        student_folder_key: studentFolderKey,
       });
 
       await onUpsert({
@@ -736,7 +738,7 @@ export default function LetterComponent() {
         description: successDescription,
       });
     },
-    [notification, studentId, uploadDocument],
+    [notification, studentData?.name, studentId, uploadDocument],
   );
 
   const buildLetterPayload = useCallback(

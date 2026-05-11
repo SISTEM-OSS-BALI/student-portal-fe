@@ -21,8 +21,11 @@ export default function DocumentsManagementContent() {
     onDeleteLoading: onDeleteDocumentLoading,
   } = useDocuments({});
 
-  const { onUpdate: onUpdateDocument, onUpdateLoading: onUpdateDocumentLoading } =
-    useDocument({ id: selectedDocument?.id ?? "" });
+  const {
+    data: selectedDocumentDetail,
+    onUpdate: onUpdateDocument,
+    onUpdateLoading: onUpdateDocumentLoading,
+  } = useDocument({ id: selectedDocument?.id ?? "" });
 
   const formLoading = selectedDocument
     ? onUpdateDocumentLoading
@@ -162,7 +165,7 @@ export default function DocumentsManagementContent() {
                   </Text>
                 </div>
                 <FormDocumentComponent
-                  selectedDocument={selectedDocument}
+                  selectedDocument={selectedDocumentDetail ?? selectedDocument}
                   onSubmit={handleSubmit}
                   onDelete={handleDelete}
                   onCancel={() => setSelectedDocument(null)}

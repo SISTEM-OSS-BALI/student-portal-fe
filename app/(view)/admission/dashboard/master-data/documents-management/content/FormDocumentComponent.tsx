@@ -1,4 +1,3 @@
-
 import {
   DocumentDataModel,
   DocumentPayloadCreateModel,
@@ -6,6 +5,7 @@ import {
 import { useDocumentUpload } from "@/app/hooks/use-document-uploads";
 import {
   Button,
+  Card,
   Col,
   Divider,
   Form,
@@ -18,7 +18,8 @@ import {
   Typography,
   Upload,
 } from "antd";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import type { UploadFile } from "antd";
 import type { UploadRequestOption } from "rc-upload/lib/interface";
 
@@ -32,24 +33,32 @@ type AutoRenameMode =
   | "label_prefix"
   | "label_suffix";
 
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+const STORAGE_BUCKET =
+  process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET ?? "student-portal";
+
 const normalizeLabelToken = (label?: string) => {
-  const normalized = String(label ?? "").trim().toUpperCase();
+  const normalized = String(label ?? "")
+    .trim()
+    .toUpperCase();
+
   if (!normalized) return "";
+
   let out = "";
+
   for (let i = 0; i < normalized.length; i += 1) {
     const ch = normalized[i];
     const code = ch.charCodeAt(0);
     const isLetter = code >= 65 && code <= 90;
     const isNumber = code >= 48 && code <= 57;
+
     if (isLetter || isNumber) out += ch;
   }
+
   return out;
 };
 
-const buildAutoRenamePattern = (
-  mode: AutoRenameMode,
-  labelToken: string,
-) => {
+const buildAutoRenamePattern = (mode: AutoRenameMode, labelToken: string) => {
   switch (mode) {
     case "none":
       return "NONE";
@@ -83,6 +92,78 @@ const sanitizeFileName = (name: string) => {
   return String(name || "file").replace(/[^a-zA-Z0-9.\-_]/g, "_");
 };
 
+const isFullUrl = (value?: string | null) => {
+  return /^https?:\/\//i.test(String(value ?? "").trim());
+};
+
+const stripLeadingSlash = (value: string) => {
+  return value.replace(/^\/+/, "");
+};
+
+const normalizeSupabaseBaseUrl = (url: string) => {
+  return String(url || "").replace(/\/+$/, "");
+};
+
+const toPublicStorageUrl = (value?: string | null) => {
+  const raw = String(value ?? "").trim();
+
+  if (!raw) return "";
+
+  if (isFullUrl(raw)) return raw;
+
+  if (!SUPABASE_URL) return raw;
+
+  const cleanPath = stripLeadingSlash(raw);
+
+  if (cleanPath.startsWith("storage/v1/object/public/")) {
+    return `${normalizeSupabaseBaseUrl(SUPABASE_URL)}/${cleanPath}`;
+  }
+
+  if (cleanPath.startsWith(`${STORAGE_BUCKET}/`)) {
+    return `${normalizeSupabaseBaseUrl(
+      SUPABASE_URL,
+    )}/storage/v1/object/public/${cleanPath}`;
+  }
+
+  return `${normalizeSupabaseBaseUrl(
+    SUPABASE_URL,
+  )}/storage/v1/object/public/${STORAGE_BUCKET}/${cleanPath}`;
+};
+
+const isPdfFile = (url?: string | null) => {
+  return String(url ?? "")
+    .toLowerCase()
+    .includes(".pdf");
+};
+
+const isImageFile = (url?: string | null) => {
+  const normalized = String(url ?? "").toLowerCase();
+
+  return (
+    normalized.includes(".png") ||
+    normalized.includes(".jpg") ||
+    normalized.includes(".jpeg") ||
+    normalized.includes(".webp")
+  );
+};
+
+const extractFileNameFromUrl = (url?: string | null) => {
+  const raw = String(url ?? "").trim();
+
+  if (!raw) return "";
+
+  try {
+    const parsed = new URL(raw);
+    const fileName = decodeURIComponent(parsed.pathname.split("/").pop() || "");
+
+    return fileName || "example-file";
+  } catch {
+    const fileName = raw.split("/").pop() || "";
+
+    return fileName || "example-file";
+  }
+};
+
 const defaultValues: DocumentFormValues = {
   label: "",
   internal_code: "",
@@ -99,16 +180,21 @@ const defaultValues: DocumentFormValues = {
 const deriveAutoRenameMode = (pattern?: string): AutoRenameMode => {
   const raw = String(pattern ?? "").trim();
   const upper = raw.toUpperCase();
+
   if (!raw || upper === "NONE") return "none";
   if (upper === "DATE") return "date";
   if (upper === "DOCUMENT_ID") return "document_id";
+
   const lower = raw.toLowerCase();
+
   if (lower.startsWith("{studentname}_") && lower.endsWith(".pdf")) {
     return "label_prefix";
   }
+
   if (lower.endsWith("_{studentname}.pdf")) {
     return "label_suffix";
   }
+
   return "none";
 };
 
@@ -123,24 +209,35 @@ export default function FormDocumentComponent({
   const screens = useBreakpoint();
   const isMobile = !screens.md;
   const [form] = Form.useForm<DocumentFormValues>();
+
   const autoRenameMode = Form.useWatch("autoRenameMode", form);
   const labelValue = Form.useWatch("label", form);
-  const auto_rename_pattern = Form.useWatch("auto_rename_pattern", form);
+  const autoRenamePattern = Form.useWatch("auto_rename_pattern", form);
   const exampleUrl = Form.useWatch("example_url", form);
   const internalCodeValue = Form.useWatch("internal_code", form);
+
   const { uploadDocument, uploading } = useDocumentUpload();
+
+  const [lastUploadedExampleFileName, setLastUploadedExampleFileName] =
+    useState("");
 
   const labelToken = useMemo(
     () => normalizeLabelToken(labelValue),
     [labelValue],
   );
+
   const computedPattern = useMemo(
     () => buildAutoRenamePattern(autoRenameMode ?? "label_prefix", labelToken),
     [autoRenameMode, labelToken],
   );
 
+  const publicExampleUrl = useMemo(() => {
+    return toPublicStorageUrl(exampleUrl);
+  }, [exampleUrl]);
+
   useEffect(() => {
     const nextPattern = computedPattern || "NONE";
+
     if (form.getFieldValue("auto_rename_pattern") !== nextPattern) {
       form.setFieldValue("auto_rename_pattern", nextPattern);
     }
@@ -152,12 +249,15 @@ export default function FormDocumentComponent({
       return;
     }
 
+    const publicUrl = toPublicStorageUrl(selectedDocument.example_url);
+
     const nextValues: DocumentFormValues = {
       ...defaultValues,
       label: selectedDocument.label ?? "",
       internal_code: selectedDocument.internal_code ?? "",
       file_type: selectedDocument.file_type ?? "pdf",
       category: selectedDocument.category ?? "identity",
+      example_url: publicUrl,
       translation_needed: selectedDocument.translation_needed ?? "no",
       required: Boolean(selectedDocument.required),
       auto_rename_pattern: selectedDocument.auto_rename_pattern ?? "NONE",
@@ -170,20 +270,33 @@ export default function FormDocumentComponent({
     form.setFieldsValue(nextValues);
   }, [form, selectedDocument]);
 
+  const exampleFileName = useMemo(() => {
+    return (
+      lastUploadedExampleFileName ||
+      extractFileNameFromUrl(publicExampleUrl) ||
+      "example-file"
+    );
+  }, [publicExampleUrl, lastUploadedExampleFileName]);
+
   const handleFinish = (values: DocumentFormValues) => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { autoRenameMode: _autoRenameMode, ...payload } = values;
+    const payload: Omit<DocumentFormValues, "autoRenameMode"> = {
+      ...values,
+    };
+    delete (payload as Partial<DocumentFormValues>).autoRenameMode;
+
+    const publicUrl = toPublicStorageUrl(payload.example_url);
+
     onSubmit?.({
       ...payload,
-      example_url: payload.example_url?.trim() || null,
+      example_url: publicUrl || null,
       notes: payload.notes?.trim() || "",
     });
   };
 
   const previewPattern =
-    auto_rename_pattern && auto_rename_pattern.includes("{studentName}")
-      ? auto_rename_pattern.replace("{studentName}", "Ngurah Manik Mahardika")
-      : auto_rename_pattern || "-";
+    autoRenamePattern && autoRenamePattern.includes("{studentName}")
+      ? autoRenamePattern.replace("{studentName}", "Ngurah Manik Mahardika")
+      : autoRenamePattern || "-";
 
   return (
     <div>
@@ -211,6 +324,7 @@ export default function FormDocumentComponent({
               <Input placeholder="PASPOR" />
             </Form.Item>
           </Col>
+
           <Col xs={24} md={12}>
             <Form.Item
               label="Tipe Berkas"
@@ -226,6 +340,7 @@ export default function FormDocumentComponent({
               />
             </Form.Item>
           </Col>
+
           <Col xs={24} md={12}>
             <Form.Item
               label="Kategori"
@@ -242,6 +357,7 @@ export default function FormDocumentComponent({
               />
             </Form.Item>
           </Col>
+
           <Col xs={24} md={12}>
             <Form.Item
               label="Perlu Terjemahan"
@@ -266,6 +382,7 @@ export default function FormDocumentComponent({
             <div>
               <Text strong>Siswa wajib mengunggah dokumen ini</Text>
             </div>
+
             <Form.Item name="required" valuePropName="checked" noStyle>
               <Switch />
             </Form.Item>
@@ -277,14 +394,12 @@ export default function FormDocumentComponent({
             <Form.Item name="autoRenameMode" noStyle>
               <Select
                 options={[
-                  { value: "none", label: "Tidak ada (NONE)" },
-                  { value: "date", label: "Tanggal (DATE)" },
-                  { value: "document_id", label: "ID Dokumen (DOCUMENT_ID)" },
                   { value: "label_prefix", label: "Nama siswa + Label" },
                   { value: "label_suffix", label: "Label + Nama siswa" },
                 ]}
               />
             </Form.Item>
+
             <Form.Item name="auto_rename_pattern" noStyle>
               <Input readOnly placeholder="{studentName}_PASPOR.pdf" />
             </Form.Item>
@@ -298,6 +413,7 @@ export default function FormDocumentComponent({
           >
             NAMA BERKAS OTOMATIS SISTEM
           </Text>
+
           <div
             style={{
               display: "flex",
@@ -310,9 +426,7 @@ export default function FormDocumentComponent({
               color: "#fff",
             }}
           >
-            <Text style={{ color: "#fff" }}>
-              {previewPattern}
-            </Text>
+            <Text style={{ color: "#fff" }}>{previewPattern}</Text>
           </div>
         </div>
 
@@ -322,67 +436,128 @@ export default function FormDocumentComponent({
             placeholder="Pastikan paspor masih berlaku minimal 6 bulan dari tanggal keberangkatan."
           />
         </Form.Item>
+
         <Text type="secondary">Hanya terlihat oleh tim internal</Text>
 
         <Divider style={{ margin: "16px 0" }} />
 
         <Form.Item label="Contoh Dokumen (opsional)" name="example_url">
-          <Upload
-            accept=".pdf,.png,.jpg,.jpeg"
-            maxCount={1}
-            showUploadList
-            fileList={
-              exampleUrl
-                ? ([
-                    {
-                      uid: "example",
-                      name: "example-file",
-                      status: "done",
-                      url: exampleUrl,
-                    } satisfies UploadFile,
-                  ] as UploadFile[])
-                : []
-            }
-            onRemove={() => {
-              form.setFieldValue("example_url", "");
-              return true;
-            }}
-            onPreview={(file) => {
-              const url = String(file.url ?? "");
-              if (!url) return;
-              window.open(url, "_blank", "noreferrer");
-            }}
-            customRequest={async (options: UploadRequestOption) => {
-              try {
-                const file = options.file as File;
-                const safeName = sanitizeFileName(file.name || "example");
-                const internalCode = sanitizeFileName(
-                  String(internalCodeValue || "document"),
-                );
-                const unique = `${Date.now()}-${Math.random()
-                  .toString(16)
-                  .slice(2)}`;
-                const path = `examples/documents-management/${internalCode}/${unique}-${safeName}`;
-
-                const result = await uploadDocument({
-                  file,
-                  path,
-                  content_type: file.type,
-                });
-
-                form.setFieldValue("example_url", result.url);
-                options.onSuccess?.(result, file);
-              } catch (err) {
-                options.onError?.(
-                  err instanceof Error ? err : new Error("Upload gagal"),
-                );
+          <Space direction="vertical" size={12} style={{ width: "100%" }}>
+            <Upload
+              accept=".pdf,.png,.jpg,.jpeg,.webp"
+              maxCount={1}
+              showUploadList
+              fileList={
+                publicExampleUrl
+                  ? ([
+                      {
+                        uid: "example",
+                        name: exampleFileName || "example-file",
+                        status: "done",
+                        url: publicExampleUrl,
+                      } satisfies UploadFile,
+                    ] as UploadFile[])
+                  : []
               }
-            }}
-          >
-            <Button loading={uploading} block={isMobile}>
-              Upload Contoh
-            </Button>
-          </Upload>
+              onRemove={() => {
+                form.setFieldValue("example_url", "");
+                setLastUploadedExampleFileName("");
+                return true;
+              }}
+              onPreview={(file) => {
+                const url = String(file.url ?? publicExampleUrl ?? "");
+                if (!url) return;
+                window.open(url, "_blank", "noreferrer");
+              }}
+              customRequest={async (options: UploadRequestOption) => {
+                try {
+                  const file = options.file as File;
+                  const safeName = sanitizeFileName(file.name || "example");
+                  const internalCode = sanitizeFileName(
+                    String(internalCodeValue || "document"),
+                  );
+
+                  const unique = `${Date.now()}-${Math.random()
+                    .toString(16)
+                    .slice(2)}`;
+
+                  const path = `examples/documents-management/${internalCode}/${unique}-${safeName}`;
+
+                  const result = await uploadDocument({
+                    file,
+                    path,
+                    content_type: file.type,
+                  });
+
+                  const uploadedUrl = toPublicStorageUrl(result.url || path);
+
+                  form.setFieldValue("example_url", uploadedUrl);
+                  setLastUploadedExampleFileName(file.name || "example-file");
+                  options.onSuccess?.(result, file);
+                } catch (err) {
+                  options.onError?.(
+                    err instanceof Error ? err : new Error("Upload gagal"),
+                  );
+                }
+              }}
+            >
+              <Button loading={uploading} block={isMobile}>
+                Upload Contoh
+              </Button>
+            </Upload>
+
+            {publicExampleUrl ? (
+              <Card size="small" title="Preview Dokumen">
+                <Space direction="vertical" size={10} style={{ width: "100%" }}>
+                  {isImageFile(publicExampleUrl) ? (
+                    <Image
+                      src={publicExampleUrl}
+                      alt={exampleFileName}
+                      width={1280}
+                      height={720}
+                      unoptimized
+                      style={{
+                        width: "100%",
+                        height: "auto",
+                        maxHeight: 360,
+                        objectFit: "contain",
+                        borderRadius: 8,
+                        border: "1px solid #f0f0f0",
+                      }}
+                    />
+                  ) : null}
+
+                  {isPdfFile(publicExampleUrl) ? (
+                    <iframe
+                      src={publicExampleUrl}
+                      title={exampleFileName}
+                      style={{
+                        width: "100%",
+                        height: 420,
+                        border: "1px solid #f0f0f0",
+                        borderRadius: 8,
+                      }}
+                    />
+                  ) : null}
+
+                  {!isPdfFile(publicExampleUrl) &&
+                  !isImageFile(publicExampleUrl) ? (
+                    <Text type="secondary">
+                      Preview tidak tersedia untuk tipe file ini.
+                    </Text>
+                  ) : null}
+
+                  <Button
+                    onClick={() =>
+                      window.open(publicExampleUrl, "_blank", "noreferrer")
+                    }
+                  >
+                    Buka di Tab Baru
+                  </Button>
+                </Space>
+              </Card>
+            ) : null}
+          </Space>
         </Form.Item>
 
         <Divider style={{ margin: "16px 0" }} />
@@ -393,17 +568,19 @@ export default function FormDocumentComponent({
               wrap
               style={{
                 width: "100%",
-                justifyContent: isMobile ? "flex-start" : "flex-start",
+                justifyContent: "flex-start",
               }}
             >
               <Button disabled={!selectedDocument} block={isMobile}>
                 Duplikasi
               </Button>
+
               <Button onClick={onCancel} block={isMobile}>
                 Batalkan Perubahan
               </Button>
             </Space>
           </Col>
+
           <Col xs={24} md={12}>
             <Space
               wrap
@@ -419,8 +596,9 @@ export default function FormDocumentComponent({
                 loading={deleteLoading}
                 block={isMobile}
               >
-                Hapus
+                Arsipkan
               </Button>
+
               <Button
                 type="primary"
                 htmlType="submit"

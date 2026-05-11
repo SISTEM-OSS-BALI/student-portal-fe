@@ -620,6 +620,7 @@ export default function CVComponents({ student_id }: CVComponentsProps) {
           file: wordFile,
           path: uploadPath,
           content_type: generatedMimeType,
+          student_folder_key: `${studentData?.name ?? "student"}-${student_id}`,
         });
 
         const payload = {

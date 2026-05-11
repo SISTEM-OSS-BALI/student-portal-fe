@@ -478,9 +478,9 @@ export default function VisaTypeManagementContent() {
                           </Button>
 
                           <Popconfirm
-                            title="Hapus visa type?"
-                            description={`Visa type "${item.name}" akan dihapus.`}
-                            okText="Ya, hapus"
+                            title="Arsipkan visa type?"
+                            description={`Visa type "${item.name}" akan diarsipkan (soft delete).`}
+                            okText="Ya, arsipkan"
                             cancelText="Batal"
                             okButtonProps={{
                               danger: true,
@@ -497,7 +497,7 @@ export default function VisaTypeManagementContent() {
                                 fontWeight: 600,
                               }}
                             >
-                              Delete
+                              Arsipkan
                             </Button>
                           </Popconfirm>
                         </Space>

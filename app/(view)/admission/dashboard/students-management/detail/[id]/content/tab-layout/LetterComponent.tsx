@@ -886,10 +886,12 @@ export default function LetterComponent() {
       setMimeType(resolvedMimeType);
 
       const uploadPath = `${folder}/${studentId}/${Date.now()}-${file.name}`;
+      const studentFolderKey = `${studentData?.name ?? "student"}-${studentId}`;
       const uploaded = await uploadDocument({
         file,
         path: uploadPath,
         content_type: resolvedMimeType,
+        student_folder_key: studentFolderKey,
       });
 
       const isWord = isWordDocument(uploaded.url, file.name, resolvedMimeType);
@@ -915,7 +917,7 @@ export default function LetterComponent() {
         description: successDescription,
       });
     },
-    [notification, studentId, uploadDocument],
+    [notification, studentData?.name, studentId, uploadDocument],
   );
 
   const buildLetterPayload = useCallback(

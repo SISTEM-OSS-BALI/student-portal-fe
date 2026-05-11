@@ -20,6 +20,11 @@ import {
 import { useUser } from "@/app/hooks/use-users";
 import { useAuth } from "@/app/utils/use-auth";
 import { useMemo } from "react";
+import { useAnswerDocumentApprovals } from "@/app/hooks/use-answer-document-approvals";
+import { useAnswerApprovals } from "@/app/hooks/use-answer-approvals";
+import { useAnswerDocuments } from "@/app/hooks/use-answer-documents";
+import { useAnswerQuestions } from "@/app/hooks/use-answer-questions";
+import { useStagesManagement } from "@/app/hooks/use-stages-management";
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -100,6 +105,20 @@ type StudentUser = {
   joined_at?: string;
   created_at?: string;
   updated_at?: string;
+};
+
+type RejectedFeedbackItem = {
+  id: string;
+  type: "document" | "form";
+  title: string;
+  note: string;
+  reviewed_at?: string | null;
+};
+
+type StudentTaskItem = {
+  id: string;
+  title: string;
+  priority: "Current Step" | "Upcoming Step" | "Required Document" | "Revision Required";
 };
 
 function extractStepNumber(label: string): number {
@@ -210,6 +229,24 @@ export default function DashboardContent() {
   const { data: user, fetchLoading } = useUser({
     id: user_id,
   });
+  const { data: stages } = useStagesManagement({});
+  const { data: answerDocuments = [] } = useAnswerDocuments({
+    queryString: user_id ? `student_id=${user_id}` : undefined,
+    enabled: Boolean(user_id),
+  });
+  const { data: answerQuestions = [] } = useAnswerQuestions({
+    queryString: user_id ? `student_id=${user_id}` : undefined,
+    enabled: Boolean(user_id),
+    withNotification: false,
+  });
+  const { data: answerDocumentApprovals = [] } = useAnswerDocumentApprovals({
+    queryString: user_id ? `student_id=${user_id}` : undefined,
+    enabled: Boolean(user_id),
+  });
+  const { data: answerApprovals = [] } = useAnswerApprovals({
+    queryString: user_id ? `student_id=${user_id}` : undefined,
+    enabled: Boolean(user_id),
+  });
 
   const student = user as StudentUser | undefined;
 
@@ -223,7 +260,144 @@ export default function DashboardContent() {
     [student],
   );
 
+  const rejectedFeedbacks = useMemo<RejectedFeedbackItem[]>(() => {
+    const documentNameById = new Map<string, string>();
+    (stages ?? []).forEach((stage) => {
+      if (!stage?.document?.id) return;
+      documentNameById.set(
+        String(stage.document.id),
+        String(stage.document.label ?? stage.document.internal_code ?? "Document"),
+      );
+    });
+
+    const answerDocumentById = new Map<string, (typeof answerDocuments)[number]>();
+    answerDocuments.forEach((item) => {
+      answerDocumentById.set(String(item.id), item);
+    });
+
+    const answerQuestionById = new Map<string, (typeof answerQuestions)[number]>();
+    answerQuestions.forEach((item) => {
+      answerQuestionById.set(String(item.id), item);
+    });
+
+    const documentRejects = answerDocumentApprovals
+      .filter(
+        (item) =>
+          String(item.status ?? "").toLowerCase() === "rejected" &&
+          String(item.note ?? "").trim(),
+      )
+      .map((item) => {
+        const answerDoc = answerDocumentById.get(String(item.answer_document_id ?? ""));
+        const docId = String(answerDoc?.document_id ?? "");
+        const docName =
+          documentNameById.get(docId) ||
+          String(answerDoc?.file_name ?? "").trim() ||
+          "Document";
+        return {
+          id: `doc-${item.id}`,
+          type: "document" as const,
+          title: `Document: ${docName}`,
+          note: String(item.note ?? "").trim(),
+          reviewed_at: item.reviewed_at ?? item.updated_at,
+        };
+      });
+
+    const formRejects = answerApprovals
+      .filter(
+        (item) =>
+          String(item.status ?? "").toLowerCase() === "rejected" &&
+          String(item.note ?? "").trim(),
+      )
+      .map((item) => {
+        const answer = answerQuestionById.get(String(item.answer_id ?? ""));
+        const answerPreview = String(answer?.answer_text ?? "").trim();
+        return {
+          id: `form-${item.id}`,
+          type: "form" as const,
+          title: answerPreview
+            ? `Form: ${answerPreview.slice(0, 60)}${answerPreview.length > 60 ? "..." : ""}`
+            : "Form submission",
+          note: String(item.note ?? "").trim(),
+          reviewed_at: item.reviewed_at ?? item.updated_at,
+        };
+      });
+
+    return [...documentRejects, ...formRejects].sort((a, b) => {
+      const aTime = Date.parse(String(a.reviewed_at ?? ""));
+      const bTime = Date.parse(String(b.reviewed_at ?? ""));
+      if (Number.isNaN(aTime) && Number.isNaN(bTime)) return 0;
+      if (Number.isNaN(aTime)) return 1;
+      if (Number.isNaN(bTime)) return -1;
+      return bTime - aTime;
+    });
+  }, [answerApprovals, answerDocumentApprovals, answerDocuments, answerQuestions, stages]);
+
   const terms = useMemo(() => buildTerms(student), [student]);
+
+  const tasksToDo = useMemo<StudentTaskItem[]>(() => {
+    const tasks: StudentTaskItem[] = [];
+    const countryId = String(student?.stage?.country_id ?? "").trim();
+
+    const docsForCountry =
+      (stages ?? [])
+        .filter((stage) => String(stage.country_id ?? "") === countryId)
+        .map((stage) => stage.document)
+        .filter((doc): doc is NonNullable<typeof doc> => Boolean(doc)) ?? [];
+
+    const latestAnswerByDocumentId = new Map<string, (typeof answerDocuments)[number]>();
+    answerDocuments.forEach((item) => {
+      const key = String(item.document_id ?? "");
+      const existing = latestAnswerByDocumentId.get(key);
+      if (!existing) {
+        latestAnswerByDocumentId.set(key, item);
+        return;
+      }
+      const existingTime = Date.parse(
+        String(existing.updated_at ?? existing.created_at ?? ""),
+      );
+      const nextTime = Date.parse(String(item.updated_at ?? item.created_at ?? ""));
+      if (Number.isNaN(existingTime) || nextTime > existingTime) {
+        latestAnswerByDocumentId.set(key, item);
+      }
+    });
+
+    docsForCountry.forEach((doc) => {
+      if (!doc.required) return;
+      const submitted = latestAnswerByDocumentId.get(String(doc.id));
+      if (!submitted?.file_url) {
+        tasks.push({
+          id: `required-doc-${doc.id}`,
+          title: `Upload dokumen wajib: ${doc.label}`,
+          priority: "Required Document",
+        });
+      }
+    });
+
+    rejectedFeedbacks.forEach((item) => {
+      tasks.push({
+        id: `revision-${item.id}`,
+        title: `Revisi ${item.title}: ${item.note}`,
+        priority: "Revision Required",
+      });
+    });
+
+    pendingTasks.forEach((task) => {
+      tasks.push({
+        id: `step-${task.id}`,
+        title: task.title,
+        priority: task.priority,
+      });
+    });
+
+    const unique = new Map<string, StudentTaskItem>();
+    tasks.forEach((task) => {
+      if (!unique.has(task.title)) {
+        unique.set(task.title, task);
+      }
+    });
+
+    return Array.from(unique.values());
+  }, [answerDocuments, pendingTasks, rejectedFeedbacks, stages, student?.stage?.country_id]);
 
   if (fetchLoading) {
     return (
@@ -418,7 +592,7 @@ export default function DashboardContent() {
               height: "100%",
             }}
           >
-            {admissionNotes.length > 0 ? (
+            {admissionNotes.length > 0 || rejectedFeedbacks.length > 0 ? (
               <Space direction="vertical" size={14} style={{ width: "100%" }}>
                 {admissionNotes.map((note, index) => (
                   <div
@@ -430,6 +604,30 @@ export default function DashboardContent() {
                   >
                     <Text style={{ fontSize: 13, color: "#374151" }}>
                       {note}
+                    </Text>
+                  </div>
+                ))}
+                {rejectedFeedbacks.map((item) => (
+                  <div
+                    key={item.id}
+                    style={{
+                      borderLeft: "3px solid #dc2626",
+                      paddingLeft: 12,
+                    }}
+                  >
+                    <Text
+                      strong
+                      style={{
+                        display: "block",
+                        fontSize: 12,
+                        color: "#991b1b",
+                        marginBottom: 2,
+                      }}
+                    >
+                      {item.title}
+                    </Text>
+                    <Text style={{ fontSize: 13, color: "#374151" }}>
+                      {item.note}
                     </Text>
                   </div>
                 ))}
@@ -452,9 +650,9 @@ export default function DashboardContent() {
           boxShadow: "0 8px 24px rgba(15, 23, 42, 0.06)",
         }}
       >
-        {pendingTasks.length > 0 ? (
+        {tasksToDo.length > 0 ? (
           <Space direction="vertical" size={14} style={{ width: "100%" }}>
-            {pendingTasks.map((task) => (
+            {tasksToDo.map((task) => (
               <div
                 key={task.id}
                 style={{
@@ -470,7 +668,13 @@ export default function DashboardContent() {
                   </Text>
                   <Tag
                     color={
-                      task.priority === "Current Step" ? "error" : "processing"
+                      task.priority === "Revision Required"
+                        ? "error"
+                        : task.priority === "Required Document"
+                          ? "gold"
+                          : task.priority === "Current Step"
+                            ? "error"
+                            : "processing"
                     }
                     style={{
                       width: "fit-content",

@@ -67,9 +67,9 @@ export default function DetailQuestionComponent() {
 
   const handleDelete = (item: QuestionDataModel) => {
     modal.confirm({
-      title: "Delete Question",
-      content: `Hapus pertanyaan "${item.text}"?`,
-      okText: "Delete",
+      title: "Arsipkan Question",
+      content: `Arsipkan pertanyaan "${item.text}" (soft delete)?`,
+      okText: "Arsipkan",
       okType: "danger",
       onOk: () => onDeleteQuestion(item.id), // return promise biar modal loading bener
     });
@@ -201,7 +201,7 @@ export default function DetailQuestionComponent() {
                         icon={<DeleteOutlined />}
                         onClick={() => handleDelete(item)}
                       >
-                        Delete
+                        Arsipkan
                       </Button>
                     </Space>
                   </Flex>

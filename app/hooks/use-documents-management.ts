@@ -24,6 +24,7 @@ const normalizeDocument = (data: DocumentDataModel): DocumentDataModel => {
         (data as DocumentDataModel).internal_code ?? data.internal_code,
       file_type: (data as DocumentDataModel).file_type ?? data.file_type,
       category: data.category,
+      example_url: (data as DocumentDataModel).example_url ?? data.example_url ?? null,
       translation_needed: normalizeTranslationNeeded(
         (data as DocumentDataModel).translation_needed ??
           data.translation_needed,
@@ -55,6 +56,7 @@ const toApiCreatePayload = (payload: DocumentPayloadCreateModel) =>
         internal_code: payload.internal_code,
         file_type: payload.file_type,
         category: payload.category,
+        example_url: payload.example_url ?? null,
         translation_needed: toApiTranslationNeeded(payload.translation_needed),
         required: payload.required,
         auto_rename_pattern: payload.auto_rename_pattern ?? "",
@@ -71,6 +73,7 @@ const toApiUpdatePayload = (payload: DocumentPayloadUpdateModel) => {
     out.internal_code = payload.internal_code;
   if (payload.file_type !== undefined) out.file_type = payload.file_type;
   if (payload.category !== undefined) out.category = payload.category;
+  if (payload.example_url !== undefined) out.example_url = payload.example_url;
   if (payload.translation_needed !== undefined)
     out.translation_needed = toApiTranslationNeeded(payload.translation_needed);
   if (payload.required !== undefined) out.required = payload.required;

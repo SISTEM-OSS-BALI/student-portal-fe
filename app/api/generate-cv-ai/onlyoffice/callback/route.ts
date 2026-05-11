@@ -27,7 +27,7 @@ function getSupabaseServerClient() {
 
 export async function POST(req: NextRequest) {
   const path = req.nextUrl.searchParams.get("path")?.trim();
-  const bucket = req.nextUrl.searchParams.get("bucket")?.trim() || "student-portal";
+  const bucket = "student-portal";
 
   if (!path) {
     return NextResponse.json({ error: 1, message: "Missing file path." }, { status: 400 });

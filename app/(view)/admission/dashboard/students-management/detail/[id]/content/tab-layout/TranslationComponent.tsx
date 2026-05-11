@@ -350,6 +350,7 @@ export default function TranslationComponent({
           file,
           path,
           content_type: file.type,
+          student_folder_key: `${student_name ?? "student"}-${student_id}`,
         });
 
         const pageCount = await fetchPageCount(result.url);

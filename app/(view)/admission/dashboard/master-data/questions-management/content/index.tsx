@@ -87,9 +87,9 @@ export default function QuestionManagementContent() {
 
   const handleDeleteQuestionBase = (base: QuestionBaseDataModel) => {
     modal.confirm({
-      title: "Delete Question Base",
-      content: `Hapus question base "${base.name}"?`,
-      okText: "Delete",
+      title: "Arsipkan Question Base",
+      content: `Arsipkan question base "${base.name}" (soft delete)?`,
+      okText: "Arsipkan",
       okType: "danger",
       onOk: () => onDeleteQuestionBase(base.id),
     });
@@ -236,7 +236,7 @@ export default function QuestionManagementContent() {
                           icon={<DeleteOutlined />}
                           onClick={() => handleDeleteQuestionBase(base)}
                         >
-                          Delete
+                          Arsipkan
                         </Button>
                       </Flex>
                     </Space>
