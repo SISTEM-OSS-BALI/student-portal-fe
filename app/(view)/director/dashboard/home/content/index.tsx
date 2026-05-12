@@ -376,16 +376,8 @@ export default function DirectorDashboardHomeContent() {
       );
     });
 
-    statementApprovals.forEach((item) => {
-      setLatestTime(String(item.student_id), item.updated_at ?? item.created_at);
-    });
-
-    sponsorApprovals.forEach((item) => {
-      setLatestTime(String(item.student_id), item.updated_at ?? item.created_at);
-    });
-
     return result;
-  }, [activeStudents, answerApprovals, sponsorApprovals, statementApprovals]);
+  }, [activeStudents, answerApprovals]);
 
   const pipelineStudents = useMemo(() => {
     const nowTime = new Date().getTime();
