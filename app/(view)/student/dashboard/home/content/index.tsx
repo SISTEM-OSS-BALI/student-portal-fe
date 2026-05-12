@@ -28,13 +28,6 @@ import { useStagesManagement } from "@/app/hooks/use-stages-management";
 
 const { Title, Text, Paragraph } = Typography;
 
-type StudentNote = {
-  id: string;
-  content: string;
-  created_at?: string;
-  updated_at?: string;
-};
-
 type StudentStepChild = {
   id: string;
   label: string;
@@ -101,7 +94,6 @@ type StudentUser = {
   visa_type?: string;
   degree?: string;
   translation_quota?: number;
-  notes?: StudentNote[];
   joined_at?: string;
   created_at?: string;
   updated_at?: string;
@@ -264,11 +256,6 @@ export default function DashboardContent() {
 
   const { stepItems, currentStep, pendingTasks } = useMemo(
     () => getStepsData(student),
-    [student],
-  );
-
-  const admissionNotes = useMemo(
-    () => student?.notes?.map((note) => note.content).filter(Boolean) ?? [],
     [student],
   );
 
@@ -604,21 +591,8 @@ export default function DashboardContent() {
               height: "100%",
             }}
           >
-            {admissionNotes.length > 0 || rejectedFeedbacks.length > 0 ? (
+            {rejectedFeedbacks.length > 0 ? (
               <Space direction="vertical" size={14} style={{ width: "100%" }}>
-                {admissionNotes.map((note, index) => (
-                  <div
-                    key={`${note}-${index}`}
-                    style={{
-                      borderLeft: "3px solid #2563eb",
-                      paddingLeft: 12,
-                    }}
-                  >
-                    <Text style={{ fontSize: 13, color: "#374151" }}>
-                      {note}
-                    </Text>
-                  </div>
-                ))}
                 {rejectedFeedbacks.map((item) => (
                   <div
                     key={item.id}

@@ -39,6 +39,11 @@ export const SidebarSettingAdmission = (): MenuProps["items"] => {
           key: "/admission/dashboard/master-data/visa-type-management",
           label: menuLabel("Manajemen Tipe Visa"),
           icon: <FontAwesomeIcon icon={faCircle} style={{ fontSize: 10 }} />,
+        },
+        {
+          key: "/admission/dashboard/master-data/promo-management",
+          label: menuLabel("Manajemen Promo"),
+          icon: <FontAwesomeIcon icon={faCircle} style={{ fontSize: 10 }} />,
         }
       ],
     },

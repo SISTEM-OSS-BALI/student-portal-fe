@@ -836,10 +836,10 @@ export default function ChatComponent() {
               >
                 <Space direction="vertical" size={2}>
                   <Title level={3} style={{ margin: 0 }}>
-                    Ticket List
+                    Subject
                   </Title>
                   <Text type="secondary">
-                    Pilih tiket untuk membuka percakapannya.
+                    Pilih subject untuk membuka percakapannya.
                   </Text>
                 </Space>
 

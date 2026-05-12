@@ -15,6 +15,7 @@ import {
 } from "antd";
 import {
   FileTextOutlined,
+  GiftOutlined,
   HomeOutlined,
   InboxOutlined,
   LogoutOutlined,
@@ -33,6 +34,8 @@ import {
 import { useInformationCountries } from "@/app/hooks/use-information-country-management";
 import { useChatMentions, useMarkMentionRead } from "@/app/hooks/use-chat";
 import { useTicketMessages } from "@/app/hooks/use-ticket-message";
+import { usePromos } from "@/app/hooks/use-promo";
+import { useAnswerDocuments } from "@/app/hooks/use-answer-documents";
 import InboxDrawer from "@/app/components/common/inbox-drawer";
 import GlobalSearchModal, {
   type GlobalSearchItem,
@@ -51,6 +54,7 @@ const DOCUMENT_CONSENT_BUCKET = "student-portal";
 const DOCUMENT_CONSENT_FOLDER = "document-consent-signatures";
 const SIGNATURE_CANVAS_HEIGHT = 220;
 const SEARCH_REDIRECT_PATH = "/student/dashboard/home";
+const PROMO_SEEN_STORAGE_PREFIX = "student_promo_seen";
 
 function formatSearchDate(value?: string | null): string {
   if (!value) {
@@ -110,6 +114,26 @@ function dataUrlToFile(dataUrl: string, filename: string): Promise<File> {
     .then((blob) => new File([blob], filename, { type: "image/png" }));
 }
 
+function isImageMimeType(value?: string | null): boolean {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .startsWith("image/");
+}
+
+function isImageByName(value?: string | null): boolean {
+  return /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(String(value ?? "").trim());
+}
+
+function toLowResImageUrl(url?: string | null): string | undefined {
+  const raw = String(url ?? "").trim();
+  if (!raw) return undefined;
+
+  // Supabase image transformation (if enabled) for lightweight avatar rendering.
+  const suffix = "width=96&height=96&quality=55&resize=cover";
+  return raw.includes("?") ? `${raw}&${suffix}` : `${raw}?${suffix}`;
+}
+
 export default function StudentLayout({
   children,
   username,
@@ -130,6 +154,7 @@ export default function StudentLayout({
   const [signatureError, setSignatureError] = useState("");
   const [isDocumentConsentModalOpen, setIsDocumentConsentModalOpen] =
     useState(false);
+  const [unseenPromoCount, setUnseenPromoCount] = useState(0);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const hasSignatureRef = useRef(false);
@@ -151,9 +176,40 @@ export default function StudentLayout({
     withNotification: false,
   });
   const { onUpdate, onUpdateLoading } = usePatchDocumentConsent();
+  const { data: activePromos = [] } = usePromos({
+    enabled: Boolean(user_id),
+    queryString: "active=true",
+  });
+  const { data: uploadedDocuments = [] } = useAnswerDocuments({
+    enabled: Boolean(user_id),
+    queryString: user_id ? `student_id=${user_id}` : undefined,
+  });
 
   const shouldShowDocumentConsentModal =
     detailUser?.document_consent_signed === false;
+
+  const avatarFromUploadedDocument = useMemo(() => {
+    const latestImageDocument = [...(uploadedDocuments ?? [])]
+      .filter(
+        (doc) =>
+          Boolean(doc.file_url) &&
+          (isImageMimeType(doc.file_type) ||
+            isImageByName(doc.file_name) ||
+            isImageByName(doc.file_url)),
+      )
+      .sort(
+        (a, b) =>
+          new Date(b.updated_at ?? b.created_at ?? 0).getTime() -
+          new Date(a.updated_at ?? a.created_at ?? 0).getTime(),
+      )[0];
+
+    return toLowResImageUrl(latestImageDocument?.file_url);
+  }, [uploadedDocuments]);
+
+  const effectiveAvatarUrl =
+    avatarFromUploadedDocument ||
+    toLowResImageUrl(detailUser?.document_consent_proof_photo_url) ||
+    userProfilePic;
 
   useEffect(() => {
     setIsDocumentConsentModalOpen(shouldShowDocumentConsentModal);
@@ -263,9 +319,34 @@ export default function StudentLayout({
         label: "Chat",
         icon: <MessageOutlined />,
       },
+      {
+        key: "/student/dashboard/promo",
+        label: "Promo",
+        icon: <GiftOutlined />,
+      },
     ],
     [],
   );
+
+  useEffect(() => {
+    if (!user_id) return;
+
+    const storageKey = `${PROMO_SEEN_STORAGE_PREFIX}:${user_id}`;
+    const raw = window.localStorage.getItem(storageKey);
+    const seenIds = raw ? (JSON.parse(raw) as string[]) : [];
+    const seenSet = new Set(seenIds);
+    const unseen = (activePromos ?? []).filter((item) => !seenSet.has(item.id));
+
+    setUnseenPromoCount(unseen.length);
+  }, [activePromos, user_id]);
+
+  useEffect(() => {
+    if (!user_id || pathname !== "/student/dashboard/promo") return;
+    const storageKey = `${PROMO_SEEN_STORAGE_PREFIX}:${user_id}`;
+    const ids = (activePromos ?? []).map((item) => item.id);
+    window.localStorage.setItem(storageKey, JSON.stringify(ids));
+    setUnseenPromoCount(0);
+  }, [activePromos, pathname, user_id]);
 
   const openDrawerInbox = () => {
     setOpenInbox(true);
@@ -587,17 +668,26 @@ export default function StudentLayout({
                   const isActive = pathname === item.key;
 
                   return (
-                    <button
+                    <Badge
                       key={item.key}
-                      type="button"
-                      onClick={() => router.push(item.key)}
-                      className={`${styles.navButton} ${
-                        isActive ? styles.navButtonActive : ""
-                      }`}
+                      count={
+                        item.key === "/student/dashboard/promo"
+                          ? unseenPromoCount
+                          : 0
+                      }
+                      size="small"
                     >
-                      {item.icon}
-                      <span>{item.label}</span>
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => router.push(item.key)}
+                        className={`${styles.navButton} ${
+                          isActive ? styles.navButtonActive : ""
+                        }`}
+                      >
+                        {item.icon}
+                        <span>{item.label}</span>
+                      </button>
+                    </Badge>
                   );
                 })}
               </div>
@@ -620,10 +710,10 @@ export default function StudentLayout({
                 <button className={styles.userTrigger} type="button">
                   <Avatar
                     size={42}
-                    src={userProfilePic || undefined}
+                    src={effectiveAvatarUrl || undefined}
                     className={styles.avatar}
                   >
-                    {!userProfilePic && getInitials(username)}
+                    {!effectiveAvatarUrl && getInitials(username)}
                   </Avatar>
 
                   <div className={styles.userMeta}>

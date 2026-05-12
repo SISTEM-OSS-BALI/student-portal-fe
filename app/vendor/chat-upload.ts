@@ -1,6 +1,10 @@
 "use client";
 
 import { supabase } from "./supabase-client";
+import {
+  buildUploadSizeErrorMessage,
+  isAllowedUploadSize,
+} from "@/app/utils/upload";
 
 
 
@@ -31,6 +35,10 @@ export async function uploadChatFiles(
   const results: UploadedChatAttachment[] = [];
 
   for (const file of files) {
+    if (!isAllowedUploadSize(file)) {
+      throw new Error(buildUploadSizeErrorMessage(file.name));
+    }
+
     const safeName = sanitizeFileName(file.name || "attachment");
     const uniqueSuffix = `${Date.now()}-${Math.random()
       .toString(16)

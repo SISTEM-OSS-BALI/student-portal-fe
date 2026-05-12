@@ -19,7 +19,10 @@ export interface UserDataModel {
   degree?: string;
   name_degree?: string;
   visa_type?: string;
+  source?: string | null;
+  source_category?: string | null;
   translation_quota?: number;
+  has_initial_translations?: boolean;
   no_phone?: string | null;
 
   visa_granted_at?: string | null;
@@ -60,13 +63,17 @@ export interface UserPayloadCreateModel {
   stage_id?: string | null;
   current_step_id?: string | null;
   visa_status?: string;
+  visa_granted_at?: string | null;
   student_status?: string;
   name_consultant?: string | null;
   name_campus?: string;
   degree?: string;
   name_degree?: string;
   visa_type?: string;
+  source?: string | null;
+  source_category?: string | null;
   translation_quota?: number;
+  has_initial_translations?: boolean;
   no_phone?: string | null;
 }
 
@@ -77,13 +84,17 @@ export interface UserPayloadUpdateModel {
   stage_id?: string | null;
   current_step_id?: string | null;
   visa_status?: string;
+  visa_granted_at?: string | null;
   student_status?: string;
   name_consultant?: string | null;
   name_campus?: string;
   degree?: string;
   name_degree?: string;
   visa_type?: string;
+  source?: string | null;
+  source_category?: string | null;
   translation_quota?: number;
+  has_initial_translations?: boolean;
   no_phone?: string | null;
 }
 

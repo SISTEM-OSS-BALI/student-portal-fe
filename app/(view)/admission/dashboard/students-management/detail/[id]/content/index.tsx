@@ -18,6 +18,7 @@ import {
   Avatar,
   Button,
   Card,
+  DatePicker,
   Flex,
   List,
   Modal,
@@ -29,6 +30,7 @@ import {
   Typography,
 } from "antd";
 import dayjs from "dayjs";
+import type { Dayjs } from "dayjs";
 import {
   useParams,
   usePathname,
@@ -58,7 +60,7 @@ const allowedTabKeys = new Set([
 
 const visaStatusOptions = [
   { value: "Grant", label: "Grant" },
-  { value: "On Going", label: "On Going" },
+  { value: "Waiting", label: "Waiting" },
   { value: "Refused", label: "Refused" },
 ];
 
@@ -195,6 +197,9 @@ export default function StudentDetailContentPage() {
   const [updatingStageId, setUpdatingStageId] = useState<string | null>(null);
   const [visaStatusModalOpen, setVisaStatusModalOpen] = useState(false);
   const [selectedVisaStatus, setSelectedVisaStatus] = useState<string>();
+  const [visaGrantModalOpen, setVisaGrantModalOpen] = useState(false);
+  const [selectedVisaGrantedAt, setSelectedVisaGrantedAt] =
+    useState<Dayjs | null>(null);
 
   const studentName = detailStudentData?.name ?? "Student";
   const studentEmail = detailStudentData?.email ?? "student@email.com";
@@ -206,8 +211,10 @@ export default function StudentDetailContentPage() {
     detailStudentData?.name_degree ??
     "Belum ada degree";
 
-  const visaTypeLabel = detailStudentData?.visa_type
-    ? detailStudentData.visa_type.replace(/_/g, " ").toUpperCase()
+  const visaTypeLabel = detailStudentData?.visa_type_name
+    ? detailStudentData.visa_type_name
+    : detailStudentData?.visa_type
+      ? detailStudentData.visa_type.replace(/_/g, " ").toUpperCase()
     : "Belum dipilih";
 
   const statusLabel =
@@ -264,6 +271,19 @@ export default function StudentDetailContentPage() {
     setVisaStatusModalOpen(false);
   };
 
+  const handleOpenVisaGrantModal = () => {
+    setSelectedVisaGrantedAt(
+      detailStudentData?.visa_granted_at
+        ? dayjs(detailStudentData.visa_granted_at)
+        : null,
+    );
+    setVisaGrantModalOpen(true);
+  };
+
+  const handleCloseVisaGrantModal = () => {
+    setVisaGrantModalOpen(false);
+  };
+
   const handleSubmitNote = (values: { content?: string }) => {
     const content = values.content?.trim();
     if (!content) return;
@@ -293,6 +313,19 @@ export default function StudentDetailContentPage() {
     });
 
     setVisaStatusModalOpen(false);
+  };
+
+  const handleSubmitVisaGrantDate = async () => {
+    if (!studentId || !selectedVisaGrantedAt) return;
+
+    await onUpdateUser({
+      id: studentId,
+      payload: {
+        visa_granted_at: selectedVisaGrantedAt.toISOString(),
+      },
+    });
+
+    setVisaGrantModalOpen(false);
   };
 
   const notesItems = useMemo(() => {
@@ -376,8 +409,7 @@ export default function StudentDetailContentPage() {
                 <Typography.Text
                   strong={isCurrent}
                   style={{
-                    textDecoration: isDone ? "line-through" : "none",
-                    color: isDone ? "#94a3b8" : undefined,
+                    color: isDone ? "#16a34a" : undefined,
                   }}
                 >
                   {step.label}
@@ -387,7 +419,7 @@ export default function StudentDetailContentPage() {
                   style={{
                     display: "block",
                     marginTop: 2,
-                    textDecoration: isDone ? "line-through" : "none",
+                    color: isDone ? "#16a34a" : undefined,
                   }}
                 >
                   {step.children?.map((child) => child.label).join(", ") ??
@@ -479,6 +511,9 @@ export default function StudentDetailContentPage() {
           student_name={studentName}
           student_country={detailStudentData?.stage?.country?.name}
           translation_quota={detailStudentData?.translation_quota}
+          student_has_initial_translations={
+            detailStudentData?.has_initial_translations
+          }
         />
       ) : null,
     },
@@ -683,7 +718,12 @@ export default function StudentDetailContentPage() {
               </div>
 
               <div>
-                <Typography.Text strong>Visa Granted At</Typography.Text>
+                <Flex align="center" justify="space-between" gap={8}>
+                  <Typography.Text strong>Visa Granted At</Typography.Text>
+                  <Button size="small" type="link" onClick={handleOpenVisaGrantModal}>
+                    Edit
+                  </Button>
+                </Flex>
                 <Typography.Text style={{ display: "block" }}>
                   {visaGrantedAtLabel}
                 </Typography.Text>
@@ -751,6 +791,29 @@ export default function StudentDetailContentPage() {
             options={visaStatusOptions}
             placeholder="Pilih status visa"
             style={{ width: "100%" }}
+          />
+        </Space>
+      </Modal>
+
+      <Modal
+        open={visaGrantModalOpen}
+        title="Edit Visa Grant Date"
+        onCancel={handleCloseVisaGrantModal}
+        onOk={() => void handleSubmitVisaGrantDate()}
+        okText="Simpan"
+        cancelText="Batal"
+        confirmLoading={onUpdateLoading}
+        destroyOnHidden
+      >
+        <Space direction="vertical" size={12} style={{ width: "100%" }}>
+          <Typography.Text type="secondary">
+            Masukkan tanggal grant visa manual.
+          </Typography.Text>
+          <DatePicker
+            value={selectedVisaGrantedAt}
+            onChange={(value) => setSelectedVisaGrantedAt(value)}
+            style={{ width: "100%" }}
+            format="DD MMM YYYY"
           />
         </Space>
       </Modal>

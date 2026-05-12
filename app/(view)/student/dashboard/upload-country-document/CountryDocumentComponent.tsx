@@ -29,6 +29,11 @@ import { useAuth } from "@/app/utils/use-auth";
 import { useStagesManagement } from "@/app/hooks/use-stages-management";
 import { useUser } from "@/app/hooks/use-users";
 import { useDocumentUpload } from "@/app/hooks/use-document-uploads";
+import {
+  MAX_UPLOAD_SIZE_MB,
+  buildUploadSizeErrorMessage,
+  isAllowedUploadSize,
+} from "@/app/utils/upload";
 import { useAnswerDocuments } from "@/app/hooks/use-answer-documents";
 import { buildFilePreviewUrl } from "@/app/utils/file-preview";
 import type {
@@ -632,6 +637,16 @@ export default function CountryDocumentComponent() {
                                 }
                               }}
                               beforeUpload={(file) => {
+                                if (!isAllowedUploadSize(file as File)) {
+                                  notification.error({
+                                    message: "Ukuran file terlalu besar",
+                                    description: buildUploadSizeErrorMessage(
+                                      (file as File).name,
+                                    ),
+                                  });
+                                  return Upload.LIST_IGNORE;
+                                }
+
                                 const renamed = buildAutoFileName(
                                   doc.auto_rename_pattern,
                                   file as File,
@@ -695,7 +710,8 @@ export default function CountryDocumentComponent() {
                                   Drag & drop file here or click to upload
                                 </Text>
                                 <Text type="secondary" style={{ fontSize: 12 }}>
-                                  Max 10 MB · {resolveFileTypeLabel(doc.file_type)}
+                                  Max {MAX_UPLOAD_SIZE_MB} MB ·{" "}
+                                  {resolveFileTypeLabel(doc.file_type)}
                                 </Text>
                                 <Button
                                   type="primary"

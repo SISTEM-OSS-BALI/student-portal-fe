@@ -518,10 +518,10 @@ export default function ChatComponent({
               <Space direction="vertical" size={12} style={{ width: "100%" }}>
                 <div>
                   <Title level={4} style={{ margin: 0 }}>
-                    Ticket List
+                    Subject
                   </Title>
                   <Text type="secondary">
-                    Pilih tiket untuk membuka percakapannya.
+                    Pilih subject untuk membuka percakapannya.
                   </Text>
                 </div>
 

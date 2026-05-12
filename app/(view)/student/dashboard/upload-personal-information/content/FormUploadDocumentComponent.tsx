@@ -25,6 +25,7 @@ import { useQuestionBases } from "@/app/hooks/use-question-bases";
 import { useQuestions } from "@/app/hooks/use-questions";
 import { useUser } from "@/app/hooks/use-users";
 import { useAnswerQuestions } from "@/app/hooks/use-answer-questions";
+import { isAllowedUploadSize } from "@/app/utils/upload";
 import type {
   AnswerQuestionDataModel,
   QuestionDataModel,
@@ -72,7 +73,15 @@ const renderQuestionField = (question: QuestionDataModel) => {
 
     case "FILE":
       return (
-        <Upload beforeUpload={() => false} maxCount={1}>
+        <Upload
+          beforeUpload={(file) => {
+            if (!isAllowedUploadSize(file as File)) {
+              return Upload.LIST_IGNORE;
+            }
+            return false;
+          }}
+          maxCount={1}
+        >
           <Input placeholder="Upload file" readOnly />
         </Upload>
       );

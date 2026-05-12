@@ -1,5 +1,9 @@
 import { useMutation } from "@tanstack/react-query";
 import { supabase } from "@/app/vendor/supabase-client";
+import {
+  buildUploadSizeErrorMessage,
+  isAllowedUploadSize,
+} from "@/app/utils/upload";
 
 export type UploadDocumentInput = {
   file: File;
@@ -21,6 +25,10 @@ export const useDocumentUpload = () => {
       content_type,
       student_folder_key,
     }: UploadDocumentInput): Promise<UploadDocumentResult> => {
+      if (!isAllowedUploadSize(file)) {
+        throw new Error(buildUploadSizeErrorMessage(file?.name));
+      }
+
       const bucket = "student-portal";
       const normalizedStudentFolderKey = String(student_folder_key ?? "")
         .trim()

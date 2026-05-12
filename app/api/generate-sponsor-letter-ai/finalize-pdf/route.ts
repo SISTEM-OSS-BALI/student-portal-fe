@@ -51,6 +51,11 @@ function buildPdfName(sourceFileName?: string) {
   return `${name}.pdf`;
 }
 
+function isPdfBuffer(buffer: Buffer) {
+  if (!buffer || buffer.length < 4) return false;
+  return buffer.subarray(0, 4).toString("ascii") === "%PDF";
+}
+
 export async function POST(req: NextRequest) {
   const body = (await req
     .json()
@@ -102,6 +107,12 @@ export async function POST(req: NextRequest) {
     ]);
 
     const pdfBuffer = await fs.readFile(outputPath);
+    if (!isPdfBuffer(pdfBuffer)) {
+      return NextResponse.json(
+        { message: "Hasil finalisasi bukan format PDF yang valid." },
+        { status: 500 },
+      );
+    }
     const pdfPath = buildPdfPath(body.source_file_path);
     const { error } = await supabase.storage
       .from("student-portal")

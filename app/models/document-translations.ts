@@ -9,6 +9,7 @@ export interface DocumentTranslationDataModel {
   file_name?: string | null;
   file_type?: string | null;
   page_count?: number | null;
+  is_existing_translation?: boolean;
   status?: string | null;
   created_at?: string;
   updated_at?: string;
@@ -24,6 +25,7 @@ export interface DocumentTranslationPayloadCreateModel {
   file_name?: string | null;
   file_type?: string | null;
   page_count?: number | null;
+  is_existing_translation?: boolean;
   status?: string | null;
 }
 
@@ -37,5 +39,6 @@ export interface DocumentTranslationPayloadUpdateModel {
   file_name?: string | null;
   file_type?: string | null;
   page_count?: number | null;
+  is_existing_translation?: boolean;
   status?: string | null;
 }

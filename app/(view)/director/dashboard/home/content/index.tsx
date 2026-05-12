@@ -68,6 +68,37 @@ function getCountryFlag(countryName?: string | null): string {
   return countryFlagMap[normalizeText(countryName)] ?? "🌍";
 }
 
+function normalizeLeadSource(value?: string | null): string {
+  const source = normalizeText(value);
+  if (
+    ["instagram", "facebook", "tiktok", "walkin", "website", "referral", "other"].includes(
+      source,
+    )
+  ) {
+    return source;
+  }
+  return "other";
+}
+
+function formatLeadSourceLabel(value: string): string {
+  switch (normalizeText(value)) {
+    case "instagram":
+      return "Instagram";
+    case "facebook":
+      return "Facebook";
+    case "tiktok":
+      return "TikTok";
+    case "walkin":
+      return "Walk-in";
+    case "website":
+      return "Website";
+    case "referral":
+      return "Referral";
+    default:
+      return "Other";
+  }
+}
+
 function getCurrentStepLabel(student: UserDataModel): string {
   const currentStepId = String(student.current_step_id ?? "");
   if (!currentStepId) return "Belum ditentukan";
@@ -244,6 +275,8 @@ export default function DirectorDashboardHomeContent() {
   const [countryFilter, setCountryFilter] = useState<string>("all");
   const [stepFilter, setStepFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [lastUpdateFilter, setLastUpdateFilter] = useState<string>("all");
+  const [leadSourceFilter, setLeadSourceFilter] = useState<string>("all");
 
   const { data: students = [], fetchLoading: studentsLoading } = useUserRoleStudents();
   const { data: answerApprovals = [], fetchLoading: approvalsLoading } = useAnswerApprovals();
@@ -303,18 +336,96 @@ export default function DirectorDashboardHomeContent() {
     return labels.filter(Boolean).sort((a, b) => a.localeCompare(b));
   }, [activeStudents]);
 
+  const leadSourceOptions = useMemo(() => {
+    const categories = Array.from(
+      new Set(activeStudents.map((student) => normalizeLeadSource(student.source))),
+    );
+
+    return categories
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b))
+      .map((value) => ({
+        value,
+        label: formatLeadSourceLabel(value),
+      }));
+  }, [activeStudents]);
+
+  const lastActivityByStudent = useMemo(() => {
+    const result: Record<string, number> = {};
+
+    const setLatestTime = (studentId: string, value?: string | null) => {
+      if (!value) return;
+      const timestamp = new Date(value).getTime();
+      if (Number.isNaN(timestamp)) return;
+      if (!result[studentId] || timestamp > result[studentId]) {
+        result[studentId] = timestamp;
+      }
+    };
+
+    activeStudents.forEach((student) => {
+      const key = String(student.id);
+      setLatestTime(key, student.updated_at);
+      setLatestTime(key, student.student_status_updated_at);
+      setLatestTime(key, student.visa_granted_at);
+    });
+
+    answerApprovals.forEach((item) => {
+      setLatestTime(
+        String(item.student_id),
+        item.reviewed_at ?? item.updated_at ?? item.created_at,
+      );
+    });
+
+    statementApprovals.forEach((item) => {
+      setLatestTime(String(item.student_id), item.updated_at ?? item.created_at);
+    });
+
+    sponsorApprovals.forEach((item) => {
+      setLatestTime(String(item.student_id), item.updated_at ?? item.created_at);
+    });
+
+    return result;
+  }, [activeStudents, answerApprovals, sponsorApprovals, statementApprovals]);
+
   const pipelineStudents = useMemo(() => {
+    const nowTime = new Date().getTime();
+
     return activeStudents.filter((student) => {
       const country = getCountryName(student);
       const step = getCurrentStepLabel(student);
       const status = getStudentPipelineStatus(student).label;
+      const lastActivityAt = lastActivityByStudent[String(student.id)];
+      const leadSource = normalizeLeadSource(student.source);
 
       if (countryFilter !== "all" && country !== countryFilter) return false;
       if (stepFilter !== "all" && step !== stepFilter) return false;
       if (statusFilter !== "all" && status !== statusFilter) return false;
+      if (leadSourceFilter !== "all" && leadSource !== leadSourceFilter) {
+        return false;
+      }
+      if (lastUpdateFilter !== "all" && lastActivityAt) {
+        const ageMs = nowTime - lastActivityAt;
+        if (lastUpdateFilter === "today" && ageMs > 24 * 60 * 60 * 1000) {
+          return false;
+        }
+        if (lastUpdateFilter === "7d" && ageMs > 7 * 24 * 60 * 60 * 1000) {
+          return false;
+        }
+        if (lastUpdateFilter === "30d" && ageMs > 30 * 24 * 60 * 60 * 1000) {
+          return false;
+        }
+      }
       return true;
     });
-  }, [activeStudents, countryFilter, stepFilter, statusFilter]);
+  }, [
+    activeStudents,
+    countryFilter,
+    lastActivityByStudent,
+    lastUpdateFilter,
+    leadSourceFilter,
+    statusFilter,
+    stepFilter,
+  ]);
 
   const visaSummary = useMemo(() => {
     const counts = { granted: 0, processing: 0, refused: 0 };
@@ -447,6 +558,26 @@ export default function DirectorDashboardHomeContent() {
                     { value: "Cancel", label: "Cancel" },
                   ]}
                 />
+                <Select
+                  value={leadSourceFilter}
+                  onChange={setLeadSourceFilter}
+                  style={{ minWidth: 190 }}
+                  options={[
+                    { value: "all", label: "All Lead Sources" },
+                    ...leadSourceOptions,
+                  ]}
+                />
+                <Select
+                  value={lastUpdateFilter}
+                  onChange={setLastUpdateFilter}
+                  style={{ minWidth: 180 }}
+                  options={[
+                    { value: "all", label: "All Last Updates" },
+                    { value: "today", label: "Updated Today" },
+                    { value: "7d", label: "Updated Last 7 Days" },
+                    { value: "30d", label: "Updated Last 30 Days" },
+                  ]}
+                />
               </Space>
             </div>
 
@@ -457,8 +588,10 @@ export default function DirectorDashboardHomeContent() {
                     <th style={{ padding: "12px 8px" }}>Name</th>
                     <th style={{ padding: "12px 8px" }}>Destination</th>
                     <th style={{ padding: "12px 8px" }}>Visa Type</th>
+                    <th style={{ padding: "12px 8px" }}>Lead Source</th>
                     <th style={{ padding: "12px 8px" }}>Step</th>
                     <th style={{ padding: "12px 8px" }}>Status</th>
+                    <th style={{ padding: "12px 8px" }}>Last Update</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -466,6 +599,8 @@ export default function DirectorDashboardHomeContent() {
                     const stepLabel = getCurrentStepLabel(student);
                     const stepTone = getStepTone(stepLabel);
                     const status = getStudentPipelineStatus(student);
+                    const leadSource = normalizeLeadSource(student.source);
+                    const lastActivityAt = lastActivityByStudent[String(student.id)];
                     const initials = student.name
                       .split(" ")
                       .map((part) => part[0])
@@ -515,6 +650,20 @@ export default function DirectorDashboardHomeContent() {
                               margin: 0,
                               borderRadius: 999,
                               padding: "6px 10px",
+                              borderColor: "#dbeafe",
+                              background: "#eff6ff",
+                              color: "#1d4ed8",
+                            }}
+                          >
+                            {formatLeadSourceLabel(leadSource)}
+                          </Tag>
+                        </td>
+                        <td style={{ padding: "14px 8px" }}>
+                          <Tag
+                            style={{
+                              margin: 0,
+                              borderRadius: 999,
+                              padding: "6px 10px",
                               background: stepTone.background,
                               color: stepTone.color,
                               borderColor: "transparent",
@@ -536,6 +685,13 @@ export default function DirectorDashboardHomeContent() {
                           >
                             {status.label}
                           </Tag>
+                        </td>
+                        <td style={{ padding: "14px 8px" }}>
+                          <Text type="secondary">
+                            {lastActivityAt
+                              ? formatShortDate(new Date(lastActivityAt).toISOString())
+                              : "-"}
+                          </Text>
                         </td>
                       </tr>
                     );

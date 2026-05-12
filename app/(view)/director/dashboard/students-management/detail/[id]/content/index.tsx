@@ -9,15 +9,14 @@ import { useStudentNotes } from "@/app/hooks/use-student-notes";
 import { NoteStudentDataModel } from "@/app/models/notes-student";
 import type { UserDataModel } from "@/app/models/user";
 import {
-  CheckCircleFilled,
   DeleteOutlined,
   EditOutlined,
-  LoadingOutlined,
 } from "@ant-design/icons";
 import {
   Avatar,
   Button,
   Card,
+  DatePicker,
   Flex,
   List,
   Modal,
@@ -29,6 +28,7 @@ import {
   Typography,
 } from "antd";
 import dayjs from "dayjs";
+import type { Dayjs } from "dayjs";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import ModalNotesComponent from "./ModalNotesComponent";
@@ -53,7 +53,7 @@ const allowedTabKeys = new Set([
 
 const visaStatusOptions = [
   { value: "Grant", label: "Grant" },
-  { value: "On Going", label: "On Going" },
+  { value: "Waiting", label: "Waiting" },
   { value: "Refused", label: "Refused" },
 ];
 
@@ -187,9 +187,11 @@ export default function StudentDetailContentPage() {
     null,
   );
   const [manualActiveTab, setManualActiveTab] = useState("overview");
-  const [updatingStageId, setUpdatingStageId] = useState<string | null>(null);
   const [visaStatusModalOpen, setVisaStatusModalOpen] = useState(false);
   const [selectedVisaStatus, setSelectedVisaStatus] = useState<string>();
+  const [visaGrantModalOpen, setVisaGrantModalOpen] = useState(false);
+  const [selectedVisaGrantedAt, setSelectedVisaGrantedAt] =
+    useState<Dayjs | null>(null);
 
   const studentName = detailStudentData?.name ?? "Student";
   const studentEmail = detailStudentData?.email ?? "student@email.com";
@@ -201,8 +203,10 @@ export default function StudentDetailContentPage() {
     detailStudentData?.name_degree ??
     "Belum ada degree";
 
-  const visaTypeLabel = detailStudentData?.visa_type
-    ? detailStudentData.visa_type.replace(/_/g, " ").toUpperCase()
+  const visaTypeLabel = detailStudentData?.visa_type_name
+    ? detailStudentData.visa_type_name
+    : detailStudentData?.visa_type
+      ? detailStudentData.visa_type.replace(/_/g, " ").toUpperCase()
     : "Belum dipilih";
 
   const statusLabel =
@@ -259,6 +263,19 @@ export default function StudentDetailContentPage() {
     setVisaStatusModalOpen(false);
   };
 
+  const handleOpenVisaGrantModal = () => {
+    setSelectedVisaGrantedAt(
+      detailStudentData?.visa_granted_at
+        ? dayjs(detailStudentData.visa_granted_at)
+        : null,
+    );
+    setVisaGrantModalOpen(true);
+  };
+
+  const handleCloseVisaGrantModal = () => {
+    setVisaGrantModalOpen(false);
+  };
+
   const handleSubmitNote = (values: { content?: string }) => {
     const content = values.content?.trim();
     if (!content) return;
@@ -290,6 +307,19 @@ export default function StudentDetailContentPage() {
     setVisaStatusModalOpen(false);
   };
 
+  const handleSubmitVisaGrantDate = async () => {
+    if (!studentId || !selectedVisaGrantedAt) return;
+
+    await onUpdateUser({
+      id: studentId,
+      payload: {
+        visa_granted_at: selectedVisaGrantedAt.toISOString(),
+      },
+    });
+
+    setVisaGrantModalOpen(false);
+  };
+
   const notesItems = useMemo(() => {
     return notesSource.map((note) => ({
       id: note.id,
@@ -316,41 +346,15 @@ export default function StudentDetailContentPage() {
     });
   }, [detailStudentData?.stage?.country?.steps]);
 
+  const currentStepId = detailStudentData?.current_step_id;
+
   const currentStageIndex = useMemo(() => {
-    if (!detailStudentData?.current_step_id) return 0;
+    if (!currentStepId) return 0;
     const foundIndex = stepsSource.findIndex(
-      (step) => String(step.id) === String(detailStudentData.current_step_id),
+      (step) => String(step.id) === String(currentStepId),
     );
     return foundIndex >= 0 ? foundIndex : 0;
-  }, [detailStudentData?.current_step_id, stepsSource]);
-
-  const handleSelectStage = useCallback(
-    async (index: number) => {
-      if (!studentId) return;
-      const currentStep = stepsSource[index];
-      if (!currentStep?.id) return;
-
-      const nextStep = stepsSource[index + 1];
-      const targetStepId =
-        index === currentStageIndex && nextStep?.id
-          ? nextStep.id
-          : currentStep.id;
-
-      setUpdatingStageId(targetStepId);
-
-      try {
-        await onUpdateUser({
-          id: studentId,
-          payload: {
-            current_step_id: targetStepId,
-          },
-        });
-      } finally {
-        setUpdatingStageId(null);
-      }
-    },
-    [currentStageIndex, onUpdateUser, stepsSource, studentId],
-  );
+  }, [currentStepId, stepsSource]);
 
   const progressPercent = useMemo(() => {
     if (!stepsSource.length) return 0;
@@ -362,8 +366,6 @@ export default function StudentDetailContentPage() {
       stepsSource.map((step, index) => {
         const isDone = index < currentStageIndex;
         const isCurrent = index === currentStageIndex;
-        const canSelect = Boolean(step?.id);
-
         return {
           title: (
             <Flex align="center" justify="space-between" gap={12}>
@@ -371,8 +373,7 @@ export default function StudentDetailContentPage() {
                 <Typography.Text
                   strong={isCurrent}
                   style={{
-                    textDecoration: isDone ? "line-through" : "none",
-                    color: isDone ? "#94a3b8" : undefined,
+                    color: isDone ? "#16a34a" : undefined,
                   }}
                 >
                   {step.label}
@@ -382,7 +383,7 @@ export default function StudentDetailContentPage() {
                   style={{
                     display: "block",
                     marginTop: 2,
-                    textDecoration: isDone ? "line-through" : "none",
+                    color: isDone ? "#16a34a" : undefined,
                   }}
                 >
                   {step.children?.map((child) => child.label).join(", ") ??
@@ -400,10 +401,7 @@ export default function StudentDetailContentPage() {
       }),
     [
       currentStageIndex,
-      handleSelectStage,
-      onUpdateLoading,
       stepsSource,
-      updatingStageId,
     ],
   );
 
@@ -641,7 +639,12 @@ export default function StudentDetailContentPage() {
               </div>
 
               <div>
-                <Typography.Text strong>Visa Granted At</Typography.Text>
+                <Flex align="center" justify="space-between" gap={8}>
+                  <Typography.Text strong>Visa Granted At</Typography.Text>
+                  <Button size="small" type="link" onClick={handleOpenVisaGrantModal}>
+                    Edit
+                  </Button>
+                </Flex>
                 <Typography.Text style={{ display: "block" }}>
                   {visaGrantedAtLabel}
                 </Typography.Text>
@@ -709,6 +712,29 @@ export default function StudentDetailContentPage() {
             options={visaStatusOptions}
             placeholder="Pilih status visa"
             style={{ width: "100%" }}
+          />
+        </Space>
+      </Modal>
+
+      <Modal
+        open={visaGrantModalOpen}
+        title="Edit Visa Grant Date"
+        onCancel={handleCloseVisaGrantModal}
+        onOk={() => void handleSubmitVisaGrantDate()}
+        okText="Simpan"
+        cancelText="Batal"
+        confirmLoading={onUpdateLoading}
+        destroyOnHidden
+      >
+        <Space direction="vertical" size={12} style={{ width: "100%" }}>
+          <Typography.Text type="secondary">
+            Masukkan tanggal grant visa manual.
+          </Typography.Text>
+          <DatePicker
+            value={selectedVisaGrantedAt}
+            onChange={(value) => setSelectedVisaGrantedAt(value)}
+            style={{ width: "100%" }}
+            format="DD MMM YYYY"
           />
         </Space>
       </Modal>

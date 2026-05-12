@@ -66,6 +66,7 @@ type TranslationRow = DocumentWithUrl & {
   file_path?: string | null;
   file_type?: string | null;
   page_count?: number | null;
+  is_existing_translation?: boolean;
 };
 
 type TranslationQuotaError = Error & {
@@ -174,6 +175,7 @@ type TranslationComponentProps = {
   student_name?: string;
   student_country?: string;
   translation_quota?: number;
+  student_has_initial_translations?: boolean;
 };
 
 export default function TranslationComponent({
@@ -181,6 +183,7 @@ export default function TranslationComponent({
   student_name,
   student_country,
   translation_quota,
+  student_has_initial_translations,
 }: TranslationComponentProps) {
   const { notification } = App.useApp();
   const { user_id } = useAuth();
@@ -311,6 +314,7 @@ export default function TranslationComponent({
         file_name: translation?.file_name ?? null,
         file_type: translation?.file_type ?? docFileTypeMap.get(docId) ?? null,
         page_count: translation?.page_count ?? null,
+        is_existing_translation: translation?.is_existing_translation ?? false,
         status:
           translation?.status ?? (translation ? "pending" : "not started"),
         updated_at: translation?.updated_at ?? null,
@@ -358,7 +362,17 @@ export default function TranslationComponent({
           throw new Error("Gagal menghitung jumlah halaman dokumen.");
         }
         const remainingQuota = Number(translation_quota ?? 0);
-        const requiredQuota = pageCount;
+        const shouldDeductQuota = !(
+          row.is_existing_translation ||
+          (!row.translation_id && student_has_initial_translations)
+        );
+        const previousPageCount =
+          row.translation_id && typeof row.page_count === "number"
+            ? row.page_count
+            : 0;
+        const requiredQuota = shouldDeductQuota
+          ? Math.max(0, pageCount - previousPageCount)
+          : 0;
         if (requiredQuota > remainingQuota) {
           const quotaError: TranslationQuotaError = new Error(
             "translation_quota_exceeded_local",
@@ -377,6 +391,9 @@ export default function TranslationComponent({
           file_name: safeName,
           file_type: file.type,
           page_count: pageCount,
+          is_existing_translation:
+            row.is_existing_translation ||
+            (!row.translation_id && Boolean(student_has_initial_translations)),
           status: "pending",
         };
 
@@ -436,6 +453,7 @@ export default function TranslationComponent({
       student_id,
       student_name,
       translation_quota,
+      student_has_initial_translations,
       uploadDocument,
       user_id,
     ],

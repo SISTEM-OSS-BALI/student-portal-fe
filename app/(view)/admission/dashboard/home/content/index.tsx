@@ -396,6 +396,7 @@ export default function AdmissionDashboardHomeContent() {
   const [countryFilter, setCountryFilter] = useState<string>("all");
   const [stepFilter, setStepFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [lastUpdateFilter, setLastUpdateFilter] = useState<string>("all");
 
   const { data: students = [], fetchLoading: studentsLoading } =
     useUserRoleStudents();
@@ -587,19 +588,74 @@ export default function AdmissionDashboardHomeContent() {
     return labels.filter(Boolean).sort((a, b) => a.localeCompare(b));
   }, [activeStudents]);
 
+  const lastActivityByStudent = useMemo(() => {
+    const result: Record<string, number> = {};
+
+    const setLatestTime = (studentId: string, value?: string | null) => {
+      if (!value) return;
+      const timestamp = new Date(value).getTime();
+      if (Number.isNaN(timestamp)) return;
+      if (!result[studentId] || timestamp > result[studentId]) {
+        result[studentId] = timestamp;
+      }
+    };
+
+    activeStudents.forEach((student) => {
+      const key = String(student.id);
+      setLatestTime(key, student.updated_at);
+      setLatestTime(key, student.student_status_updated_at);
+      setLatestTime(key, student.visa_granted_at);
+    });
+
+    documentTranslations.forEach((item) => {
+      setLatestTime(String(item.student_id), item.updated_at ?? item.created_at);
+    });
+
+    answerApprovals.forEach((item) => {
+      setLatestTime(
+        String(item.student_id),
+        item.reviewed_at ?? item.updated_at ?? item.created_at,
+      );
+    });
+
+    return result;
+  }, [activeStudents, answerApprovals, documentTranslations]);
+
   const pipelineStudents = useMemo(() => {
+    const nowTime = new Date().getTime();
+
     return activeStudents.filter((student) => {
       const country = getCountryName(student);
       const step = getCurrentStepLabel(student);
       const status = getStudentPipelineStatus(student).label;
+      const lastActivityAt = lastActivityByStudent[String(student.id)];
 
       if (countryFilter !== "all" && country !== countryFilter) return false;
       if (stepFilter !== "all" && step !== stepFilter) return false;
       if (statusFilter !== "all" && status !== statusFilter) return false;
+      if (lastUpdateFilter !== "all" && lastActivityAt) {
+        const ageMs = nowTime - lastActivityAt;
+        if (lastUpdateFilter === "today" && ageMs > 24 * 60 * 60 * 1000) {
+          return false;
+        }
+        if (lastUpdateFilter === "7d" && ageMs > 7 * 24 * 60 * 60 * 1000) {
+          return false;
+        }
+        if (lastUpdateFilter === "30d" && ageMs > 30 * 24 * 60 * 60 * 1000) {
+          return false;
+        }
+      }
 
       return true;
     });
-  }, [activeStudents, countryFilter, statusFilter, stepFilter]);
+  }, [
+    activeStudents,
+    countryFilter,
+    lastActivityByStudent,
+    lastUpdateFilter,
+    statusFilter,
+    stepFilter,
+  ]);
 
   const visaSummary = useMemo(() => {
     const counts = { granted: 0, processing: 0, refused: 0 };
@@ -883,6 +939,18 @@ export default function AdmissionDashboardHomeContent() {
                 { value: "Cancel", label: "Cancel" },
               ]}
             />
+
+            <Select
+              value={lastUpdateFilter}
+              onChange={setLastUpdateFilter}
+              style={{ minWidth: 180 }}
+              options={[
+                { value: "all", label: "All Last Updates" },
+                { value: "today", label: "Updated Today" },
+                { value: "7d", label: "Updated Last 7 Days" },
+                { value: "30d", label: "Updated Last 30 Days" },
+              ]}
+            />
           </div>
 
           <div style={{ overflowX: "auto" }}>
@@ -894,6 +962,7 @@ export default function AdmissionDashboardHomeContent() {
                   <th style={{ padding: "12px 10px" }}>Visa Type</th>
                   <th style={{ padding: "12px 10px" }}>Step</th>
                   <th style={{ padding: "12px 10px" }}>Status</th>
+                  <th style={{ padding: "12px 10px" }}>Last Update</th>
                 </tr>
               </thead>
 
@@ -902,6 +971,7 @@ export default function AdmissionDashboardHomeContent() {
                   const stepLabel = getCurrentStepLabel(student);
                   const stepTone = getStepTone(stepLabel);
                   const status = getStudentPipelineStatus(student);
+                  const lastActivityAt = lastActivityByStudent[String(student.id)];
 
                   return (
                     <tr
@@ -988,6 +1058,14 @@ export default function AdmissionDashboardHomeContent() {
                         >
                           {status.label}
                         </Tag>
+                      </td>
+
+                      <td style={{ padding: "14px 10px" }}>
+                        <Text type="secondary">
+                          {lastActivityAt
+                            ? formatDateTime(new Date(lastActivityAt).toISOString())
+                            : "-"}
+                        </Text>
                       </td>
                     </tr>
                   );

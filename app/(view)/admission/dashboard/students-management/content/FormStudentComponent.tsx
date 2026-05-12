@@ -6,7 +6,7 @@ import {
   UserDataModel,
   StudentFormValues,
 } from "@/app/models/user";
-import { Button, Form, Input, InputNumber, Select, Space } from "antd";
+import { Button, Form, Input, InputNumber, Select, Space, Switch } from "antd";
 import { useEffect, useMemo } from "react";
 
 interface FormStudentComponentProps {
@@ -62,7 +62,7 @@ export default function FormStudentComponent({
       map.get(country_id)!.total += 1;
     });
 
-    return Array.from(map.entries()).map(([id, value]) => ({
+    return Array.from(map.values()).map((value) => ({
       id: value.stage_id,
       name: value.name,
       total: value.total,
@@ -80,8 +80,12 @@ export default function FormStudentComponent({
         name_degree: selectedStudent.name_degree ?? undefined,
         visa_type: selectedStudent.visa_type ?? undefined,
         translation_quota: selectedStudent.translation_quota ?? 0,
+        has_initial_translations:
+          selectedStudent.has_initial_translations ?? false,
         no_phone: selectedStudent.no_phone ?? undefined,
         name_consultant: selectedStudent.name_consultant ?? undefined,
+        source: selectedStudent.source ?? undefined,
+        source_category: selectedStudent.source_category ?? undefined,
       });
       return;
     }
@@ -139,6 +143,14 @@ export default function FormStudentComponent({
         rules={[{ required: true, message: "Translation quota wajib diisi" }]}
       >
         <InputNumber min={0} style={{ width: "100%" }} placeholder="0" />
+      </Form.Item>
+
+      <Form.Item
+        name="has_initial_translations"
+        label="Student Sudah Punya Dokumen Translate"
+        valuePropName="checked"
+      >
+        <Switch />
       </Form.Item>
 
       <Form.Item
@@ -215,12 +227,27 @@ export default function FormStudentComponent({
         name="source"
         label="Sumber Leads"
       >
-        <Select>
+        <Select placeholder="Pilih sumber leads">
           <Select.Option value="instagram">Instagram</Select.Option>
           <Select.Option value="facebook">Facebook</Select.Option>
           <Select.Option value="tiktok">TikTok</Select.Option>
           <Select.Option value="walkin">Walk-in</Select.Option>
           <Select.Option value="website">Website</Select.Option>
+          <Select.Option value="referral">Referral</Select.Option>
+          <Select.Option value="other">Other</Select.Option>
+        </Select>
+      </Form.Item>
+
+      <Form.Item
+        name="source_category"
+        label="Kategori Sumber Leads"
+      >
+        <Select placeholder="Pilih kategori sumber leads">
+          <Select.Option value="digital">Digital</Select.Option>
+          <Select.Option value="offline">Offline</Select.Option>
+          <Select.Option value="referral">Referral</Select.Option>
+          <Select.Option value="agent">Agent</Select.Option>
+          <Select.Option value="other">Other</Select.Option>
         </Select>
       </Form.Item>
 
