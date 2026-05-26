@@ -70,7 +70,7 @@ const filterStyle: CSSProperties = {
   width: "100%",
 };
 
-type StudentBoardStatus = "ONGOING" | "POSTPONE" | "CANCEL";
+type StudentBoardStatus = "ONGOING" | "POSTPONE" | "CANCEL" | "STUDENT_DONE";
 
 type SelectOption = {
   value: string;
@@ -112,6 +112,14 @@ const boardConfig: BoardColumnConfig[] = [
     softBg: "linear-gradient(180deg, #fff4f3 0%, #ffffff 32%)",
     borderColor: "#f5c4bf",
     accent: "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)",
+  },
+  {
+    key: "STUDENT_DONE",
+    title: "Student Done",
+    color: "#1d4ed8",
+    softBg: "linear-gradient(180deg, #eff6ff 0%, #ffffff 32%)",
+    borderColor: "#bfdbfe",
+    accent: "linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)",
   },
 ];
 
@@ -211,6 +219,15 @@ function resolveBoardStatus(value: unknown): StudentBoardStatus {
   const rawStatus = normalizeText(value);
 
   if (
+    rawStatus.includes("student done") ||
+    rawStatus.includes("done") ||
+    rawStatus.includes("completed") ||
+    rawStatus.includes("finish")
+  ) {
+    return "STUDENT_DONE";
+  }
+
+  if (
     rawStatus.includes("cancel") ||
     rawStatus.includes("canceled") ||
     rawStatus.includes("cancelled") ||
@@ -243,6 +260,8 @@ function getStudentStatusPayload(status: StudentBoardStatus): string {
       return "POSTPONE";
     case "CANCEL":
       return "CANCEL";
+    case "STUDENT_DONE":
+      return "STUDENT DONE";
     default:
       return "ON GOING";
   }
@@ -268,6 +287,13 @@ function getStatusTagMeta(status: StudentBoardStatus): {
         color: "#b42318",
         background: "#fff1f0",
         borderColor: "#ffccc7",
+      };
+    case "STUDENT_DONE":
+      return {
+        label: "Student Done",
+        color: "#1d4ed8",
+        background: "#eff6ff",
+        borderColor: "#bfdbfe",
       };
     default:
       return {
@@ -655,7 +681,7 @@ function BoardColumn({
       style={{
         background: isActive ? column.softBg : "#ffffff",
         height: "clamp(560px, calc(100vh - 360px), 820px)",
-        minWidth: 340,
+        minWidth: 0,
         display: "flex",
         flexDirection: "column",
         transition: "all 0.18s ease",
@@ -834,6 +860,7 @@ export default function StudentsManagementContent() {
     ONGOING: 1,
     POSTPONE: 1,
     CANCEL: 1,
+    STUDENT_DONE: 1,
   });
 
   const { onCreate, onCreateLoading } = useCreateUser();
@@ -878,6 +905,7 @@ export default function StudentsManagementContent() {
       ONGOING: 1,
       POSTPONE: 1,
       CANCEL: 1,
+      STUDENT_DONE: 1,
     });
   }, []);
 
@@ -1196,6 +1224,7 @@ export default function StudentsManagementContent() {
       ONGOING: [],
       POSTPONE: [],
       CANCEL: [],
+      STUDENT_DONE: [],
     };
 
     filteredStudents.forEach((student) => {
@@ -1221,6 +1250,10 @@ export default function StudentsManagementContent() {
       CANCEL: groupedStudents.CANCEL.slice(
         (pageByStatus.CANCEL - 1) * PAGE_SIZE,
         pageByStatus.CANCEL * PAGE_SIZE,
+      ),
+      STUDENT_DONE: groupedStudents.STUDENT_DONE.slice(
+        (pageByStatus.STUDENT_DONE - 1) * PAGE_SIZE,
+        pageByStatus.STUDENT_DONE * PAGE_SIZE,
       ),
     };
   }, [groupedStudents, pageByStatus]);
@@ -1614,17 +1647,16 @@ export default function StudentsManagementContent() {
           <div
             style={{
               width: "100%",
-              overflowX: "auto",
+              overflowX: "hidden",
               paddingBottom: 8,
             }}
           >
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(3, minmax(340px, 1fr))",
+                gridTemplateColumns: `repeat(${boardConfig.length}, minmax(0, 1fr))`,
                 gap: 18,
                 alignItems: "stretch",
-                minWidth: 1060,
               }}
             >
               {boardConfig.map((column) => (

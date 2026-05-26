@@ -12,6 +12,7 @@ import { Card, Empty, Select, Space, Tag, Typography } from "antd";
 import LoadingSplash from "@/app/components/common/loading";
 import { useAnswerApprovals } from "@/app/hooks/use-answer-approvals";
 import { useInformationCountries } from "@/app/hooks/use-information-country-management";
+import { useVisaTypes } from "@/app/hooks/use-visa-type-management";
 import { useSponsorLetterAiApprovals } from "@/app/hooks/use-sponsor-letter-ai-approvals";
 import { useStatementLetterAiApprovals } from "@/app/hooks/use-statement-letter-ai-approvals";
 import { useUserRoleStudents } from "@/app/hooks/use-users";
@@ -283,9 +284,35 @@ export default function DirectorDashboardHomeContent() {
   const { data: statementApprovals = [], fetchLoading: statementLoading } = useStatementLetterAiApprovals();
   const { data: sponsorApprovals = [], fetchLoading: sponsorLoading } = useSponsorLetterAiApprovals();
   const { data: informationUpdates = [], fetchLoading: informationLoading } = useInformationCountries({});
+  const { data: visaTypes = [] } = useVisaTypes();
 
   const isLoading =
     studentsLoading || approvalsLoading || statementLoading || sponsorLoading || informationLoading;
+
+  const visaTypeNameById = useMemo(() => {
+    return new Map(
+      visaTypes.map((item) => [String(item.id), String(item.name ?? "").trim()]),
+    );
+  }, [visaTypes]);
+
+  const getVisaTypeLabel = (student: UserDataModel): string => {
+    const visaTypeName = String(student.visa_type_name ?? "").trim();
+    if (visaTypeName) {
+      return visaTypeName;
+    }
+
+    const visaTypeValue = String(student.visa_type ?? "").trim();
+    if (!visaTypeValue) {
+      return "Student Visa";
+    }
+
+    const mappedName = visaTypeNameById.get(visaTypeValue);
+    if (mappedName) {
+      return mappedName;
+    }
+
+    return visaTypeValue.replace(/_/g, " ");
+  };
 
   const activeStudents = useMemo(() => {
     return students.filter((student) => String(student.role ?? "").toUpperCase() === "STUDENT");
@@ -634,7 +661,7 @@ export default function DirectorDashboardHomeContent() {
                           </Space>
                         </td>
                         <td style={{ padding: "14px 8px" }}>
-                          <Text>{String(student.visa_type ?? "Student Visa").replace(/_/g, " ")}</Text>
+                          <Text>{getVisaTypeLabel(student)}</Text>
                         </td>
                         <td style={{ padding: "14px 8px" }}>
                           <Tag

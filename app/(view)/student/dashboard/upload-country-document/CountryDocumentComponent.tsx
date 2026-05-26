@@ -27,6 +27,7 @@ import {
 import type { UploadFile, UploadProps } from "antd";
 import { useAuth } from "@/app/utils/use-auth";
 import { useStagesManagement } from "@/app/hooks/use-stages-management";
+import { useVisaTypes } from "@/app/hooks/use-visa-type-management";
 import { useUser } from "@/app/hooks/use-users";
 import { useDocumentUpload } from "@/app/hooks/use-document-uploads";
 import {
@@ -227,6 +228,7 @@ export default function CountryDocumentComponent() {
   const { user_id } = useAuth();
   const { data: currentUser, fetchLoading: userLoading } = useUser({ id: user_id });
   const { data: stages, fetchLoading: stagesLoading } = useStagesManagement({});
+  const { data: visaTypes = [] } = useVisaTypes();
   const { uploadDocument } = useDocumentUpload();
 
   const {
@@ -255,6 +257,26 @@ export default function CountryDocumentComponent() {
   const documentMap = useMemo(() => {
     return new Map(countryDocuments.map((doc) => [String(doc.id), doc]));
   }, [countryDocuments]);
+
+  const visaTypeNameById = useMemo(() => {
+    return new Map(
+      visaTypes.map((item) => [String(item.id), String(item.name ?? "").trim()]),
+    );
+  }, [visaTypes]);
+
+  const visaTypeLabel = useMemo(() => {
+    const named = String(currentUser?.visa_type_name ?? "").trim();
+    if (named) {
+      return named;
+    }
+
+    const raw = String(currentUser?.visa_type ?? "").trim();
+    if (!raw) {
+      return "";
+    }
+
+    return visaTypeNameById.get(raw) ?? raw.replace(/_/g, " ");
+  }, [currentUser?.visa_type, currentUser?.visa_type_name, visaTypeNameById]);
 
   const latestAnswerByDocumentId = useMemo(() => {
     const map = new Map<string, AnswerDocumentDataModel>();
@@ -424,7 +446,7 @@ export default function CountryDocumentComponent() {
                     </Tag>
                   ) : null}
 
-                  {currentUser?.visa_type ? (
+                  {visaTypeLabel ? (
                     <Tag
                       style={{
                         borderRadius: 999,
@@ -434,7 +456,7 @@ export default function CountryDocumentComponent() {
                         color: "#4338ca",
                       }}
                     >
-                      {currentUser.visa_type}
+                      {visaTypeLabel}
                     </Tag>
                   ) : null}
 
@@ -518,6 +540,21 @@ export default function CountryDocumentComponent() {
                                     }}
                                   >
                                     {isCompleted ? "Done" : "Pending"}
+                                  </span>
+                                  <span
+                                    style={{
+                                      display: "inline-block",
+                                      marginTop: 4,
+                                      marginLeft: 6,
+                                      fontSize: 11,
+                                      color: doc.required ? "#92400e" : "#475569",
+                                      background: doc.required ? "#fff7ed" : "#f1f5f9",
+                                      borderRadius: 999,
+                                      padding: "2px 8px",
+                                      fontWeight: 600,
+                                    }}
+                                  >
+                                    {doc.required ? "Required" : "Optional"}
                                   </span>
                                 </button>
                               );

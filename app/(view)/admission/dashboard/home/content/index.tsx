@@ -20,6 +20,7 @@ import LoadingSplash from "@/app/components/common/loading";
 import { useAnswerApprovals } from "@/app/hooks/use-answer-approvals";
 import { useDocumentTranslations } from "@/app/hooks/use-document-translations";
 import { useInformationCountries } from "@/app/hooks/use-information-country-management";
+import { useVisaTypes } from "@/app/hooks/use-visa-type-management";
 import { useUserRoleStudents } from "@/app/hooks/use-users";
 import type { AnswerApprovalsDataModel } from "@/app/models/answer-approvals";
 import type { DocumentTranslationDataModel } from "@/app/models/document-translations";
@@ -406,6 +407,7 @@ export default function AdmissionDashboardHomeContent() {
     useAnswerApprovals();
   const { data: informationUpdates = [], fetchLoading: informationLoading } =
     useInformationCountries({});
+  const { data: visaTypes = [] } = useVisaTypes();
 
   const { data: cvDocuments = [], isLoading: cvLoading } = useQuery({
     queryKey: ["generated-cv-ai-documents", "dashboard"],
@@ -448,6 +450,31 @@ export default function AdmissionDashboardHomeContent() {
     cvLoading ||
     statementLoading ||
     sponsorLoading;
+
+  const visaTypeNameById = useMemo(() => {
+    return new Map(
+      visaTypes.map((item) => [String(item.id), String(item.name ?? "").trim()]),
+    );
+  }, [visaTypes]);
+
+  const getVisaTypeLabel = (student: UserDataModel): string => {
+    const visaTypeName = String(student.visa_type_name ?? "").trim();
+    if (visaTypeName) {
+      return visaTypeName;
+    }
+
+    const visaTypeValue = String(student.visa_type ?? "").trim();
+    if (!visaTypeValue) {
+      return "Student Visa";
+    }
+
+    const mappedName = visaTypeNameById.get(visaTypeValue);
+    if (mappedName) {
+      return mappedName;
+    }
+
+    return visaTypeValue.replace(/_/g, " ");
+  };
 
   const activeStudents = useMemo(() => {
     return students.filter(
@@ -1021,12 +1048,7 @@ export default function AdmissionDashboardHomeContent() {
                       </td>
 
                       <td style={{ padding: "14px 10px" }}>
-                        <Text>
-                          {String(student.visa_type ?? "Student Visa").replace(
-                            /_/g,
-                            " ",
-                          )}
-                        </Text>
+                        <Text>{getVisaTypeLabel(student)}</Text>
                       </td>
 
                       <td style={{ padding: "14px 10px" }}>

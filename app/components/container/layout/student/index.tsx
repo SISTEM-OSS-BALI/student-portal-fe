@@ -36,6 +36,7 @@ import { useChatMentions, useMarkMentionRead } from "@/app/hooks/use-chat";
 import { useTicketMessages } from "@/app/hooks/use-ticket-message";
 import { usePromos } from "@/app/hooks/use-promo";
 import { useAnswerDocuments } from "@/app/hooks/use-answer-documents";
+import { useStagesManagement } from "@/app/hooks/use-stages-management";
 import InboxDrawer from "@/app/components/common/inbox-drawer";
 import GlobalSearchModal, {
   type GlobalSearchItem,
@@ -125,6 +126,42 @@ function isImageByName(value?: string | null): boolean {
   return /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(String(value ?? "").trim());
 }
 
+function normalizeDocText(value?: string | null): string {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase();
+}
+
+function isSignatureDocument(meta: {
+  label?: string | null;
+  internalCode?: string | null;
+  fileName?: string | null;
+}): boolean {
+  const text = `${normalizeDocText(meta.label)} ${normalizeDocText(meta.internalCode)} ${normalizeDocText(meta.fileName)}`;
+  return (
+    text.includes("signature") ||
+    text.includes("sign") ||
+    text.includes("ttd") ||
+    text.includes("tanda_tangan") ||
+    text.includes("tanda tangan")
+  );
+}
+
+function isProfilePhotoDocument(meta: {
+  label?: string | null;
+  internalCode?: string | null;
+  fileName?: string | null;
+}): boolean {
+  const text = `${normalizeDocText(meta.label)} ${normalizeDocText(meta.internalCode)} ${normalizeDocText(meta.fileName)}`;
+  return (
+    text.includes("photo") ||
+    text.includes("foto") ||
+    text.includes("4x6") ||
+    text.includes("pas foto") ||
+    text.includes("profile")
+  );
+}
+
 function toLowResImageUrl(url?: string | null): string | undefined {
   const raw = String(url ?? "").trim();
   if (!raw) return undefined;
@@ -180,6 +217,7 @@ export default function StudentLayout({
     enabled: Boolean(user_id),
     queryString: "active=true",
   });
+  const { data: stages = [] } = useStagesManagement({});
   const { data: uploadedDocuments = [] } = useAnswerDocuments({
     enabled: Boolean(user_id),
     queryString: user_id ? `student_id=${user_id}` : undefined,
@@ -188,23 +226,60 @@ export default function StudentLayout({
   const shouldShowDocumentConsentModal =
     detailUser?.document_consent_signed === false;
 
+  const documentMetaById = useMemo(() => {
+    const countryId = String(detailUser?.stage?.country_id ?? "");
+    const filteredStages = countryId
+      ? stages.filter((stage) => String(stage.country_id ?? "") === countryId)
+      : stages;
+
+    return new Map(
+      filteredStages.map((stage) => [
+        String(stage.document_id ?? stage.document?.id ?? ""),
+        {
+          label: stage.document?.label,
+          internalCode: stage.document?.internal_code,
+        },
+      ]),
+    );
+  }, [detailUser?.stage?.country_id, stages]);
+
   const avatarFromUploadedDocument = useMemo(() => {
-    const latestImageDocument = [...(uploadedDocuments ?? [])]
+    const imageDocuments = [...(uploadedDocuments ?? [])]
       .filter(
         (doc) =>
           Boolean(doc.file_url) &&
           (isImageMimeType(doc.file_type) ||
             isImageByName(doc.file_name) ||
             isImageByName(doc.file_url)),
-      )
-      .sort(
-        (a, b) =>
-          new Date(b.updated_at ?? b.created_at ?? 0).getTime() -
-          new Date(a.updated_at ?? a.created_at ?? 0).getTime(),
-      )[0];
+      );
 
-    return toLowResImageUrl(latestImageDocument?.file_url);
-  }, [uploadedDocuments]);
+    const sortedByNewest = imageDocuments.sort(
+      (a, b) =>
+        new Date(b.updated_at ?? b.created_at ?? 0).getTime() -
+        new Date(a.updated_at ?? a.created_at ?? 0).getTime(),
+    );
+
+    const nonSignatureImages = sortedByNewest.filter((doc) => {
+      const meta = documentMetaById.get(String(doc.document_id ?? ""));
+      return !isSignatureDocument({
+        label: meta?.label,
+        internalCode: meta?.internalCode,
+        fileName: doc.file_name,
+      });
+    });
+
+    const prioritizedProfilePhoto =
+      nonSignatureImages.find((doc) => {
+        const meta = documentMetaById.get(String(doc.document_id ?? ""));
+        return isProfilePhotoDocument({
+          label: meta?.label,
+          internalCode: meta?.internalCode,
+          fileName: doc.file_name,
+        });
+      }) ?? nonSignatureImages[0];
+
+    return toLowResImageUrl(prioritizedProfilePhoto?.file_url);
+  }, [documentMetaById, uploadedDocuments]);
 
   const effectiveAvatarUrl =
     avatarFromUploadedDocument ||

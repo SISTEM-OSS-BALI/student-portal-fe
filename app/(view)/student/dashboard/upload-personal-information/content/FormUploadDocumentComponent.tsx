@@ -34,6 +34,17 @@ import type {
 const { TextArea } = Input;
 const { Text, Title } = Typography;
 
+const renderQuestionLabel = (question: QuestionDataModel) => (
+  <Space direction="vertical" size={2} style={{ width: "100%" }}>
+    <span>{question.text}</span>
+    {question.help_text ? (
+      <Typography.Text type="secondary" style={{ fontSize: 12, fontWeight: 400 }}>
+        {question.help_text}
+      </Typography.Text>
+    ) : null}
+  </Space>
+);
+
 const renderQuestionField = (question: QuestionDataModel) => {
   const options =
     question.options?.map((option) => ({
@@ -133,7 +144,12 @@ function buildFieldValue(
 function buildInitialFormValues(
   baseQuestions: QuestionDataModel[],
   answerByQuestionId: Map<string, AnswerQuestionDataModel>,
+  allowMultipleSubmissions: boolean,
 ) {
+  if (allowMultipleSubmissions) {
+    return {};
+  }
+
   const values: Record<string, unknown> = {};
 
   baseQuestions.forEach((question) => {
@@ -271,16 +287,22 @@ export default function FormUploadDocumentComponent() {
       return;
     }
 
+    const activeBase = (bases ?? []).find(
+      (base) => String(base.id) === String(resolvedBaseId),
+    );
+
     const values = buildInitialFormValues(
       activeBaseQuestions,
       answerByQuestionId,
+      Boolean(activeBase?.allow_multiple_submissions),
     );
     form.setFieldsValue(values);
-  }, [activeBaseQuestions, answerByQuestionId, form, resolvedBaseId]);
+  }, [activeBaseQuestions, answerByQuestionId, bases, form, resolvedBaseId]);
 
   const handleSubmitAnswers = async (
     baseId: string,
     baseQuestions: QuestionDataModel[],
+    allowMultipleSubmissions: boolean,
     values: Record<string, unknown>,
   ) => {
     if (!currentUser?.id) {
@@ -334,8 +356,7 @@ export default function FormUploadDocumentComponent() {
         }
 
         const existing = answerByQuestionId.get(String(question.id));
-
-        if (existing) {
+        if (existing && !allowMultipleSubmissions) {
           return updateAnswerQuestion({
             id: existing.id,
             payload,
@@ -352,42 +373,50 @@ export default function FormUploadDocumentComponent() {
       const results = await Promise.all(tasks);
       const submitted = results.filter(Boolean).length;
 
-      const refreshedValues = buildInitialFormValues(
-        baseQuestions,
-        new Map(
-          baseQuestions.map((question) => {
-            const existing = answerByQuestionId.get(String(question.id));
-            const rawValue = values?.[String(question.id)];
+      if (allowMultipleSubmissions) {
+        form.resetFields(baseQuestions.map((question) => String(question.id)));
+      } else {
+        const refreshedValues = buildInitialFormValues(
+          baseQuestions,
+          new Map(
+            baseQuestions.map((question) => {
+              const existing = answerByQuestionId.get(String(question.id));
+              const rawValue = values?.[String(question.id)];
 
-            const fakeAnswer: AnswerQuestionDataModel = {
-              id: existing?.id ?? "",
-              question_id: String(question.id),
-              answer_text: ["SELECT", "RADIO", "CHECKBOX"].includes(
-                question.input_type,
-              )
-                ? undefined
-                : normalizeAnswerText(rawValue),
-              selected_option_ids: ["CHECKBOX"].includes(question.input_type)
-                ? Array.isArray(rawValue)
-                  ? rawValue.map(String)
-                  : []
-                : ["SELECT", "RADIO"].includes(question.input_type) && rawValue
-                  ? [String(rawValue)]
-                  : [],
-              created_at: existing?.created_at ?? new Date().toISOString(),
-            };
+              const fakeAnswer: AnswerQuestionDataModel = {
+                id: existing?.id ?? "",
+                question_id: String(question.id),
+                answer_text: ["SELECT", "RADIO", "CHECKBOX"].includes(
+                  question.input_type,
+                )
+                  ? undefined
+                  : normalizeAnswerText(rawValue),
+                selected_option_ids: ["CHECKBOX"].includes(question.input_type)
+                  ? Array.isArray(rawValue)
+                    ? rawValue.map(String)
+                    : []
+                  : ["SELECT", "RADIO"].includes(question.input_type) &&
+                      rawValue
+                    ? [String(rawValue)]
+                    : [],
+                created_at: existing?.created_at ?? new Date().toISOString(),
+              };
 
-            return [String(question.id), fakeAnswer];
-          }),
-        ),
-      );
+              return [String(question.id), fakeAnswer];
+            }),
+          ),
+          false,
+        );
 
-      form.setFieldsValue(refreshedValues);
+        form.setFieldsValue(refreshedValues);
+      }
 
       notification.success({
         message: "Jawaban berhasil disimpan",
         description: submitted
-          ? `${submitted} jawaban berhasil disubmit dan field tetap terisi.`
+          ? allowMultipleSubmissions
+            ? `${submitted} jawaban berhasil disubmit. Silakan isi jawaban berikutnya.`
+            : `${submitted} jawaban berhasil disubmit dan field tetap terisi.`
           : "Tidak ada perubahan jawaban yang dikirim.",
       });
     } catch (error) {
@@ -413,14 +442,19 @@ export default function FormUploadDocumentComponent() {
           key={base.id}
           layout="vertical"
           onFinish={(values) =>
-            handleSubmitAnswers(String(base.id), baseQuestions, values)
+            handleSubmitAnswers(
+              String(base.id),
+              baseQuestions,
+              Boolean(base.allow_multiple_submissions),
+              values,
+            )
           }
         >
           <Row gutter={[16, 16]}>
             {baseQuestions.map((question) => (
               <Col key={question.id} xs={24} md={12}>
                 <Form.Item
-                  label={question.text}
+                  label={renderQuestionLabel(question)}
                   name={String(question.id)}
                   rules={
                     question.required

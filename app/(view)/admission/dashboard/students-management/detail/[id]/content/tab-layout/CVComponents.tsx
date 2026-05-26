@@ -84,6 +84,10 @@ const CV_TEMPLATE_PUBLIC_PATH =
   (typeof process !== "undefined" &&
     process.env?.NEXT_PUBLIC_CV_TEMPLATE_PUBLIC_PATH) ||
   "/assets/file/Template CV.docx";
+const CV_MANUAL_TEMPLATE_PUBLIC_PATH =
+  (typeof process !== "undefined" &&
+    process.env?.NEXT_PUBLIC_CV_MANUAL_TEMPLATE_PUBLIC_PATH) ||
+  "/assets/file/Template CV.docx";
 const GENERATED_CV_FOLDER = "generate-cv-ai";
 
 const WORD_DOCUMENT_MIME_TYPE =
@@ -222,6 +226,7 @@ export default function CVComponents({ student_id }: CVComponentsProps) {
   const [savingApprovalStatus, setSavingApprovalStatus] = useState<
     string | null
   >(null);
+  const [manualCreatingCv, setManualCreatingCv] = useState(false);
 
   const [generatedCvUrl, setGeneratedCvUrl] = useState<string | null>(null);
   const [generatedCvPath, setGeneratedCvPath] = useState<string | null>(null);
@@ -673,6 +678,83 @@ export default function CVComponents({ student_id }: CVComponentsProps) {
     timeline.submittedAt,
     uploadDocument,
   ]);
+
+  const handleCreateManualCv = useCallback(async () => {
+    if (!student_id) {
+      notification.warning({
+        message: "Student ID kosong",
+        description: "Tidak bisa membuat CV manual tanpa student_id.",
+      });
+      return;
+    }
+
+    setManualCreatingCv(true);
+    try {
+      const templatePath = CV_MANUAL_TEMPLATE_PUBLIC_PATH;
+      const templateUrl =
+        typeof window !== "undefined"
+          ? new URL(templatePath, window.location.origin).toString()
+          : templatePath;
+      const templateRes = await fetch(templateUrl, { cache: "no-store" });
+      if (!templateRes.ok) {
+        throw new Error("Template CV manual tidak dapat diunduh.");
+      }
+
+      const templateBuffer = await templateRes.arrayBuffer();
+      const manualFileName = `${(studentData?.name ?? "student").replace(/\s+/g, "_")}_CV_MANUAL.docx`;
+      const manualFile = new File([templateBuffer], manualFileName, {
+        type: WORD_DOCUMENT_MIME_TYPE,
+      });
+
+      if (objectUrlRef.current && objectUrlRef.current.startsWith("blob:")) {
+        URL.revokeObjectURL(objectUrlRef.current);
+      }
+      const localPreviewUrl = URL.createObjectURL(manualFile);
+      objectUrlRef.current = localPreviewUrl;
+      setGeneratedCvUrl(localPreviewUrl);
+      setGeneratedCvPath(null);
+      setGeneratedCvContent(null);
+
+      const uploadPath = `${GENERATED_CV_FOLDER}/${student_id}/${Date.now()}-${manualFileName}`;
+      const uploaded = await uploadDocument({
+        file: manualFile,
+        path: uploadPath,
+        content_type: WORD_DOCUMENT_MIME_TYPE,
+        student_folder_key: `${studentData?.name ?? "student"}-${student_id}`,
+      });
+
+      await onUpsertGeneratedCvAi({
+        student_id,
+        file_url: uploaded.url,
+        file_path: uploaded.path,
+        file_name: manualFileName,
+        file_type: WORD_DOCUMENT_MIME_TYPE,
+        status: "generated",
+      });
+
+      setGeneratedCvUrl(uploaded.url);
+      setGeneratedCvPath(uploaded.path);
+
+      notification.success({
+        message: "CV manual siap diedit",
+        description:
+          "Draft Word dari template manual sudah dibuat dan tersimpan. Lanjutkan di Preview/Edit Word.",
+      });
+    } catch (error) {
+      notification.error({
+        message: "Buat CV manual gagal",
+        description: extractGenerateErrorMessage(error),
+      });
+    } finally {
+      setManualCreatingCv(false);
+    }
+  }, [
+    notification,
+    onUpsertGeneratedCvAi,
+    studentData?.name,
+    student_id,
+    uploadDocument,
+  ]);
   const handlePreviewCv = useCallback(() => {
     if (!previewCvUrl) {
       notification.info(
@@ -1072,6 +1154,17 @@ export default function CVComponents({ student_id }: CVComponentsProps) {
                 onClick={handleGenerateCv}
               >
                 Generate CV AI
+              </Button>
+
+              <Button
+                size="large"
+                block
+                icon={<FileTextOutlined />}
+                loading={manualCreatingCv}
+                style={{ borderRadius: 999, height: 44 }}
+                onClick={handleCreateManualCv}
+              >
+                Generate CV Manual
               </Button>
 
               <Button

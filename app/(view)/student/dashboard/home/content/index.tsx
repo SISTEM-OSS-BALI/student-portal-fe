@@ -25,6 +25,7 @@ import { useAnswerApprovals } from "@/app/hooks/use-answer-approvals";
 import { useAnswerDocuments } from "@/app/hooks/use-answer-documents";
 import { useAnswerQuestions } from "@/app/hooks/use-answer-questions";
 import { useStagesManagement } from "@/app/hooks/use-stages-management";
+import { useVisaTypes } from "@/app/hooks/use-visa-type-management";
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -92,6 +93,7 @@ type StudentUser = {
   stage?: StudentStage;
   name_campus?: string;
   visa_type?: string;
+  visa_type_name?: string;
   degree?: string;
   translation_quota?: number;
   joined_at?: string;
@@ -146,19 +148,50 @@ function formatVisaType(value?: string): string {
     .join(" ");
 }
 
+function resolveVisaTypeLabel(
+  student: StudentUser | undefined,
+  visaTypeNameById: Map<string, string>,
+): string {
+  const visaTypeName = String(student?.visa_type_name ?? "").trim();
+  if (visaTypeName) {
+    return visaTypeName;
+  }
+
+  const visaTypeValue = String(student?.visa_type ?? "").trim();
+  if (!visaTypeValue) {
+    return "-";
+  }
+
+  const mappedName = visaTypeNameById.get(visaTypeValue);
+  if (mappedName) {
+    return mappedName;
+  }
+
+  return formatVisaType(visaTypeValue);
+}
+
 function getStepsData(user?: StudentUser) {
   const rawSteps = user?.stage?.country?.steps ?? [];
-  const sortedSteps = [...rawSteps].sort(
-    (a, b) => extractStepNumber(a.label) - extractStepNumber(b.label),
-  );
+  const sortedSteps = [...rawSteps].sort((a, b) => {
+    const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+
+    if (timeA !== timeB) {
+      return timeA - timeB;
+    }
+
+    return extractStepNumber(a.label) - extractStepNumber(b.label);
+  });
 
   const stepItems = sortedSteps.map((step) => ({
-    title: step.children?.map((child) => child.label).join(", ") || step.label,
+    title: step.label,
   }));
 
-  const currentIndex = sortedSteps.findIndex(
-    (step) => step.id === user?.current_step_id,
-  );
+  const currentStepId = String(user?.current_step_id ?? "");
+  const currentIndex = sortedSteps.findIndex((step) => {
+    if (step.id === currentStepId) return true;
+    return (step.children ?? []).some((child) => child.id === currentStepId);
+  });
 
   const visaGranted = (user?.visa_status ?? "").toLowerCase() === "grant";
 
@@ -178,16 +211,35 @@ function getStepsData(user?: StudentUser) {
       const index = sortedSteps.findIndex((item) => item.id === step.id);
       return visaGranted ? false : index >= currentStep;
     })
-    .flatMap((step) =>
-      (step.children ?? []).map((child) => ({
+    .flatMap((step) => {
+      const sortedChildren = [...(step.children ?? [])].sort(
+        (a, b) => extractStepNumber(a.label) - extractStepNumber(b.label),
+      );
+
+      if (sortedChildren.length === 0) {
+        return [
+          {
+            id: step.id,
+            title: step.label,
+            priority:
+              step.id === currentStepId ||
+              sortedChildren.some((child) => child.id === currentStepId)
+                ? ("Current Step" as const)
+                : ("Upcoming Step" as const),
+          },
+        ];
+      }
+
+      return sortedChildren.map((child) => ({
         id: child.id,
         title: child.label,
         priority:
-          step.id === user?.current_step_id
+          step.id === currentStepId ||
+          sortedChildren.some((child) => child.id === currentStepId)
             ? ("Current Step" as const)
             : ("Upcoming Step" as const),
-      })),
-    );
+      }));
+    });
 
   return {
     stepItems,
@@ -251,8 +303,14 @@ export default function DashboardContent() {
     queryString: user_id ? `student_id=${user_id}` : undefined,
     enabled: Boolean(user_id),
   });
+  const { data: visaTypes = [] } = useVisaTypes();
 
   const student = user as StudentUser | undefined;
+  const visaTypeNameById = useMemo(() => {
+    return new Map(
+      visaTypes.map((item) => [String(item.id), String(item.name ?? "").trim()]),
+    );
+  }, [visaTypes]);
 
   const { stepItems, currentStep, pendingTasks } = useMemo(
     () => getStepsData(student),
@@ -537,7 +595,7 @@ export default function DashboardContent() {
                   <Text type="secondary" style={{ fontSize: 12 }}>
                     Visa Type
                   </Text>
-                  <Text strong>{formatVisaType(student?.visa_type)}</Text>
+                  <Text strong>{resolveVisaTypeLabel(student, visaTypeNameById)}</Text>
                 </Space>
               </Col>
 
