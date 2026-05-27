@@ -205,22 +205,22 @@ function ChatBubbleItem({
   const timeLabel = [time, date].filter(Boolean).join(" · ");
 
   const avatarBg = isMine ? "#0f4f95" : "#f59e0b";
-  const bubbleBg = isMine ? "#f5f5f5" : "#174f93";
-  const bubbleText = isMine ? "#334155" : "#ffffff";
-  const bubbleBorder = isMine ? "1px solid #d5dde8" : "1px solid transparent";
+  const bubbleBg = isMine ? "#dcf8c6" : "#ffffff";
+  const bubbleText = "#334155";
+  const bubbleBorder = isMine ? "1px solid #b8e6a0" : "1px solid #e5e7eb";
 
   return (
     <div
       style={{
         display: "flex",
-        justifyContent: isMine ? "flex-start" : "flex-end",
+        justifyContent: isMine ? "flex-end" : "flex-start",
         width: "100%",
       }}
     >
       <div
         style={{
           display: "flex",
-          flexDirection: isMine ? "row" : "row-reverse",
+          flexDirection: isMine ? "row-reverse" : "row",
           alignItems: "flex-end",
           gap: 12,
           width: "100%",
@@ -343,19 +343,23 @@ function ChatBubbleItem({
             )}
           </div>
 
-          <div
-            style={{
-              maxWidth: "72%",
-              minWidth: attachments.length && !message.text ? 180 : 160,
-              background: bubbleBg,
-              color: bubbleText,
-              border: bubbleBorder,
-              borderRadius: 28,
-              padding:
-                attachments.length && !message.text ? "14px 18px" : "14px 20px",
-              boxShadow: isMine ? "none" : "0 8px 18px rgba(23,79,147,0.14)",
-            }}
-          >
+          <div style={{ maxWidth: "72%", position: "relative" }}>
+            <div
+              style={{
+                minWidth: attachments.length && !message.text ? 180 : 160,
+                background: bubbleBg,
+                color: bubbleText,
+                border: bubbleBorder,
+                borderRadius: isMine
+                  ? "16px 6px 16px 16px"
+                  : "6px 16px 16px 16px",
+                padding:
+                  attachments.length && !message.text
+                    ? "14px 18px"
+                    : "14px 20px",
+                boxShadow: "0 2px 10px rgba(15, 23, 42, 0.06)",
+              }}
+            >
             {message.text ? (
               <Text
                 style={{
@@ -401,7 +405,7 @@ function ChatBubbleItem({
                       target="_blank"
                       rel="noreferrer"
                       style={{
-                        color: bubbleText,
+                        color: "#2563eb",
                         textDecoration: "none",
                         display: "flex",
                         alignItems: "center",
@@ -424,6 +428,21 @@ function ChatBubbleItem({
                 )}
               </div>
             ) : null}
+            </div>
+            <div
+              style={{
+                position: "absolute",
+                top: 10,
+                ...(isMine ? { right: -6 } : { left: -6 }),
+                width: 12,
+                height: 12,
+                background: bubbleBg,
+                borderBottom: bubbleBorder,
+                borderRight: isMine ? bubbleBorder : "none",
+                borderLeft: !isMine ? bubbleBorder : "none",
+                transform: isMine ? "rotate(-35deg)" : "rotate(35deg)",
+              }}
+            />
           </div>
         </div>
       </div>

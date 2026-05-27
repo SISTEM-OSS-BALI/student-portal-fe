@@ -316,9 +316,9 @@ function MessageBubble({
   studentName?: string;
 }) {
   const attachments = message.attachments ?? [];
-  const bubbleBg = isMine ? "#0f4c8a" : "#ffffff";
-  const bubbleColor = isMine ? "#ffffff" : "#334155";
-  const borderColor = isMine ? "#0f4c8a" : "#dbe4ee";
+  const bubbleBg = isMine ? "#dcf8c6" : "#ffffff";
+  const bubbleColor = "#334155";
+  const borderColor = isMine ? "#b8e6a0" : "#e5e7eb";
   const justify = isMine ? "flex-end" : "flex-start";
 
   const senderName =
@@ -380,18 +380,19 @@ function MessageBubble({
             </Text>
           </div>
 
-          <div
-            style={{
-              borderRadius: 18,
-              border: `1px solid ${borderColor}`,
-              background: bubbleBg,
-              color: bubbleColor,
-              padding: "12px 14px",
-              boxShadow: isMine
-                ? "0 10px 20px rgba(15, 76, 138, 0.18)"
-                : "0 8px 20px rgba(15, 23, 42, 0.04)",
-            }}
-          >
+          <div style={{ position: "relative" }}>
+            <div
+              style={{
+                borderRadius: isMine
+                  ? "16px 6px 16px 16px"
+                  : "6px 16px 16px 16px",
+                border: `1px solid ${borderColor}`,
+                background: bubbleBg,
+                color: bubbleColor,
+                padding: "12px 14px",
+                boxShadow: "0 2px 10px rgba(15, 23, 42, 0.06)",
+              }}
+            >
             {message.text ? (
               <Paragraph
                 style={{
@@ -433,7 +434,7 @@ function MessageBubble({
                       target="_blank"
                       rel="noreferrer"
                       style={{
-                        color: isMine ? "#dbeafe" : "#2563eb",
+                        color: "#2563eb",
                         display: "inline-flex",
                         gap: 8,
                         alignItems: "center",
@@ -446,6 +447,21 @@ function MessageBubble({
                 )}
               </div>
             ) : null}
+            </div>
+            <div
+              style={{
+                position: "absolute",
+                top: 10,
+                ...(isMine ? { right: -6 } : { left: -6 }),
+                width: 12,
+                height: 12,
+                background: bubbleBg,
+                borderBottom: `1px solid ${borderColor}`,
+                borderRight: isMine ? `1px solid ${borderColor}` : "none",
+                borderLeft: !isMine ? `1px solid ${borderColor}` : "none",
+                transform: isMine ? "rotate(-35deg)" : "rotate(35deg)",
+              }}
+            />
           </div>
         </div>
       </Space>

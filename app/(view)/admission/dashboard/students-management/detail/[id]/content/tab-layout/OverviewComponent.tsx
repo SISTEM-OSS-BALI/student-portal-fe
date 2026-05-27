@@ -49,11 +49,22 @@ const isMentionableRole = (role?: string) => {
   return r === "ADMISSION" || r === "DIRECTOR";
 };
 
-const getUserHandle = (user: UserDataModel) => {
+const normalizeHandle = (value?: string | null) => {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]/g, "");
+};
+
+const getLegacyEmailHandle = (user: UserDataModel) => {
   const email = user.email ?? "";
-  const local = email.split("@")[0];
-  if (local) return local.toLowerCase();
-  return user.name.toLowerCase().replace(/\s+/g, "");
+  return normalizeHandle(email.split("@")[0] ?? "");
+};
+
+const getUserHandle = (user: UserDataModel) => {
+  const fromName = normalizeHandle(user.name);
+  if (fromName) return fromName;
+  return getLegacyEmailHandle(user);
 };
 
 const formatRoleLabel = (value?: string | null) => {
@@ -97,7 +108,10 @@ const useMentionHelpers = (
   const mentionMap = useMemo(() => {
     const map = new Map<string, UserDataModel>();
     mentionableUsers.forEach((user) => {
-      map.set(getUserHandle(user), user);
+      const preferredHandle = getUserHandle(user);
+      const legacyHandle = getLegacyEmailHandle(user);
+      if (preferredHandle) map.set(preferredHandle, user);
+      if (legacyHandle) map.set(legacyHandle, user);
     });
     return map;
   }, [mentionableUsers]);
@@ -953,18 +967,21 @@ export default function OverviewComponent({
       </div>
 
       <Card
-        styles={{ body: { padding: 16 } }}
+        styles={{ body: { padding: 20 } }}
         style={{
-          borderRadius: 16,
-          borderColor: "#e5e7eb",
-          background: "#fff",
-          boxShadow: "0 10px 30px rgba(15, 23, 42, 0.05)",
+          borderRadius: 20,
+          borderColor: "#dbe4ee",
+          background:
+            "linear-gradient(180deg, #ffffff 0%, #fbfdff 45%, #f8fbff 100%)",
+          boxShadow: "0 14px 34px rgba(15, 23, 42, 0.06)",
         }}
       >
-        <Space direction="vertical" size={12} style={{ width: "100%" }}>
-          <div>
-            <Typography.Text strong>Notes for This Student</Typography.Text>
-            <Typography.Text type="secondary" style={{ display: "block" }}>
+        <Space direction="vertical" size={14} style={{ width: "100%" }}>
+          <div style={{ display: "grid", gap: 4 }}>
+            <Typography.Text strong style={{ fontSize: 20, color: "#0f172a" }}>
+              Notes for This Student
+            </Typography.Text>
+            <Typography.Text type="secondary" style={{ display: "block", fontSize: 14 }}>
               Internal notes and communication log
             </Typography.Text>
           </div>
@@ -975,7 +992,17 @@ export default function OverviewComponent({
             </Typography.Text>
           )}
 
-          <div style={{ maxHeight: 260, overflow: "auto" }}>
+          <div
+            style={{
+              maxHeight: 340,
+              overflowY: "auto",
+              overflowX: "hidden",
+              padding: 8,
+              borderRadius: 16,
+              border: "1px solid #e6edf5",
+              background: "rgba(255,255,255,0.78)",
+            }}
+          >
             <List
               dataSource={internalChatMessages}
               locale={{ emptyText: "Belum ada pesan" }}
@@ -1006,21 +1033,29 @@ export default function OverviewComponent({
                       style={{ width: "100%" }}
                       justify={isMine ? "flex-end" : "flex-start"}
                     >
-                      <Space
-                        direction="vertical"
-                        size={4}
-                        style={{
-                          maxWidth: "70%",
-                          background: isMine
-                            ? "#e0f2fe"
-                            : isMentioned
-                              ? "#fef9c3"
-                              : "#f8fafc",
-                          border: "1px solid #e2e8f0",
-                          padding: "8px 12px",
-                          borderRadius: 12,
-                        }}
-                      >
+                      <div style={{ maxWidth: "76%", position: "relative" }}>
+                        <Space
+                          direction="vertical"
+                          size={6}
+                          style={{
+                            width: "100%",
+                            background: isMine
+                              ? "#dcf8c6"
+                              : isMentioned
+                                ? "#fff4c7"
+                                : "#ffffff",
+                            border: isMine
+                              ? "1px solid #b8e6a0"
+                              : isMentioned
+                                ? "1px solid #f3dc8d"
+                                : "1px solid #e5e7eb",
+                            padding: "10px 14px",
+                            borderRadius: isMine
+                              ? "16px 6px 16px 16px"
+                              : "6px 16px 16px 16px",
+                            boxShadow: "0 2px 10px rgba(15, 23, 42, 0.06)",
+                          }}
+                        >
                         <Flex
                           align="center"
                           justify="space-between"
@@ -1100,7 +1135,38 @@ export default function OverviewComponent({
                         >
                           {timeLabel}
                         </Typography.Text>
-                      </Space>
+                        </Space>
+                        <div
+                          style={{
+                            position: "absolute",
+                            top: 10,
+                            ...(isMine ? { right: -6 } : { left: -6 }),
+                            width: 12,
+                            height: 12,
+                            background: isMine
+                              ? "#dcf8c6"
+                              : isMentioned
+                                ? "#fff4c7"
+                                : "#ffffff",
+                            borderBottom: isMine
+                              ? "1px solid #b8e6a0"
+                              : isMentioned
+                                ? "1px solid #f3dc8d"
+                                : "1px solid #e5e7eb",
+                            borderRight: isMine
+                              ? "1px solid #b8e6a0"
+                              : "none",
+                            borderLeft: !isMine
+                              ? isMentioned
+                                ? "1px solid #f3dc8d"
+                                : "1px solid #e5e7eb"
+                              : "none",
+                            transform: isMine
+                              ? "rotate(-35deg)"
+                              : "rotate(35deg)",
+                          }}
+                        />
+                      </div>
                     </Flex>
                   </List.Item>
                 );
@@ -1138,7 +1204,16 @@ export default function OverviewComponent({
             </div>
           )}
 
-          <Space.Compact style={{ width: "100%" }}>
+          <Space.Compact
+            style={{
+              width: "100%",
+              border: "1px solid #dbe4ee",
+              borderRadius: 14,
+              overflow: "hidden",
+              boxShadow: "0 8px 18px rgba(15, 23, 42, 0.05)",
+              background: "#ffffff",
+            }}
+          >
             <Upload
               multiple
               beforeUpload={handleAttachmentUpload}
@@ -1147,6 +1222,13 @@ export default function OverviewComponent({
               <Button
                 icon={<PaperClipOutlined />}
                 loading={uploadingAttachments}
+                style={{
+                  border: "none",
+                  borderRight: "1px solid #e2e8f0",
+                  height: 48,
+                  width: 52,
+                  borderRadius: 0,
+                }}
               />
             </Upload>
 
@@ -1164,6 +1246,9 @@ export default function OverviewComponent({
               styles={{
                 textarea: {
                   borderRadius: 0,
+                  minHeight: 48,
+                  paddingTop: 12,
+                  paddingBottom: 12,
                 },
               }}
             />
@@ -1175,6 +1260,13 @@ export default function OverviewComponent({
                 (!chatText.trim() && pendingAttachments.length === 0) ||
                 !currentUserId
               }
+              style={{
+                border: "none",
+                borderLeft: "1px solid #e2e8f0",
+                height: 48,
+                minWidth: 88,
+                borderRadius: 0,
+              }}
             >
               Send
             </Button>

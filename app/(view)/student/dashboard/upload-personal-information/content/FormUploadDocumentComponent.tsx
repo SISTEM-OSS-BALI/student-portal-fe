@@ -19,6 +19,7 @@ import {
   Typography,
   Upload,
 } from "antd";
+import { PlusCircleOutlined } from "@ant-design/icons";
 import dayjs, { type Dayjs } from "dayjs";
 import { useAuth } from "@/app/utils/use-auth";
 import { useQuestionBases } from "@/app/hooks/use-question-bases";
@@ -281,23 +282,33 @@ export default function FormUploadDocumentComponent() {
     return questionsByBaseId.get(String(resolvedBaseId)) ?? [];
   }, [questionsByBaseId, resolvedBaseId]);
 
+  const activeBase = useMemo(() => {
+    return (bases ?? []).find((base) => String(base.id) === String(resolvedBaseId));
+  }, [bases, resolvedBaseId]);
+
+  const allowMultipleSubmissions = Boolean(
+    activeBase?.allow_multiple_submissions,
+  );
+
   useEffect(() => {
     if (!resolvedBaseId || !activeBaseQuestions.length) {
       form.resetFields();
       return;
     }
 
-    const activeBase = (bases ?? []).find(
-      (base) => String(base.id) === String(resolvedBaseId),
-    );
-
     const values = buildInitialFormValues(
       activeBaseQuestions,
       answerByQuestionId,
-      Boolean(activeBase?.allow_multiple_submissions),
+      allowMultipleSubmissions,
     );
     form.setFieldsValue(values);
-  }, [activeBaseQuestions, answerByQuestionId, bases, form, resolvedBaseId]);
+  }, [
+    activeBaseQuestions,
+    allowMultipleSubmissions,
+    answerByQuestionId,
+    form,
+    resolvedBaseId,
+  ]);
 
   const handleSubmitAnswers = async (
     baseId: string,
@@ -432,6 +443,7 @@ export default function FormUploadDocumentComponent() {
 
   const items = (bases ?? []).map((base) => {
     const baseQuestions = questionsByBaseId.get(String(base.id)) ?? [];
+    const baseAllowMultiple = Boolean(base.allow_multiple_submissions);
 
     return {
       key: String(base.id),
@@ -445,11 +457,35 @@ export default function FormUploadDocumentComponent() {
             handleSubmitAnswers(
               String(base.id),
               baseQuestions,
-              Boolean(base.allow_multiple_submissions),
+              baseAllowMultiple,
               values,
             )
           }
         >
+          {baseAllowMultiple ? (
+            <Space
+              align="center"
+              style={{
+                width: "100%",
+                justifyContent: "space-between",
+                marginBottom: 12,
+              }}
+            >
+              <Typography.Text type="secondary">
+                Section ini mendukung multiple submissions.
+              </Typography.Text>
+              <Button
+                type="link"
+                icon={<PlusCircleOutlined />}
+                onClick={() =>
+                  form.resetFields(baseQuestions.map((question) => String(question.id)))
+                }
+              >
+                Isi Jawaban Baru
+              </Button>
+            </Space>
+          ) : null}
+
           <Row gutter={[16, 16]}>
             {baseQuestions.map((question) => (
               <Col key={question.id} xs={24} md={12}>
@@ -520,6 +556,12 @@ export default function FormUploadDocumentComponent() {
         ) : (
           <Text type="secondary">Belum ada base question yang tersedia.</Text>
         )}
+
+        {allowMultipleSubmissions ? (
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            Klik ikon `+` untuk menyiapkan input response baru setelah submit.
+          </Typography.Text>
+        ) : null}
       </Space>
     </Card>
   );
