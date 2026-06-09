@@ -56,6 +56,8 @@ const resolvers: Record<string, Resolver> = {
     fetchName(`/api/users/${id}`),
   "director/dashboard/students-management/detail": (id) =>
     fetchName(`/api/users/${id}`),
+  "consultant/dashboard/students-management/detail": (id) =>
+    fetchName(`/api/users/${id}`),
   "student/dashboard/students-management/detail": (id) =>
     fetchName(`/api/users/${id}`),
   "admission/students-management/detail": (id) =>

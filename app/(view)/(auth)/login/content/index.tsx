@@ -25,6 +25,9 @@ export default function LoginContent() {
         case "ADMISSION":
           router.push("/admission/dashboard/home");
           return;
+        case "CONSULTANT":
+          router.push("/consultant/dashboard/students-management");
+          return;
         case "DIRECTOR":
           router.push("/director/dashboard/home");
           return;

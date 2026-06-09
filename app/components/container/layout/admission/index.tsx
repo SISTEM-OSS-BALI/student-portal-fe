@@ -10,6 +10,7 @@ import {
 } from "antd";
 import {
   BellOutlined,
+  LockOutlined,
   InboxOutlined,
   LogoutOutlined,
   SearchOutlined,
@@ -264,6 +265,14 @@ export default function AdmissionLayout({
   };
 
   const menuItems = [
+    {
+      key: "change-password",
+      icon: <LockOutlined />,
+      label: "Change Password",
+      onClick: () => {
+        router.push("/admission/dashboard/change-password");
+      },
+    },
     {
       key: "logout",
       icon: <LogoutOutlined />,

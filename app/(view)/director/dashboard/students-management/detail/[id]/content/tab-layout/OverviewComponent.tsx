@@ -32,7 +32,7 @@ import {
   Upload,
 } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { CloseOutlined, PaperClipOutlined } from "@ant-design/icons";
 import api from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
@@ -46,7 +46,7 @@ interface OverviewComponentProps {
 
 const isMentionableRole = (role?: string) => {
   const r = (role ?? "").toUpperCase();
-  return r === "ADMISSION" || r === "DIRECTOR";
+  return r === "ADMISSION" || r === "DIRECTOR" || r === "CONSULTANT";
 };
 
 const normalizeHandle = (value?: string | null) => {
@@ -78,6 +78,8 @@ const getRoleTagColor = (value?: string | null) => {
       return "gold";
     case "ADMISSION":
       return "blue";
+    case "CONSULTANT":
+      return "purple";
     case "STUDENT":
       return "green";
     default:
@@ -175,7 +177,7 @@ const useMentionHelpers = (
         .join("")
         .toUpperCase();
       const roleLabel = (user.role ?? "staff").toUpperCase();
-      const roleColor = roleLabel === "DIRECTOR" ? "gold" : "blue";
+      const roleColor = getRoleTagColor(roleLabel);
 
       return (
         <Mentions.Option key={handle} value={handle}>
@@ -289,9 +291,19 @@ export default function OverviewComponent({
   const detailStudentData = props.detailStudent;
 
   const { notification } = App.useApp();
+  const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
   const { user_id: currentUserId } = useAuth();
+  const detailBasePath = useMemo(() => {
+    if (pathname.includes("/consultant/dashboard/")) {
+      return "/consultant/dashboard/students-management/detail";
+    }
+    if (pathname.includes("/admission/dashboard/")) {
+      return "/admission/dashboard/students-management/detail";
+    }
+    return "/director/dashboard/students-management/detail";
+  }, [pathname]);
   const { data: usersData } = useUsers({ enabled: Boolean(currentUserId) });
   const { data: chatConversations } = useChatConversations();
   const { onCreate: onCreateConversation } = useCreateChatConversation();
@@ -875,7 +887,7 @@ export default function OverviewComponent({
               <Typography.Link
                 onClick={() =>
                   router.push(
-                    `/director/dashboard/students-management/detail/${studentId}?tab=activity-log`,
+                    `${detailBasePath}/${studentId}?tab=activity-log`,
                   )
                 }
               >

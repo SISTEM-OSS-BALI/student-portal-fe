@@ -46,7 +46,7 @@ interface OverviewComponentProps {
 
 const isMentionableRole = (role?: string) => {
   const r = (role ?? "").toUpperCase();
-  return r === "ADMISSION" || r === "DIRECTOR";
+  return r === "ADMISSION" || r === "DIRECTOR" || r === "CONSULTANT";
 };
 
 const normalizeHandle = (value?: string | null) => {
@@ -78,6 +78,8 @@ const getRoleTagColor = (value?: string | null) => {
       return "gold";
     case "ADMISSION":
       return "blue";
+    case "CONSULTANT":
+      return "purple";
     case "STUDENT":
       return "green";
     default:

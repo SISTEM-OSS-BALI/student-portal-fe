@@ -348,11 +348,13 @@ function StudentCardInner({
   dragListeners,
   dragAttributes,
   isDragging,
+  showDragHandle = true,
 }: {
   student: UserDataModel;
   dragListeners?: SortableHookResult["listeners"];
   dragAttributes?: SortableHookResult["attributes"];
   isDragging?: boolean;
+  showDragHandle?: boolean;
 }) {
   const status = getStudentBoardStatus(student);
   const statusMeta = getStatusTagMeta(status);
@@ -473,29 +475,31 @@ function StudentCardInner({
           </div>
         </Flex>
 
-        <Flex vertical align="flex-end" gap={8} style={{ flexShrink: 0 }}>
-          <div
-            {...dragAttributes}
-            {...dragListeners}
-            style={{
-              width: 30,
-              height: 30,
-              borderRadius: 11,
-              border: "1px solid #e5e7eb",
-              color: "#98a2b3",
-              display: "grid",
-              placeItems: "center",
-              fontSize: 14,
-              cursor: isDragging ? "grabbing" : "grab",
-              touchAction: "none",
-              background: "#fff",
-            }}
-            onClick={(e) => e.stopPropagation()}
-            title="Drag handle"
-          >
-            <HolderOutlined />
-          </div>
-        </Flex>
+        {showDragHandle ? (
+          <Flex vertical align="flex-end" gap={8} style={{ flexShrink: 0 }}>
+            <div
+              {...dragAttributes}
+              {...dragListeners}
+              style={{
+                width: 30,
+                height: 30,
+                borderRadius: 11,
+                border: "1px solid #e5e7eb",
+                color: "#98a2b3",
+                display: "grid",
+                placeItems: "center",
+                fontSize: 14,
+                cursor: isDragging ? "grabbing" : "grab",
+                touchAction: "none",
+                background: "#fff",
+              }}
+              onClick={(e) => e.stopPropagation()}
+              title="Drag handle"
+            >
+              <HolderOutlined />
+            </div>
+          </Flex>
+        ) : null}
       </Flex>
     </div>
   );
@@ -505,10 +509,12 @@ function SortableStudentCard({
   student,
   onClick,
   disabled,
+  showDragHandle = true,
 }: {
   student: UserDataModel;
   onClick: () => void;
   disabled?: boolean;
+  showDragHandle?: boolean;
 }) {
   const {
     attributes,
@@ -543,6 +549,7 @@ function SortableStudentCard({
         dragAttributes={attributes}
         dragListeners={listeners}
         isDragging={isDragging}
+        showDragHandle={showDragHandle}
       />
     </button>
   );
@@ -557,6 +564,7 @@ function BoardColumn({
   onClickStudent,
   isHighlighted,
   disableInteraction,
+  showDragHandle = true,
 }: {
   column: BoardColumnConfig;
   students: UserDataModel[];
@@ -566,6 +574,7 @@ function BoardColumn({
   onClickStudent: (student: UserDataModel) => void;
   isHighlighted: boolean;
   disableInteraction?: boolean;
+  showDragHandle?: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: column.key,
@@ -690,6 +699,7 @@ function BoardColumn({
                 key={student.id}
                 student={student}
                 disabled={disableInteraction}
+                showDragHandle={showDragHandle}
                 onClick={() => onClickStudent(student)}
               />
             ))
@@ -732,7 +742,19 @@ function BoardColumn({
   );
 }
 
-export default function StudentsManagementContent() {
+type StudentsManagementContentProps = {
+  detailBasePath?: string;
+  readOnly?: boolean;
+  title?: string;
+  description?: string;
+};
+
+export default function StudentsManagementContent({
+  detailBasePath = "/director/dashboard/students-management/detail",
+  readOnly = false,
+  title = "Student Pipeline Management",
+  description = "Kelola progres student dengan tampilan board yang lebih ringkas. Data student ditampilkan 10 per halaman pada setiap kolom.",
+}: StudentsManagementContentProps) {
   const router = useRouter();
 
   const [keyword, setKeyword] = useState("");
@@ -769,11 +791,9 @@ export default function StudentsManagementContent() {
 
   const goToStudentDetail = useCallback(
     (student: UserDataModel) => {
-      router.push(
-        `/director/dashboard/students-management/detail/${student.id}`,
-      );
+      router.push(`${detailBasePath}/${student.id}`);
     },
-    [router],
+    [detailBasePath, router],
   );
 
   const sensors = useSensors(
@@ -1054,18 +1074,21 @@ export default function StudentsManagementContent() {
   );
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
+    if (readOnly) return;
     setActiveStudentId(String(event.active.id));
-  }, []);
+  }, [readOnly]);
 
   const handleDragOver = useCallback(
     (event: DragOverEvent) => {
+      if (readOnly) return;
       setDragOverStatus(resolveDropStatus(event.over?.id));
     },
-    [resolveDropStatus],
+    [readOnly, resolveDropStatus],
   );
 
   const handleDragEnd = useCallback(
     async (event: DragEndEvent) => {
+      if (readOnly) return;
       const draggedId = String(event.active.id);
       const draggedStudent = studentMap.get(draggedId);
       const nextStatus = resolveDropStatus(event.over?.id);
@@ -1127,9 +1150,10 @@ export default function StudentsManagementContent() {
   );
 
   const handleDragCancel = useCallback(() => {
+    if (readOnly) return;
     setActiveStudentId(null);
     setDragOverStatus(null);
-  }, []);
+  }, [readOnly]);
 
   const handleColumnPageChange = useCallback(
     (status: StudentBoardStatus, page: number) => {
@@ -1163,12 +1187,11 @@ export default function StudentsManagementContent() {
           <Flex justify="space-between" align="flex-start" gap={18} wrap>
             <div style={{ maxWidth: 680 }}>
               <Title level={3} style={{ margin: "0 0 6px", color: "#101828" }}>
-                Student Pipeline Management
+                {title}
               </Title>
 
               <Text style={{ color: "#667085", fontSize: 14, lineHeight: 1.7 }}>
-                Kelola progres student dengan tampilan board yang lebih ringkas.
-                Data student ditampilkan 10 per halaman pada setiap kolom.
+                {description}
               </Text>
             </div>
 
@@ -1428,8 +1451,9 @@ export default function StudentsManagementContent() {
                   onClickStudent={goToStudentDetail}
                   isHighlighted={dragOverStatus === column.key}
                   disableInteraction={
-                    onUpdateLoading && movingStudentId !== null
+                    readOnly || (onUpdateLoading && movingStudentId !== null)
                   }
+                  showDragHandle={!readOnly}
                 />
               ))}
             </div>
@@ -1438,7 +1462,11 @@ export default function StudentsManagementContent() {
           <DragOverlay>
             {activeStudent ? (
               <div style={{ width: 340, maxWidth: "92vw" }}>
-                <StudentCardInner student={activeStudent} isDragging />
+                <StudentCardInner
+                  student={activeStudent}
+                  isDragging
+                  showDragHandle={!readOnly}
+                />
               </div>
             ) : null}
           </DragOverlay>

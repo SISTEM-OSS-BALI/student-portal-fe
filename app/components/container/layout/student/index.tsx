@@ -18,6 +18,7 @@ import {
   GiftOutlined,
   HomeOutlined,
   InboxOutlined,
+  LockOutlined,
   LogoutOutlined,
   MessageOutlined,
   UserOutlined,
@@ -359,6 +360,14 @@ export default function StudentLayout({
 
   const menuItems = useMemo(
     () => [
+      {
+        key: "change-password",
+        icon: <LockOutlined />,
+        label: "Change Password",
+        onClick: () => {
+          router.push("/student/dashboard/change-password");
+        },
+      },
       {
         key: "logout",
         icon: <LogoutOutlined />,
