@@ -12,10 +12,12 @@ import {
   Row,
   Space,
   Tag,
+  Tour,
   Typography,
   Upload,
   notification,
 } from "antd";
+import type { TourProps } from "antd";
 import {
   CheckCircleFilled,
   CloudUploadOutlined,
@@ -23,6 +25,7 @@ import {
   InfoCircleFilled,
   LinkOutlined,
   LoadingOutlined,
+  QuestionCircleOutlined,
 } from "@ant-design/icons";
 import type { UploadFile, UploadProps } from "antd";
 import { useAuth } from "@/app/utils/use-auth";
@@ -30,6 +33,7 @@ import { useStagesManagement } from "@/app/hooks/use-stages-management";
 import { useVisaTypes } from "@/app/hooks/use-visa-type-management";
 import { useUser } from "@/app/hooks/use-users";
 import { useDocumentUpload } from "@/app/hooks/use-document-uploads";
+import { usePageTour } from "@/app/hooks/use-page-tour";
 import {
   MAX_UPLOAD_SIZE_MB,
   buildUploadSizeErrorMessage,
@@ -231,6 +235,54 @@ export default function CountryDocumentComponent() {
   const { data: visaTypes = [] } = useVisaTypes();
   const { uploadDocument } = useDocumentUpload();
 
+  const { open: tourOpen, close: closeTour, restart: restartTour } = usePageTour(
+    "student_tour_documents_done",
+  );
+
+  const tourSteps: TourProps["steps"] = [
+    {
+      title: "Upload Dokumen",
+      description:
+        "Halaman ini untuk mengunggah semua dokumen yang dibutuhkan dalam proses aplikasi visa kamu.",
+      target: null,
+    },
+    {
+      title: "Header & Info Aplikasi",
+      description:
+        "Di sini terlihat negara tujuan, tipe visa, dan status fitur auto rename untuk file kamu.",
+      target: () => document.getElementById("docs-header")!,
+      placement: "bottom",
+    },
+    {
+      title: "Pilih Dokumen",
+      description:
+        "Klik salah satu dokumen dari daftar ini untuk memilih dokumen yang ingin diunggah. Status setiap dokumen ditampilkan di sini.",
+      target: () => document.getElementById("docs-selector")!,
+      placement: "bottom",
+    },
+    {
+      title: "Area Upload",
+      description:
+        "Drag & drop file ke area ini, atau klik untuk memilih file dari komputer. Maksimal ukuran file tercantum di sini.",
+      target: () => document.getElementById("docs-upload-area")!,
+      placement: "top",
+    },
+    {
+      title: "Progress Dokumen",
+      description:
+        "Pantau berapa dokumen yang sudah diunggah dan yang masih pending di panel ini.",
+      target: () => document.getElementById("docs-progress-card")!,
+      placement: "left",
+    },
+    {
+      title: "Submit untuk Review",
+      description:
+        "Setelah semua dokumen diunggah, klik tombol ini untuk mengirim dokumen ke tim admission untuk direview.",
+      target: () => document.getElementById("docs-submit-btn")!,
+      placement: "top",
+    },
+  ];
+
   const {
     data: answerDocuments,
     fetchLoading: answerDocumentsLoading,
@@ -412,744 +464,769 @@ export default function CountryDocumentComponent() {
   };
 
   return (
-    <div
-      style={{
-        minHeight: "100%",
-        padding: 24,
-        borderRadius: 28,
-      }}
-    >
-      <Form form={docForm} layout="vertical" onFinish={handleSubmitDocuments}>
-        <Row gutter={[24, 24]} align="top">
-          <Col xs={24} xl={16}>
-            <Space direction="vertical" size={20} style={{ width: "100%" }}>
-              <Space direction="vertical" size={6} style={{ width: "100%" }}>
-                <Title level={3} style={{ margin: 0 }}>
-                  Upload Documents
-                </Title>
-                <Text type="secondary">
-                  Please upload all required documents to continue your visa process.
-                </Text>
+    <>
+      <div
+        style={{
+          minHeight: "100%",
+          padding: 24,
+          borderRadius: 28,
+        }}
+      >
+        <Form form={docForm} layout="vertical" onFinish={handleSubmitDocuments}>
+          <Row gutter={[24, 24]} align="top">
+            <Col xs={24} xl={16}>
+              <Space direction="vertical" size={20} style={{ width: "100%" }}>
+                <div id="docs-header">
+                  <Space direction="vertical" size={6} style={{ width: "100%" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                      <Title level={3} style={{ margin: 0 }}>
+                        Upload Documents
+                      </Title>
+                      <Button
+                        type="text"
+                        icon={<QuestionCircleOutlined />}
+                        onClick={restartTour}
+                        title="Lihat panduan halaman ini"
+                        style={{ color: "#94a3b8" }}
+                      />
+                    </div>
+                    <Text type="secondary">
+                      Please upload all required documents to continue your visa process.
+                    </Text>
 
-                <Space size={8} wrap>
-                  {currentUser?.stage?.country?.name ? (
-                    <Tag
-                      style={{
-                        borderRadius: 999,
-                        paddingInline: 10,
-                        borderColor: "#bfdbfe",
-                        background: "#eff6ff",
-                        color: "#1d4ed8",
-                      }}
-                    >
-                      {currentUser.stage.country.name}
-                    </Tag>
-                  ) : null}
-
-                  {visaTypeLabel ? (
-                    <Tag
-                      style={{
-                        borderRadius: 999,
-                        paddingInline: 10,
-                        borderColor: "#c7d2fe",
-                        background: "#eef2ff",
-                        color: "#4338ca",
-                      }}
-                    >
-                      {visaTypeLabel}
-                    </Tag>
-                  ) : null}
-
-                  <Tag
-                    style={{
-                      borderRadius: 999,
-                      paddingInline: 10,
-                      borderColor: "#e5e7eb",
-                      background: "#f8fafc",
-                      color: "#475569",
-                    }}
-                  >
-                    Auto rename enabled
-                  </Tag>
-                </Space>
-              </Space>
-
-              <Space direction="vertical" size={16} style={{ width: "100%" }}>
-                {documentsWithState.length ? (
-                  <>
-                    <Card
-                      style={{
-                        borderRadius: 16,
-                        borderColor: "#dbe5ff",
-                        boxShadow: "0 10px 26px rgba(15, 23, 42, 0.05)",
-                      }}
-                      styles={{ body: { padding: 12 } }}
-                    >
-                      <Space direction="vertical" size={8} style={{ width: "100%" }}>
-                        <Text strong style={{ fontSize: 12, color: "#475569" }}>
-                          Pilih Dokumen
-                        </Text>
-                        <div
+                    <Space size={8} wrap>
+                      {currentUser?.stage?.country?.name ? (
+                        <Tag
                           style={{
-                            display: "grid",
-                            gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))",
-                            gap: 8,
+                            borderRadius: 999,
+                            paddingInline: 10,
+                            borderColor: "#bfdbfe",
+                            background: "#eff6ff",
+                            color: "#1d4ed8",
                           }}
                         >
-                          {documentsWithState.map(
-                            ({ doc, statusInfo, isCompleted, submittedFile, draftFile }) => {
-                              const key = String(doc.id);
-                              const isActive =
-                                key === String(effectiveActiveDocumentId);
-                              return (
-                                <button
-                                  key={key}
-                                  type="button"
-                                  onClick={() => setActiveDocumentId(key)}
-                                  style={{
-                                    width: "100%",
-                                    border: `1px solid ${isActive ? "#93c5fd" : "#e5e7eb"}`,
-                                    background: isActive ? "#eff6ff" : "#fff",
-                                    borderRadius: 10,
-                                    padding: "9px 10px",
-                                    textAlign: "left",
-                                    cursor: "pointer",
-                                  }}
-                                >
-                                  <Text strong style={{ fontSize: 12, display: "block" }}>
-                                    {String(doc.label).toUpperCase()}
-                                  </Text>
-                                  <Text
-                                    type="secondary"
-                                    style={{ fontSize: 11, display: "block", marginTop: 2 }}
-                                  >
-                                    {draftFile?.status === "done" || submittedFile?.file_url
-                                      ? "Sudah upload"
-                                      : "Belum upload"}
-                                  </Text>
-                                  <span
-                                    style={{
-                                      display: "inline-block",
-                                      marginTop: 4,
-                                      fontSize: 11,
-                                      color: statusInfo.color,
-                                      background: statusInfo.background,
-                                      borderRadius: 999,
-                                      padding: "2px 8px",
-                                      fontWeight: 600,
-                                    }}
-                                  >
-                                    {isCompleted ? "Done" : "Pending"}
-                                  </span>
-                                  <span
-                                    style={{
-                                      display: "inline-block",
-                                      marginTop: 4,
-                                      marginLeft: 6,
-                                      fontSize: 11,
-                                      color: doc.required ? "#92400e" : "#475569",
-                                      background: doc.required ? "#fff7ed" : "#f1f5f9",
-                                      borderRadius: 999,
-                                      padding: "2px 8px",
-                                      fontWeight: 600,
-                                    }}
-                                  >
-                                    {doc.required ? "Required" : "Optional"}
-                                  </span>
-                                </button>
-                              );
-                            },
-                          )}
-                        </div>
-                      </Space>
-                    </Card>
-                  {visibleDocuments.map(
-                    ({ doc, draftFile, submittedFile, statusInfo, isCompleted }) => (
-                      <Card
-                        key={doc.id}
-                        loading={userLoading || stagesLoading || answerDocumentsLoading}
-                        style={{
-                          borderRadius: 18,
-                          borderColor: "#dbe5ff",
-                          boxShadow: "0 16px 36px rgba(15, 23, 42, 0.06)",
-                        }}
-                        styles={{ body: { padding: 18 } }}
-                      >
-                        <Space direction="vertical" size={14} style={{ width: "100%" }}>
-                          {(() => {
-                            const previewUrl =
-                              draftFile?.response?.url || submittedFile?.file_url || "";
-                            const previewName =
-                              draftFile?.name ||
-                              submittedFile?.file_name ||
-                              `${doc.label}.pdf`;
-                            const previewType =
-                              draftFile?.type || submittedFile?.file_type || "";
-                            const previewKind = getPreviewKind(
-                              previewUrl,
-                              previewName,
-                              previewType,
-                            );
+                          {currentUser.stage.country.name}
+                        </Tag>
+                      ) : null}
 
-                            return (
-                              <>
+                      {visaTypeLabel ? (
+                        <Tag
+                          style={{
+                            borderRadius: 999,
+                            paddingInline: 10,
+                            borderColor: "#c7d2fe",
+                            background: "#eef2ff",
+                            color: "#4338ca",
+                          }}
+                        >
+                          {visaTypeLabel}
+                        </Tag>
+                      ) : null}
+
+                      <Tag
+                        style={{
+                          borderRadius: 999,
+                          paddingInline: 10,
+                          borderColor: "#e5e7eb",
+                          background: "#f8fafc",
+                          color: "#475569",
+                        }}
+                      >
+                        Auto rename enabled
+                      </Tag>
+                    </Space>
+                  </Space>
+                </div>
+
+                <Space direction="vertical" size={16} style={{ width: "100%" }}>
+                  {documentsWithState.length ? (
+                    <>
+                      <Card
+                        id="docs-selector"
+                        style={{
+                          borderRadius: 16,
+                          borderColor: "#dbe5ff",
+                          boxShadow: "0 10px 26px rgba(15, 23, 42, 0.05)",
+                        }}
+                        styles={{ body: { padding: 12 } }}
+                      >
+                        <Space direction="vertical" size={8} style={{ width: "100%" }}>
+                          <Text strong style={{ fontSize: 12, color: "#475569" }}>
+                            Pilih Dokumen
+                          </Text>
                           <div
                             style={{
-                              display: "flex",
-                              justifyContent: "space-between",
-                              gap: 12,
-                              alignItems: "flex-start",
+                              display: "grid",
+                              gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))",
+                              gap: 8,
                             }}
                           >
-                            <Space align="start" size={12}>
-                              <div
-                                style={{
-                                  width: 38,
-                                  height: 38,
-                                  borderRadius: 12,
-                                  display: "grid",
-                                  placeItems: "center",
-                                  color: "#2563eb",
-                                  background: "#eff6ff",
-                                  flexShrink: 0,
-                                }}
-                              >
-                                <FileTextOutlined />
-                              </div>
-
-                              <div>
-                                <Text
-                                  strong
-                                  style={{
-                                    display: "block",
-                                    fontSize: 14,
-                                    letterSpacing: 0.2,
-                                  }}
-                                >
-                                  {String(doc.label).toUpperCase()}
-                                </Text>
-                                <Text type="secondary" style={{ fontSize: 12 }}>
-                                  {doc.notes ||
-                                    `${doc.required ? "Required" : "Optional"} document for your application.`}
-                                </Text>
-                              </div>
-                            </Space>
-
-                            <span
-                              style={{
-                                whiteSpace: "nowrap",
-                                borderRadius: 999,
-                                padding: "4px 10px",
-                                fontSize: 12,
-                                fontWeight: 600,
-                                color: statusInfo.color,
-                                background: statusInfo.background,
-                              }}
-                            >
-                              {statusInfo.label}
-                            </span>
-                          </div>
-
-                          <Form.Item
-                            style={{ marginBottom: 0 }}
-                            name={["documents", String(doc.id)]}
-                            valuePropName="fileList"
-                            getValueFromEvent={normalizeUpload}
-                            rules={
-                              doc.required
-                                ? [{ required: true, message: "Dokumen wajib diunggah" }]
-                                : undefined
-                            }
-                          >
-                            <Upload.Dragger
-                              onChange={(info) => {
-                                if (info.file.status === "done") {
-                                  const response = info.file.response;
-                                  notification.success({
-                                    message: "Upload berhasil",
-                                    description: `${doc.label} berhasil diunggah${
-                                      response?.url ? "." : ", namun URL belum tersedia."
-                                    }`,
-                                  });
-                                }
-                              }}
-                              beforeUpload={(file) => {
-                                if (!isAllowedUploadSize(file as File)) {
-                                  notification.error({
-                                    message: "Ukuran file terlalu besar",
-                                    description: buildUploadSizeErrorMessage(
-                                      (file as File).name,
-                                    ),
-                                  });
-                                  return Upload.LIST_IGNORE;
-                                }
-
-                                const renamed = buildAutoFileName(
-                                  doc.auto_rename_pattern,
-                                  file as File,
-                                  {
-                                    student_name:
-                                      currentUser?.name ?? currentUser?.email ?? "student",
-                                    document_label: doc.label,
-                                    internal_code: doc.internal_code,
-                                    country_name: currentUser?.stage?.country?.name,
-                                  },
-                                );
-
-                                return new File([file], renamed, { type: file.type });
-                              }}
-                              customRequest={async ({
-                                file,
-                                onSuccess,
-                                onError,
-                              }: CustomRequestOptions) => {
-                                try {
-                                  const typedFile = file as File;
-                                  const safeName = sanitizeFileName(
-                                    typedFile.name || "document",
-                                  );
-                                  const userId = currentUser?.id ?? "anonymous";
-                                  const path = `documents/${userId}/${doc.id}/${safeName}`;
-                                  const studentFolderKey = `${
-                                    currentUser?.name ?? "student"
-                                  }-${userId}`;
-
-                                  const result = await uploadDocument({
-                                    file: typedFile,
-                                    path,
-                                    content_type: typedFile.type,
-                                    student_folder_key: studentFolderKey,
-                                  });
-
-                                  onSuccess?.(result, typedFile);
-                                } catch (err: unknown) {
-                                  onError?.(
-                                    err instanceof Error
-                                      ? err
-                                      : new Error("Upload gagal diproses"),
-                                  );
-                                }
-                              }}
-                              accept={resolveAccept(doc.file_type)}
-                              maxCount={1}
-                              style={{
-                                borderRadius: 14,
-                                background: isCompleted ? "#fbfdff" : "#f8fafc",
-                                borderColor: isCompleted ? "#dbeafe" : "#e5e7eb",
-                                padding: 18,
-                              }}
-                            >
-                              <Space direction="vertical" size={4}>
-                                <CloudUploadOutlined
-                                  style={{ fontSize: 24, color: "#64748b" }}
-                                />
-                                <Text style={{ fontSize: 13 }}>
-                                  Drag & drop file here or click to upload
-                                </Text>
-                                <Text type="secondary" style={{ fontSize: 12 }}>
-                                  Max {MAX_UPLOAD_SIZE_MB} MB ·{" "}
-                                  {resolveFileTypeLabel(doc.file_type)}
-                                </Text>
-                                <Button
-                                  type="primary"
-                                  size="small"
-                                  style={{
-                                    marginTop: 8,
-                                    borderRadius: 999,
-                                    paddingInline: 18,
-                                  }}
-                                >
-                                  {isCompleted ? "Replace file" : "Browse files"}
-                                </Button>
-                              </Space>
-                            </Upload.Dragger>
-                          </Form.Item>
-
-                          {doc.auto_rename_pattern ? (
-                            <div
-                              style={{
-                                display: "flex",
-                                gap: 10,
-                                alignItems: "flex-start",
-                                borderRadius: 12,
-                                padding: "10px 12px",
-                                background: "#f5f7ff",
-                                color: "#4f46e5",
-                                fontSize: 12,
-                              }}
-                            >
-                              <InfoCircleFilled style={{ marginTop: 2 }} />
-                              <span>
-                                System will auto-rename your file to{" "}
-                                <strong>{doc.auto_rename_pattern}</strong> for consistency.
-                              </span>
-                            </div>
-                          ) : null}
-
-                          {doc.example_url ? (
-                            <div
-                              style={{
-                                border: "1px solid #e0e7ff",
-                                borderRadius: 12,
-                                background: "#f8faff",
-                                overflow: "hidden",
-                              }}
-                            >
-                              <div
-                                style={{
-                                  padding: "10px 12px",
-                                  borderBottom: "1px solid #e5e7eb",
-                                  display: "flex",
-                                  justifyContent: "space-between",
-                                  alignItems: "center",
-                                  gap: 10,
-                                }}
-                              >
-                                <Text strong style={{ fontSize: 12 }}>
-                                  Contoh
-                                </Text>
-                                <a
-                                  href={buildFilePreviewUrl(
-                                    doc.example_url,
-                                    `${doc.label}-example`,
-                                  )}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  style={{ fontSize: 12 }}
-                                >
-                                  Buka Contoh
-                                </a>
-                              </div>
-                              {(() => {
-                                const kind = getPreviewKind(
-                                  doc.example_url ?? "",
-                                  `${doc.label}-example`,
-                                  "",
-                                );
-                                if (kind === "image") {
-                                  return (
-                                    <Image
-                                      src={doc.example_url}
-                                      alt={`${doc.label} example`}
-                                      width={1400}
-                                      height={900}
-                                      unoptimized
-                                      style={{
-                                        width: "100%",
-                                        height: "auto",
-                                        maxHeight: 320,
-                                        objectFit: "contain",
-                                      }}
-                                    />
-                                  );
-                                }
-                                if (kind === "pdf") {
-                                  return (
-                                    <iframe
-                                      src={buildFilePreviewUrl(
-                                        doc.example_url,
-                                        `${doc.label}-example.pdf`,
-                                      )}
-                                      title={`${doc.label} example`}
-                                      style={{
-                                        width: "100%",
-                                        height: 320,
-                                        border: "none",
-                                      }}
-                                    />
-                                  );
-                                }
+                            {documentsWithState.map(
+                              ({ doc, statusInfo, isCompleted, submittedFile, draftFile }) => {
+                                const key = String(doc.id);
+                                const isActive =
+                                  key === String(effectiveActiveDocumentId);
                                 return (
-                                  <div style={{ padding: 12 }}>
-                                    <Text type="secondary" style={{ fontSize: 12 }}>
-                                      Preview contoh dokumen tidak tersedia.
+                                  <button
+                                    key={key}
+                                    type="button"
+                                    onClick={() => setActiveDocumentId(key)}
+                                    style={{
+                                      width: "100%",
+                                      border: `1px solid ${isActive ? "#93c5fd" : "#e5e7eb"}`,
+                                      background: isActive ? "#eff6ff" : "#fff",
+                                      borderRadius: 10,
+                                      padding: "9px 10px",
+                                      textAlign: "left",
+                                      cursor: "pointer",
+                                    }}
+                                  >
+                                    <Text strong style={{ fontSize: 12, display: "block" }}>
+                                      {String(doc.label).toUpperCase()}
                                     </Text>
-                                  </div>
-                                );
-                              })()}
-                            </div>
-                          ) : null}
-
-                          {submittedFile?.file_url || draftFile?.status === "done" ? (
-                            <>
-                              <Divider style={{ margin: "2px 0" }} />
-                              <div
-                                style={{
-                                  display: "flex",
-                                  justifyContent: "space-between",
-                                  alignItems: "center",
-                                  gap: 12,
-                                  padding: "10px 12px",
-                                  borderRadius: 12,
-                                  border: "1px solid #edf2f7",
-                                  background: "#ffffff",
-                                }}
-                              >
-                                <Space size={10} align="start">
-                                  <FileTextOutlined
-                                    style={{ color: "#64748b", marginTop: 2 }}
-                                  />
-                                  <Space direction="vertical" size={0}>
-                                    <Text strong style={{ fontSize: 13 }}>
-                                      {draftFile?.name ||
-                                        submittedFile?.file_name ||
-                                        `${doc.label}.pdf`}
+                                    <Text
+                                      type="secondary"
+                                      style={{ fontSize: 11, display: "block", marginTop: 2 }}
+                                    >
+                                      {draftFile?.status === "done" || submittedFile?.file_url
+                                        ? "Sudah upload"
+                                        : "Belum upload"}
                                     </Text>
-                                    <Text type="secondary" style={{ fontSize: 12 }}>
-                                      {draftFile?.status === "done"
-                                        ? "Uploaded in this session"
-                                        : submittedFile?.created_at
-                                          ? `Uploaded ${formatUploadDate(submittedFile.created_at)}`
-                                          : "Ready to submit"}
-                                    </Text>
-                                  </Space>
-                                </Space>
-
-                                <Space size={8}>
-                                  {draftFile?.status === "uploading" ? (
-                                    <span style={{ color: "#2563eb", fontSize: 12 }}>
-                                      <LoadingOutlined /> Uploading...
-                                    </span>
-                                  ) : (
                                     <span
                                       style={{
-                                        color: "#16a34a",
-                                        fontSize: 12,
+                                        display: "inline-block",
+                                        marginTop: 4,
+                                        fontSize: 11,
+                                        color: statusInfo.color,
+                                        background: statusInfo.background,
+                                        borderRadius: 999,
+                                        padding: "2px 8px",
                                         fontWeight: 600,
                                       }}
                                     >
-                                      <CheckCircleFilled /> File ready
+                                      {isCompleted ? "Done" : "Pending"}
                                     </span>
-                                  )}
-
-                                  {(draftFile?.response?.url || submittedFile?.file_url) && (
-                                    <a
-                                      href={buildFilePreviewUrl(
-                                        draftFile?.response?.url ||
-                                          submittedFile?.file_url,
-                                        draftFile?.name ||
-                                          submittedFile?.file_name ||
-                                          `${doc.label}.pdf`,
-                                      )}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      style={{ color: "#2563eb" }}
+                                    <span
+                                      style={{
+                                        display: "inline-block",
+                                        marginTop: 4,
+                                        marginLeft: 6,
+                                        fontSize: 11,
+                                        color: doc.required ? "#92400e" : "#475569",
+                                        background: doc.required ? "#fff7ed" : "#f1f5f9",
+                                        borderRadius: 999,
+                                        padding: "2px 8px",
+                                        fontWeight: 600,
+                                      }}
                                     >
-                                      <LinkOutlined />
-                                    </a>
-                                  )}
-                                </Space>
-                              </div>
-                            </>
-                          ) : null}
-                          {previewUrl ? (
+                                      {doc.required ? "Required" : "Optional"}
+                                    </span>
+                                  </button>
+                                );
+                              },
+                            )}
+                          </div>
+                        </Space>
+                      </Card>
+                    {visibleDocuments.map(
+                      ({ doc, draftFile, submittedFile, statusInfo, isCompleted }) => (
+                        <Card
+                          key={doc.id}
+                          loading={userLoading || stagesLoading || answerDocumentsLoading}
+                          style={{
+                            borderRadius: 18,
+                            borderColor: "#dbe5ff",
+                            boxShadow: "0 16px 36px rgba(15, 23, 42, 0.06)",
+                          }}
+                          styles={{ body: { padding: 18 } }}
+                        >
+                          <Space direction="vertical" size={14} style={{ width: "100%" }}>
+                            {(() => {
+                              const previewUrl =
+                                draftFile?.response?.url || submittedFile?.file_url || "";
+                              const previewName =
+                                draftFile?.name ||
+                                submittedFile?.file_name ||
+                                `${doc.label}.pdf`;
+                              const previewType =
+                                draftFile?.type || submittedFile?.file_type || "";
+                              const previewKind = getPreviewKind(
+                                previewUrl,
+                                previewName,
+                                previewType,
+                              );
+
+                              return (
+                                <>
                             <div
                               style={{
-                                border: "1px solid #e5e7eb",
-                                borderRadius: 12,
-                                background: "#ffffff",
-                                overflow: "hidden",
+                                display: "flex",
+                                justifyContent: "space-between",
+                                gap: 12,
+                                alignItems: "flex-start",
                               }}
                             >
-                              {previewKind === "image" ? (
-                                <Image
-                                  src={previewUrl}
-                                  alt={previewName}
-                                  width={1400}
-                                  height={900}
-                                  unoptimized
-                                  style={{
-                                    width: "100%",
-                                    height: "auto",
-                                    maxHeight: 420,
-                                    objectFit: "contain",
-                                  }}
-                                />
-                              ) : null}
-
-                              {previewKind === "pdf" ? (
-                                <iframe
-                                  src={buildFilePreviewUrl(previewUrl, previewName)}
-                                  title={previewName}
-                                  style={{
-                                    width: "100%",
-                                    height: 420,
-                                    border: "none",
-                                  }}
-                                />
-                              ) : null}
-
-                              {previewKind === "other" ? (
+                              <Space align="start" size={12}>
                                 <div
                                   style={{
-                                    padding: 14,
+                                    width: 38,
+                                    height: 38,
+                                    borderRadius: 12,
+                                    display: "grid",
+                                    placeItems: "center",
+                                    color: "#2563eb",
+                                    background: "#eff6ff",
+                                    flexShrink: 0,
+                                  }}
+                                >
+                                  <FileTextOutlined />
+                                </div>
+
+                                <div>
+                                  <Text
+                                    strong
+                                    style={{
+                                      display: "block",
+                                      fontSize: 14,
+                                      letterSpacing: 0.2,
+                                    }}
+                                  >
+                                    {String(doc.label).toUpperCase()}
+                                  </Text>
+                                  <Text type="secondary" style={{ fontSize: 12 }}>
+                                    {doc.notes ||
+                                      `${doc.required ? "Required" : "Optional"} document for your application.`}
+                                  </Text>
+                                </div>
+                              </Space>
+
+                              <span
+                                style={{
+                                  whiteSpace: "nowrap",
+                                  borderRadius: 999,
+                                  padding: "4px 10px",
+                                  fontSize: 12,
+                                  fontWeight: 600,
+                                  color: statusInfo.color,
+                                  background: statusInfo.background,
+                                }}
+                              >
+                                {statusInfo.label}
+                              </span>
+                            </div>
+
+                            <div id="docs-upload-area">
+                              <Form.Item
+                                style={{ marginBottom: 0 }}
+                                name={["documents", String(doc.id)]}
+                                valuePropName="fileList"
+                                getValueFromEvent={normalizeUpload}
+                                rules={
+                                  doc.required
+                                    ? [{ required: true, message: "Dokumen wajib diunggah" }]
+                                    : undefined
+                                }
+                              >
+                                <Upload.Dragger
+                                  onChange={(info) => {
+                                    if (info.file.status === "done") {
+                                      const response = info.file.response;
+                                      notification.success({
+                                        message: "Upload berhasil",
+                                        description: `${doc.label} berhasil diunggah${
+                                          response?.url ? "." : ", namun URL belum tersedia."
+                                        }`,
+                                      });
+                                    }
+                                  }}
+                                  beforeUpload={(file) => {
+                                    if (!isAllowedUploadSize(file as File)) {
+                                      notification.error({
+                                        message: "Ukuran file terlalu besar",
+                                        description: buildUploadSizeErrorMessage(
+                                          (file as File).name,
+                                        ),
+                                      });
+                                      return Upload.LIST_IGNORE;
+                                    }
+
+                                    const renamed = buildAutoFileName(
+                                      doc.auto_rename_pattern,
+                                      file as File,
+                                      {
+                                        student_name:
+                                          currentUser?.name ?? currentUser?.email ?? "student",
+                                        document_label: doc.label,
+                                        internal_code: doc.internal_code,
+                                        country_name: currentUser?.stage?.country?.name,
+                                      },
+                                    );
+
+                                    return new File([file], renamed, { type: file.type });
+                                  }}
+                                  customRequest={async ({
+                                    file,
+                                    onSuccess,
+                                    onError,
+                                  }: CustomRequestOptions) => {
+                                    try {
+                                      const typedFile = file as File;
+                                      const safeName = sanitizeFileName(
+                                        typedFile.name || "document",
+                                      );
+                                      const userId = currentUser?.id ?? "anonymous";
+                                      const path = `documents/${userId}/${doc.id}/${safeName}`;
+                                      const studentFolderKey = `${
+                                        currentUser?.name ?? "student"
+                                      }-${userId}`;
+
+                                      const result = await uploadDocument({
+                                        file: typedFile,
+                                        path,
+                                        content_type: typedFile.type,
+                                        student_folder_key: studentFolderKey,
+                                      });
+
+                                      onSuccess?.(result, typedFile);
+                                    } catch (err: unknown) {
+                                      onError?.(
+                                        err instanceof Error
+                                          ? err
+                                          : new Error("Upload gagal diproses"),
+                                      );
+                                    }
+                                  }}
+                                  accept={resolveAccept(doc.file_type)}
+                                  maxCount={1}
+                                  style={{
+                                    borderRadius: 14,
+                                    background: isCompleted ? "#fbfdff" : "#f8fafc",
+                                    borderColor: isCompleted ? "#dbeafe" : "#e5e7eb",
+                                    padding: 18,
+                                  }}
+                                >
+                                  <Space direction="vertical" size={4}>
+                                    <CloudUploadOutlined
+                                      style={{ fontSize: 24, color: "#64748b" }}
+                                    />
+                                    <Text style={{ fontSize: 13 }}>
+                                      Drag & drop file here or click to upload
+                                    </Text>
+                                    <Text type="secondary" style={{ fontSize: 12 }}>
+                                      Max {MAX_UPLOAD_SIZE_MB} MB ·{" "}
+                                      {resolveFileTypeLabel(doc.file_type)}
+                                    </Text>
+                                    <Button
+                                      type="primary"
+                                      size="small"
+                                      style={{
+                                        marginTop: 8,
+                                        borderRadius: 999,
+                                        paddingInline: 18,
+                                      }}
+                                    >
+                                      {isCompleted ? "Replace file" : "Browse files"}
+                                    </Button>
+                                  </Space>
+                                </Upload.Dragger>
+                              </Form.Item>
+                            </div>
+
+                            {doc.auto_rename_pattern ? (
+                              <div
+                                style={{
+                                  display: "flex",
+                                  gap: 10,
+                                  alignItems: "flex-start",
+                                  borderRadius: 12,
+                                  padding: "10px 12px",
+                                  background: "#f5f7ff",
+                                  color: "#4f46e5",
+                                  fontSize: 12,
+                                }}
+                              >
+                                <InfoCircleFilled style={{ marginTop: 2 }} />
+                                <span>
+                                  System will auto-rename your file to{" "}
+                                  <strong>{doc.auto_rename_pattern}</strong> for consistency.
+                                </span>
+                              </div>
+                            ) : null}
+
+                            {doc.example_url ? (
+                              <div
+                                style={{
+                                  border: "1px solid #e0e7ff",
+                                  borderRadius: 12,
+                                  background: "#f8faff",
+                                  overflow: "hidden",
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    padding: "10px 12px",
+                                    borderBottom: "1px solid #e5e7eb",
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    alignItems: "center",
+                                    gap: 10,
+                                  }}
+                                >
+                                  <Text strong style={{ fontSize: 12 }}>
+                                    Contoh
+                                  </Text>
+                                  <a
+                                    href={buildFilePreviewUrl(
+                                      doc.example_url,
+                                      `${doc.label}-example`,
+                                    )}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    style={{ fontSize: 12 }}
+                                  >
+                                    Buka Contoh
+                                  </a>
+                                </div>
+                                {(() => {
+                                  const kind = getPreviewKind(
+                                    doc.example_url ?? "",
+                                    `${doc.label}-example`,
+                                    "",
+                                  );
+                                  if (kind === "image") {
+                                    return (
+                                      <Image
+                                        src={doc.example_url}
+                                        alt={`${doc.label} example`}
+                                        width={1400}
+                                        height={900}
+                                        unoptimized
+                                        style={{
+                                          width: "100%",
+                                          height: "auto",
+                                          maxHeight: 320,
+                                          objectFit: "contain",
+                                        }}
+                                      />
+                                    );
+                                  }
+                                  if (kind === "pdf") {
+                                    return (
+                                      <iframe
+                                        src={buildFilePreviewUrl(
+                                          doc.example_url,
+                                          `${doc.label}-example.pdf`,
+                                        )}
+                                        title={`${doc.label} example`}
+                                        style={{
+                                          width: "100%",
+                                          height: 320,
+                                          border: "none",
+                                        }}
+                                      />
+                                    );
+                                  }
+                                  return (
+                                    <div style={{ padding: 12 }}>
+                                      <Text type="secondary" style={{ fontSize: 12 }}>
+                                        Preview contoh dokumen tidak tersedia.
+                                      </Text>
+                                    </div>
+                                  );
+                                })()}
+                              </div>
+                            ) : null}
+
+                            {submittedFile?.file_url || draftFile?.status === "done" ? (
+                              <>
+                                <Divider style={{ margin: "2px 0" }} />
+                                <div
+                                  style={{
                                     display: "flex",
                                     justifyContent: "space-between",
                                     alignItems: "center",
                                     gap: 12,
+                                    padding: "10px 12px",
+                                    borderRadius: 12,
+                                    border: "1px solid #edf2f7",
+                                    background: "#ffffff",
                                   }}
                                 >
-                                  <Text type="secondary" style={{ fontSize: 12 }}>
-                                    Preview tidak tersedia untuk tipe file ini.
-                                  </Text>
-                                  <a
-                                    href={buildFilePreviewUrl(previewUrl, previewName)}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                  >
-                                    Buka file
-                                  </a>
+                                  <Space size={10} align="start">
+                                    <FileTextOutlined
+                                      style={{ color: "#64748b", marginTop: 2 }}
+                                    />
+                                    <Space direction="vertical" size={0}>
+                                      <Text strong style={{ fontSize: 13 }}>
+                                        {draftFile?.name ||
+                                          submittedFile?.file_name ||
+                                          `${doc.label}.pdf`}
+                                      </Text>
+                                      <Text type="secondary" style={{ fontSize: 12 }}>
+                                        {draftFile?.status === "done"
+                                          ? "Uploaded in this session"
+                                          : submittedFile?.created_at
+                                            ? `Uploaded ${formatUploadDate(submittedFile.created_at)}`
+                                            : "Ready to submit"}
+                                      </Text>
+                                    </Space>
+                                  </Space>
+
+                                  <Space size={8}>
+                                    {draftFile?.status === "uploading" ? (
+                                      <span style={{ color: "#2563eb", fontSize: 12 }}>
+                                        <LoadingOutlined /> Uploading...
+                                      </span>
+                                    ) : (
+                                      <span
+                                        style={{
+                                          color: "#16a34a",
+                                          fontSize: 12,
+                                          fontWeight: 600,
+                                        }}
+                                      >
+                                        <CheckCircleFilled /> File ready
+                                      </span>
+                                    )}
+
+                                    {(draftFile?.response?.url || submittedFile?.file_url) && (
+                                      <a
+                                        href={buildFilePreviewUrl(
+                                          draftFile?.response?.url ||
+                                            submittedFile?.file_url,
+                                          draftFile?.name ||
+                                            submittedFile?.file_name ||
+                                            `${doc.label}.pdf`,
+                                        )}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        style={{ color: "#2563eb" }}
+                                      >
+                                        <LinkOutlined />
+                                      </a>
+                                    )}
+                                  </Space>
                                 </div>
-                              ) : null}
-                            </div>
-                          ) : null}
                               </>
-                            );
-                          })()}
-                        </Space>
-                      </Card>
-                    ),
-                  )
-                  }
-                  </>
-                ) : (
-                  <Card style={{ borderRadius: 18, borderColor: "#e5e7eb" }}>
-                    <Text type="secondary">Belum ada dokumen untuk negara ini.</Text>
-                  </Card>
-                )}
+                            ) : null}
+                            {previewUrl ? (
+                              <div
+                                style={{
+                                  border: "1px solid #e5e7eb",
+                                  borderRadius: 12,
+                                  background: "#ffffff",
+                                  overflow: "hidden",
+                                }}
+                              >
+                                {previewKind === "image" ? (
+                                  <Image
+                                    src={previewUrl}
+                                    alt={previewName}
+                                    width={1400}
+                                    height={900}
+                                    unoptimized
+                                    style={{
+                                      width: "100%",
+                                      height: "auto",
+                                      maxHeight: 420,
+                                      objectFit: "contain",
+                                    }}
+                                  />
+                                ) : null}
+
+                                {previewKind === "pdf" ? (
+                                  <iframe
+                                    src={buildFilePreviewUrl(previewUrl, previewName)}
+                                    title={previewName}
+                                    style={{
+                                      width: "100%",
+                                      height: 420,
+                                      border: "none",
+                                    }}
+                                  />
+                                ) : null}
+
+                                {previewKind === "other" ? (
+                                  <div
+                                    style={{
+                                      padding: 14,
+                                      display: "flex",
+                                      justifyContent: "space-between",
+                                      alignItems: "center",
+                                      gap: 12,
+                                    }}
+                                  >
+                                    <Text type="secondary" style={{ fontSize: 12 }}>
+                                      Preview tidak tersedia untuk tipe file ini.
+                                    </Text>
+                                    <a
+                                      href={buildFilePreviewUrl(previewUrl, previewName)}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                    >
+                                      Buka file
+                                    </a>
+                                  </div>
+                                ) : null}
+                              </div>
+                            ) : null}
+                                </>
+                              );
+                            })()}
+                          </Space>
+                        </Card>
+                      ),
+                    )
+                    }
+                    </>
+                  ) : (
+                    <Card style={{ borderRadius: 18, borderColor: "#e5e7eb" }}>
+                      <Text type="secondary">Belum ada dokumen untuk negara ini.</Text>
+                    </Card>
+                  )}
+                </Space>
               </Space>
-            </Space>
-          </Col>
+            </Col>
 
-          <Col xs={24} xl={8}>
-            <Space direction="vertical" size={16} style={{ width: "100%" }}>
-              <Card style={summaryCardStyle} styles={{ body: { padding: 18 } }}>
-                <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "flex-start",
-                      gap: 12,
-                    }}
-                  >
-                    <Space direction="vertical" size={0}>
-                      <Text strong>Overall Progress</Text>
-                      <Text type="secondary" style={{ fontSize: 12 }}>
-                        {uploadedDocuments} / {totalDocuments} documents uploaded
-                      </Text>
-                    </Space>
-                    <Text
-                      strong
-                      style={{ color: "#2f61ff", fontSize: 24, lineHeight: 1 }}
+            <Col xs={24} xl={8}>
+              <Space direction="vertical" size={16} style={{ width: "100%" }}>
+                <Card id="docs-progress-card" style={summaryCardStyle} styles={{ body: { padding: 18 } }}>
+                  <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "flex-start",
+                        gap: 12,
+                      }}
                     >
-                      {progressPercent}%
+                      <Space direction="vertical" size={0}>
+                        <Text strong>Overall Progress</Text>
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                          {uploadedDocuments} / {totalDocuments} documents uploaded
+                        </Text>
+                      </Space>
+                      <Text
+                        strong
+                        style={{ color: "#2f61ff", fontSize: 24, lineHeight: 1 }}
+                      >
+                        {progressPercent}%
+                      </Text>
+                    </div>
+
+                    <Progress
+                      percent={progressPercent}
+                      showInfo={false}
+                      strokeColor="#2f61ff"
+                      trailColor="#e5e7eb"
+                    />
+
+                    <Row gutter={[12, 12]}>
+                      <Col span={12}>
+                        <Space direction="vertical" size={0}>
+                          <Text strong style={{ fontSize: 24, color: "#111827" }}>
+                            {uploadedDocuments}
+                          </Text>
+                          <Text type="secondary" style={{ fontSize: 12 }}>
+                            Uploaded
+                          </Text>
+                        </Space>
+                      </Col>
+
+                      <Col span={12}>
+                        <Space direction="vertical" size={0}>
+                          <Text strong style={{ fontSize: 24, color: "#111827" }}>
+                            {pendingDocuments}
+                          </Text>
+                          <Text type="secondary" style={{ fontSize: 12 }}>
+                            Pending upload
+                          </Text>
+                        </Space>
+                      </Col>
+
+                      <Col span={12}>
+                        <Space direction="vertical" size={0}>
+                          <Text strong style={{ fontSize: 24, color: "#111827" }}>
+                            {optionalDocuments}
+                          </Text>
+                          <Text type="secondary" style={{ fontSize: 12 }}>
+                            Optional docs
+                          </Text>
+                        </Space>
+                      </Col>
+
+                      <Col span={12}>
+                        <Space direction="vertical" size={0}>
+                          <Text strong style={{ fontSize: 24, color: "#111827" }}>
+                            {translationDocuments}
+                          </Text>
+                          <Text type="secondary" style={{ fontSize: 12 }}>
+                            Need translation
+                          </Text>
+                        </Space>
+                      </Col>
+                    </Row>
+
+                    <Button
+                      id="docs-submit-btn"
+                      type="primary"
+                      block
+                      size="large"
+                      loading={submittingDocuments}
+                      onClick={() => docForm.submit()}
+                      style={{
+                        borderRadius: 999,
+                        height: 42,
+                        background: "linear-gradient(90deg, #2f61ff 0%, #3563e9 100%)",
+                        boxShadow: "0 12px 24px rgba(47, 97, 255, 0.22)",
+                      }}
+                    >
+                      Submit for admission review
+                    </Button>
+                  </Space>
+                </Card>
+
+                <Card
+                  style={{
+                    ...summaryCardStyle,
+                    background: "#f8fbff",
+                  }}
+                  styles={{ body: { padding: 18 } }}
+                >
+                  <Space direction="vertical" size={10} style={{ width: "100%" }}>
+                    <Text strong style={{ color: "#1d4ed8" }}>
+                      Upload guidelines
                     </Text>
-                  </div>
 
-                  <Progress
-                    percent={progressPercent}
-                    showInfo={false}
-                    strokeColor="#2f61ff"
-                    trailColor="#e5e7eb"
-                  />
+                    <ul
+                      style={{
+                        margin: 0,
+                        paddingLeft: 18,
+                        color: "#475569",
+                        fontSize: 13,
+                      }}
+                    >
+                      {guidelineItems.map((item) => (
+                        <li key={item} style={{ marginBottom: 6 }}>
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  </Space>
+                </Card>
+              </Space>
+            </Col>
+          </Row>
+        </Form>
+      </div>
 
-                  <Row gutter={[12, 12]}>
-                    <Col span={12}>
-                      <Space direction="vertical" size={0}>
-                        <Text strong style={{ fontSize: 24, color: "#111827" }}>
-                          {uploadedDocuments}
-                        </Text>
-                        <Text type="secondary" style={{ fontSize: 12 }}>
-                          Uploaded
-                        </Text>
-                      </Space>
-                    </Col>
-
-                    <Col span={12}>
-                      <Space direction="vertical" size={0}>
-                        <Text strong style={{ fontSize: 24, color: "#111827" }}>
-                          {pendingDocuments}
-                        </Text>
-                        <Text type="secondary" style={{ fontSize: 12 }}>
-                          Pending upload
-                        </Text>
-                      </Space>
-                    </Col>
-
-                    <Col span={12}>
-                      <Space direction="vertical" size={0}>
-                        <Text strong style={{ fontSize: 24, color: "#111827" }}>
-                          {optionalDocuments}
-                        </Text>
-                        <Text type="secondary" style={{ fontSize: 12 }}>
-                          Optional docs
-                        </Text>
-                      </Space>
-                    </Col>
-
-                    <Col span={12}>
-                      <Space direction="vertical" size={0}>
-                        <Text strong style={{ fontSize: 24, color: "#111827" }}>
-                          {translationDocuments}
-                        </Text>
-                        <Text type="secondary" style={{ fontSize: 12 }}>
-                          Need translation
-                        </Text>
-                      </Space>
-                    </Col>
-                  </Row>
-
-                  <Button
-                    type="primary"
-                    block
-                    size="large"
-                    loading={submittingDocuments}
-                    onClick={() => docForm.submit()}
-                    style={{
-                      borderRadius: 999,
-                      height: 42,
-                      background: "linear-gradient(90deg, #2f61ff 0%, #3563e9 100%)",
-                      boxShadow: "0 12px 24px rgba(47, 97, 255, 0.22)",
-                    }}
-                  >
-                    Submit for admission review
-                  </Button>
-                </Space>
-              </Card>
-
-              <Card
-                style={{
-                  ...summaryCardStyle,
-                  background: "#f8fbff",
-                }}
-                styles={{ body: { padding: 18 } }}
-              >
-                <Space direction="vertical" size={10} style={{ width: "100%" }}>
-                  <Text strong style={{ color: "#1d4ed8" }}>
-                    Upload guidelines
-                  </Text>
-
-                  <ul
-                    style={{
-                      margin: 0,
-                      paddingLeft: 18,
-                      color: "#475569",
-                      fontSize: 13,
-                    }}
-                  >
-                    {guidelineItems.map((item) => (
-                      <li key={item} style={{ marginBottom: 6 }}>
-                        {item}
-                      </li>
-                    ))}
-                  </ul>
-                </Space>
-              </Card>
-            </Space>
-          </Col>
-        </Row>
-      </Form>
-    </div>
+      <Tour
+        open={tourOpen}
+        onClose={closeTour}
+        onFinish={closeTour}
+        steps={tourSteps}
+        zIndex={1200}
+      />
+    </>
   );
 }

@@ -496,6 +496,7 @@ export default function DashboardContent() {
       </div>
 
       <Card
+        id="student-tour-progress"
         bordered={false}
         style={{
           borderRadius: 20,
@@ -513,6 +514,7 @@ export default function DashboardContent() {
       <Row gutter={[20, 20]}>
         <Col xs={24} lg={16}>
           <Card
+            id="student-tour-overview"
             title="Overview"
             bordered={false}
             style={{
@@ -641,6 +643,7 @@ export default function DashboardContent() {
 
         <Col xs={24} lg={8}>
           <Card
+            id="student-tour-notes"
             title="Notes from admission"
             bordered={false}
             style={{
@@ -687,6 +690,7 @@ export default function DashboardContent() {
       </Row>
 
       <Card
+        id="student-tour-tasks"
         title="Tasks to Do"
         bordered={false}
         style={{

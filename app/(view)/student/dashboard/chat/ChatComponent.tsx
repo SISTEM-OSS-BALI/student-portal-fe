@@ -15,15 +15,18 @@ import {
   Row,
   Space,
   Tag,
+  Tour,
   Typography,
   Upload,
   notification,
 } from "antd";
+import type { TourProps } from "antd";
 import {
   ClockCircleOutlined,
   CloseOutlined,
   PaperClipOutlined,
   PlusOutlined,
+  QuestionCircleOutlined,
   TagOutlined,
   PaperClipOutlined as AttachmentIcon,
 } from "@ant-design/icons";
@@ -40,6 +43,7 @@ import type {
   TicketMessagePayloadCreateModel,
 } from "@/app/models/ticket-message";
 import { useAuth } from "@/app/utils/use-auth";
+import { usePageTour } from "@/app/hooks/use-page-tour";
 import { useUsers } from "@/app/hooks/use-users";
 import type { UploadedChatAttachment } from "@/app/vendor/chat-upload";
 import { uploadChatFiles } from "@/app/vendor/chat-upload";
@@ -454,6 +458,47 @@ export default function ChatComponent() {
   const [form] = Form.useForm<TicketMessagePayloadCreateModel>();
   const { user_id } = useAuth();
 
+  const { open: tourOpen, close: closeTour, restart: restartTour } = usePageTour(
+    "student_tour_chat_done",
+  );
+
+  const tourSteps: TourProps["steps"] = [
+    {
+      title: "Chat dengan Tim Admission",
+      description:
+        "Gunakan fitur chat ini untuk berkomunikasi langsung dengan tim admission kamu.",
+      target: null,
+    },
+    {
+      title: "Daftar Subject / Ticket",
+      description:
+        "Semua ticket percakapan kamu tampil di sini. Klik salah satu untuk membuka riwayat chat.",
+      target: () => document.getElementById("chat-ticket-list")!,
+      placement: "right",
+    },
+    {
+      title: "Buat Ticket Baru",
+      description:
+        "Klik tombol ini untuk membuat ticket percakapan baru dengan tim admission.",
+      target: () => document.getElementById("chat-new-ticket-btn")!,
+      placement: "bottom",
+    },
+    {
+      title: "Area Pesan",
+      description:
+        "Riwayat pesan dengan tim admission ditampilkan di sini. Pesan kamu muncul di kanan, pesan dari admission di kiri.",
+      target: () => document.getElementById("chat-messages-area")!,
+      placement: "top",
+    },
+    {
+      title: "Kirim Pesan",
+      description:
+        "Ketik pesanmu di sini. Tekan Enter untuk mengirim, atau Shift+Enter untuk baris baru. Kamu juga bisa melampirkan file.",
+      target: () => document.getElementById("chat-input-area")!,
+      placement: "top",
+    },
+  ];
+
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [chatText, setChatText] = useState("");
@@ -835,6 +880,7 @@ export default function ChatComponent() {
       <Row gutter={[24, 24]}>
         <Col xs={24} lg={9} xl={8}>
           <Card
+            id="chat-ticket-list"
             loading={fetchLoading}
             style={{
               height: "100%",
@@ -863,6 +909,7 @@ export default function ChatComponent() {
                 </Space>
 
                 <Button
+                  id="chat-new-ticket-btn"
                   type="primary"
                   icon={<PlusOutlined />}
                   onClick={handleOpenModal}
@@ -1071,6 +1118,7 @@ export default function ChatComponent() {
                 {selectedTicket ? (
                   mergedMessages.length ? (
                     <div
+                      id="chat-messages-area"
                       style={{
                         display: "flex",
                         flexDirection: "column",
@@ -1158,6 +1206,7 @@ export default function ChatComponent() {
                 ) : null}
 
                 <div
+                  id="chat-input-area"
                   style={{
                     display: "flex",
                     alignItems: "stretch",
@@ -1287,6 +1336,14 @@ export default function ChatComponent() {
           </div>
         </Form>
       </Modal>
+
+      <Tour
+        open={tourOpen}
+        onClose={closeTour}
+        onFinish={closeTour}
+        steps={tourSteps}
+        zIndex={1200}
+      />
     </div>
   );
 }

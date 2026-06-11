@@ -10,9 +10,11 @@ import {
   Image,
   Layout,
   Modal,
+  Tour,
   Typography,
   message,
 } from "antd";
+import type { TourProps } from "antd";
 import {
   FileTextOutlined,
   GiftOutlined,
@@ -21,6 +23,7 @@ import {
   LockOutlined,
   LogoutOutlined,
   MessageOutlined,
+  QuestionCircleOutlined,
   UserOutlined,
 } from "@ant-design/icons";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -56,6 +59,7 @@ const DOCUMENT_CONSENT_BUCKET = "student-portal";
 const DOCUMENT_CONSENT_FOLDER = "document-consent-signatures";
 const SIGNATURE_CANVAS_HEIGHT = 220;
 const SEARCH_REDIRECT_PATH = "/student/dashboard/home";
+const TOUR_STORAGE_KEY = "student_portal_tour_completed";
 const PROMO_SEEN_STORAGE_PREFIX = "student_promo_seen";
 
 function formatSearchDate(value?: string | null): string {
@@ -193,6 +197,7 @@ export default function StudentLayout({
   const [isDocumentConsentModalOpen, setIsDocumentConsentModalOpen] =
     useState(false);
   const [unseenPromoCount, setUnseenPromoCount] = useState(0);
+  const [tourOpen, setTourOpen] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const hasSignatureRef = useRef(false);
@@ -387,26 +392,31 @@ export default function StudentLayout({
         key: "/student/dashboard/home",
         label: "Home",
         icon: <HomeOutlined />,
+        tourId: "student-tour-nav-home",
       },
       {
         key: "/student/dashboard/upload-personal-information",
         label: "Personal Info",
         icon: <UserOutlined />,
+        tourId: "student-tour-nav-personal-info",
       },
       {
         key: "/student/dashboard/upload-country-document",
         label: "Documents",
         icon: <FileTextOutlined />,
+        tourId: "student-tour-nav-documents",
       },
       {
         key: "/student/dashboard/chat",
         label: "Chat",
         icon: <MessageOutlined />,
+        tourId: "student-tour-nav-chat",
       },
       {
         key: "/student/dashboard/promo",
         label: "Promo",
         icon: <GiftOutlined />,
+        tourId: "student-tour-nav-promo",
       },
     ],
     [],
@@ -431,6 +441,15 @@ export default function StudentLayout({
     window.localStorage.setItem(storageKey, JSON.stringify(ids));
     setUnseenPromoCount(0);
   }, [activePromos, pathname, user_id]);
+
+  useEffect(() => {
+    if (!user_id) return;
+    const completed = window.localStorage.getItem(TOUR_STORAGE_KEY);
+    if (!completed) {
+      const timer = window.setTimeout(() => setTourOpen(true), 1000);
+      return () => window.clearTimeout(timer);
+    }
+  }, [user_id]);
 
   const openDrawerInbox = () => {
     setOpenInbox(true);
@@ -722,6 +741,77 @@ export default function StudentLayout({
     };
   }, [isDocumentConsentModalOpen]);
 
+  const tourSteps: TourProps["steps"] = [
+    {
+      title: "Selamat datang di Bali Student Portal!",
+      description:
+        "Mari kami tunjukkan fitur-fitur utama agar kamu bisa memulai dengan cepat.",
+      target: null,
+    },
+    {
+      title: "Navigasi Dashboard",
+      description:
+        "Gunakan tombol-tombol ini untuk berpindah antar halaman: Home, Personal Info, Documents, Chat, dan Promo.",
+      target: () => document.getElementById("student-tour-nav")!,
+      placement: "bottom" as const,
+    },
+    {
+      title: "Personal Info",
+      description:
+        "Lengkapi data diri dan unggah dokumen identitas kamu di sini.",
+      target: () => document.getElementById("student-tour-nav-personal-info")!,
+      placement: "bottom" as const,
+    },
+    {
+      title: "Documents",
+      description:
+        "Unggah semua dokumen yang diperlukan untuk proses aplikasi visa kamu.",
+      target: () => document.getElementById("student-tour-nav-documents")!,
+      placement: "bottom" as const,
+    },
+    {
+      title: "Chat",
+      description:
+        "Komunikasikan langsung dengan tim admission jika kamu punya pertanyaan.",
+      target: () => document.getElementById("student-tour-nav-chat")!,
+      placement: "bottom" as const,
+    },
+    {
+      title: "Application Progress",
+      description:
+        "Pantau tahapan aplikasi visa kamu saat ini. Setiap langkah menunjukkan seberapa jauh prosesmu.",
+      target: () => document.getElementById("student-tour-progress")!,
+      placement: "bottom" as const,
+    },
+    {
+      title: "Overview",
+      description:
+        "Ringkasan informasi aplikasimu: negara tujuan, kampus, jenis visa, dan status terkini.",
+      target: () => document.getElementById("student-tour-overview")!,
+      placement: "top" as const,
+    },
+    {
+      title: "Notes from Admission",
+      description:
+        "Catatan dan feedback penting dari tim admission akan muncul di sini. Perhatikan baik-baik!",
+      target: () => document.getElementById("student-tour-notes")!,
+      placement: "top" as const,
+    },
+    {
+      title: "Tasks to Do",
+      description:
+        "Daftar tugas yang perlu kamu selesaikan. Selesaikan semua task agar proses aplikasimu berjalan lancar.",
+      target: () => document.getElementById("student-tour-tasks")!,
+      placement: "top" as const,
+    },
+  ];
+
+  const handleCloseTour = () => {
+    setTourOpen(false);
+    window.localStorage.setItem(TOUR_STORAGE_KEY, "true");
+  };
+
+
   return (
     <>
       <Layout className={styles.root}>
@@ -747,7 +837,7 @@ export default function StudentLayout({
             </div>
 
             <div className={styles.headerTools}>
-              <div className={styles.navList}>
+              <div className={styles.navList} id="student-tour-nav">
                 {navigationItems.map((item) => {
                   const isActive = pathname === item.key;
 
@@ -762,6 +852,7 @@ export default function StudentLayout({
                       size="small"
                     >
                       <button
+                        id={item.tourId}
                         type="button"
                         onClick={() => router.push(item.key)}
                         className={`${styles.navButton} ${
@@ -775,6 +866,16 @@ export default function StudentLayout({
                   );
                 })}
               </div>
+
+              <button
+                className={styles.iconButton}
+                type="button"
+                onClick={() => setTourOpen(true)}
+                title="Mulai Tour"
+                aria-label="Mulai Onboarding Tour"
+              >
+                <QuestionCircleOutlined />
+              </button>
 
               <Badge count={unreadCount} size="small">
                 <button
@@ -978,6 +1079,13 @@ export default function StudentLayout({
           </div>
         </div>
       </Modal>
+      <Tour
+        open={tourOpen}
+        onClose={handleCloseTour}
+        onFinish={handleCloseTour}
+        steps={tourSteps}
+        zIndex={1200}
+      />
     </>
   );
 }

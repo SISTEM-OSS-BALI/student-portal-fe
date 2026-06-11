@@ -16,16 +16,19 @@ import {
   Select,
   Space,
   Tabs,
+  Tour,
   Typography,
   Upload,
 } from "antd";
-import { PlusCircleOutlined } from "@ant-design/icons";
+import type { TourProps } from "antd";
+import { PlusCircleOutlined, QuestionCircleOutlined } from "@ant-design/icons";
 import dayjs, { type Dayjs } from "dayjs";
 import { useAuth } from "@/app/utils/use-auth";
 import { useQuestionBases } from "@/app/hooks/use-question-bases";
 import { useQuestions } from "@/app/hooks/use-questions";
 import { useUser } from "@/app/hooks/use-users";
 import { useAnswerQuestions } from "@/app/hooks/use-answer-questions";
+import { usePageTour } from "@/app/hooks/use-page-tour";
 import { isAllowedUploadSize } from "@/app/utils/upload";
 import type {
   AnswerQuestionDataModel,
@@ -176,6 +179,47 @@ export default function FormUploadDocumentComponent() {
   const { user_id } = useAuth();
   const { data: currentUser } = useUser({ id: user_id });
   const { data: bases, fetchLoading: basesLoading } = useQuestionBases({});
+
+  const { open: tourOpen, close: closeTour, restart: restartTour } = usePageTour(
+    "student_tour_personal_info_done",
+  );
+
+  const tourSteps: TourProps["steps"] = [
+    {
+      title: "Personal Information",
+      description:
+        "Halaman ini untuk mengisi data diri kamu yang diperlukan dalam proses aplikasi visa.",
+      target: null,
+    },
+    {
+      title: "Tab Kategori",
+      description:
+        "Setiap tab berisi kategori pertanyaan yang berbeda. Pastikan semua tab sudah diisi dengan lengkap.",
+      target: () => document.getElementById("personal-info-tabs")!,
+      placement: "bottom",
+    },
+    {
+      title: "Isi Jawaban Baru",
+      description:
+        "Klik tombol ini untuk mereset form dan mengisi jawaban baru. Section ini mendukung multiple submissions.",
+      target: () => document.getElementById("personal-info-add-btn")!,
+      placement: "left",
+    },
+    {
+      title: "Form Isian",
+      description:
+        "Isi semua field yang ditandai bintang (*). Field ini wajib diisi sebelum submit.",
+      target: () => document.getElementById("personal-info-form-fields")!,
+      placement: "top",
+    },
+    {
+      title: "Submit Jawaban",
+      description:
+        "Setelah mengisi semua field, klik tombol ini untuk menyimpan data kamu ke sistem.",
+      target: () => document.getElementById("personal-info-submit-btn")!,
+      placement: "top",
+    },
+  ];
 
   useEffect(() => {
     if (!activeTab && bases?.length) {
@@ -475,6 +519,7 @@ export default function FormUploadDocumentComponent() {
                 Section ini mendukung multiple submissions.
               </Typography.Text>
               <Button
+                id="personal-info-add-btn"
                 type="link"
                 icon={<PlusCircleOutlined />}
                 onClick={() =>
@@ -486,23 +531,25 @@ export default function FormUploadDocumentComponent() {
             </Space>
           ) : null}
 
-          <Row gutter={[16, 16]}>
-            {baseQuestions.map((question) => (
-              <Col key={question.id} xs={24} md={12}>
-                <Form.Item
-                  label={renderQuestionLabel(question)}
-                  name={String(question.id)}
-                  rules={
-                    question.required
-                      ? [{ required: true, message: "Field is required" }]
-                      : undefined
-                  }
-                >
-                  {renderQuestionField(question)}
-                </Form.Item>
-              </Col>
-            ))}
-          </Row>
+          <div id="personal-info-form-fields">
+            <Row gutter={[16, 16]}>
+              {baseQuestions.map((question) => (
+                <Col key={question.id} xs={24} md={12}>
+                  <Form.Item
+                    label={renderQuestionLabel(question)}
+                    name={String(question.id)}
+                    rules={
+                      question.required
+                        ? [{ required: true, message: "Field is required" }]
+                        : undefined
+                    }
+                  >
+                    {renderQuestionField(question)}
+                  </Form.Item>
+                </Col>
+              ))}
+            </Row>
+          </div>
 
           <div
             style={{
@@ -512,6 +559,7 @@ export default function FormUploadDocumentComponent() {
             }}
           >
             <Button
+              id="personal-info-submit-btn"
               type="primary"
               htmlType="submit"
               loading={
@@ -528,41 +576,68 @@ export default function FormUploadDocumentComponent() {
   });
 
   return (
-    <Card
-      style={{ borderRadius: 20 }}
-      loading={basesLoading || questionsLoading}
-      bodyStyle={{ padding: 24 }}
-    >
-      <Space direction="vertical" size={16} style={{ width: "100%" }}>
-        <Space direction="vertical" size={4} style={{ width: "100%" }}>
-          <Title level={4} style={{ margin: 0 }}>
-            Personal Information
-          </Title>
-          <Text type="secondary">
-            Form pertanyaan personal information ditampilkan terpisah dari
-            country document.
-          </Text>
-        </Space>
-
-        {items.length ? (
-          <Tabs
-            activeKey={activeTab ?? resolvedBaseId}
-            onChange={(key) => {
-              setActiveTab(key);
-              form.resetFields();
+    <>
+      <Card
+        style={{ borderRadius: 20 }}
+        loading={basesLoading || questionsLoading}
+        bodyStyle={{ padding: 24 }}
+      >
+        <Space direction="vertical" size={16} style={{ width: "100%" }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
             }}
-            items={items}
-          />
-        ) : (
-          <Text type="secondary">Belum ada base question yang tersedia.</Text>
-        )}
+          >
+            <Space direction="vertical" size={4}>
+              <Title level={4} style={{ margin: 0 }}>
+                Personal Information
+              </Title>
+              <Text type="secondary">
+                Form pertanyaan personal information ditampilkan terpisah dari
+                country document.
+              </Text>
+            </Space>
+            <Button
+              type="text"
+              icon={<QuestionCircleOutlined />}
+              onClick={restartTour}
+              title="Lihat panduan halaman ini"
+              style={{ color: "#94a3b8" }}
+            />
+          </div>
 
-        {allowMultipleSubmissions ? (
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            Klik ikon `+` untuk menyiapkan input response baru setelah submit.
-          </Typography.Text>
-        ) : null}
-      </Space>
-    </Card>
+          {items.length ? (
+            <div id="personal-info-tabs">
+              <Tabs
+                activeKey={activeTab ?? resolvedBaseId}
+                onChange={(key) => {
+                  setActiveTab(key);
+                  form.resetFields();
+                }}
+                items={items}
+              />
+            </div>
+          ) : (
+            <Text type="secondary">Belum ada base question yang tersedia.</Text>
+          )}
+
+          {allowMultipleSubmissions ? (
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              Klik ikon `+` untuk menyiapkan input response baru setelah submit.
+            </Typography.Text>
+          ) : null}
+        </Space>
+      </Card>
+
+      <Tour
+        open={tourOpen}
+        onClose={closeTour}
+        onFinish={closeTour}
+        steps={tourSteps}
+        zIndex={1200}
+      />
+    </>
   );
 }
