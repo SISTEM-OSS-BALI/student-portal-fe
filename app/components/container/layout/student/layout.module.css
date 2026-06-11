@@ -161,8 +161,16 @@
 .navList {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+  gap: 8px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+}
+
+.headerNav {
+  max-width: 1180px;
+  margin: 12px auto 0;
+  display: flex;
+  align-items: center;
 }
 
 .navButton {
@@ -248,11 +256,12 @@
     display: none;
   }
 
-  .navList {
-    width: 100%;
+  .headerNav {
+    overflow-x: auto;
+    padding: 0 4px;
   }
 
-  .navButton {
-    width: 100%;
+  .navList {
+    width: max-content;
   }
 }

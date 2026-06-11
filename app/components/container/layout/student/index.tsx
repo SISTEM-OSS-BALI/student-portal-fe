@@ -837,36 +837,6 @@ export default function StudentLayout({
             </div>
 
             <div className={styles.headerTools}>
-              <div className={styles.navList} id="student-tour-nav">
-                {navigationItems.map((item) => {
-                  const isActive = pathname === item.key;
-
-                  return (
-                    <Badge
-                      key={item.key}
-                      count={
-                        item.key === "/student/dashboard/promo"
-                          ? unseenPromoCount
-                          : 0
-                      }
-                      size="small"
-                    >
-                      <button
-                        id={item.tourId}
-                        type="button"
-                        onClick={() => router.push(item.key)}
-                        className={`${styles.navButton} ${
-                          isActive ? styles.navButtonActive : ""
-                        }`}
-                      >
-                        {item.icon}
-                        <span>{item.label}</span>
-                      </button>
-                    </Badge>
-                  );
-                })}
-              </div>
-
               <button
                 className={styles.iconButton}
                 type="button"
@@ -911,6 +881,38 @@ export default function StudentLayout({
                   </div>
                 </button>
               </Dropdown>
+            </div>
+          </div>
+
+          <div className={styles.headerNav}>
+            <div className={styles.navList} id="student-tour-nav">
+              {navigationItems.map((item) => {
+                const isActive = pathname === item.key;
+
+                return (
+                  <Badge
+                    key={item.key}
+                    count={
+                      item.key === "/student/dashboard/promo"
+                        ? unseenPromoCount
+                        : 0
+                    }
+                    size="small"
+                  >
+                    <button
+                      id={item.tourId}
+                      type="button"
+                      onClick={() => router.push(item.key)}
+                      className={`${styles.navButton} ${
+                        isActive ? styles.navButtonActive : ""
+                      }`}
+                    >
+                      {item.icon}
+                      <span>{item.label}</span>
+                    </button>
+                  </Badge>
+                );
+              })}
             </div>
           </div>
         </Header>
