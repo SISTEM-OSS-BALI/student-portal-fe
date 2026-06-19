@@ -39,6 +39,23 @@ export const useCreateChatConversation = () => {
   return { onCreate, onCreateLoading };
 };
 
+export const useGetOrCreateContextConversation = () => {
+  const queryClient = useQueryClient();
+
+  const { mutateAsync: getOrCreate, isPending: getOrCreateLoading } =
+    useMutation({
+      mutationFn: async (payload: {
+        context_type: string;
+        context_user_id: string;
+      }) => api.post(`${chatBaseUrl}/conversations/context`, payload),
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["chat-conversations"] });
+      },
+    });
+
+  return { getOrCreate, getOrCreateLoading };
+};
+
 export const useChatMessages = ({
   conversation_id,
   limit = 50,

@@ -8,9 +8,8 @@ import { useGeneratedStatementLetterAiDocuments } from "@/app/hooks/use-generate
 import { useGeneratedSponsorLetterAiDocuments } from "@/app/hooks/use-generated-sponsor-letter-ai-documents";
 import { useAuth } from "@/app/utils/use-auth";
 import {
-  useChatConversations,
   useChatMessages,
-  useCreateChatConversation,
+  useGetOrCreateContextConversation,
 } from "@/app/hooks/use-chat";
 import { useChatSocket } from "@/app/hooks/use-chat-socket";
 import type { ChatMessage } from "@/app/models/chat";
@@ -284,17 +283,17 @@ export default function OverviewComponent({
   const queryClient = useQueryClient();
   const { user_id: currentUserId } = useAuth();
   const { data: usersData } = useUsers({ enabled: Boolean(currentUserId) });
-  const { data: chatConversations } = useChatConversations();
-  const { onCreate: onCreateConversation } = useCreateChatConversation();
+  const { getOrCreate: getOrCreateContextConversation } =
+    useGetOrCreateContextConversation();
 
-  const [activeConversationId, setActiveConversationId] = useState<
+  const [studentConversationId, setStudentConversationId] = useState<
     string | undefined
   >();
-  const creatingConversationRef = useRef(false);
+  const [conversationError, setConversationError] = useState(false);
+  const fetchingConversationRef = useRef(false);
   const [localMessagesByConversation, setLocalMessagesByConversation] =
     useState<Record<string, ChatMessage[]>>({});
   const [chatText, setChatText] = useState("");
-  const [selectedPeerId, setSelectedPeerId] = useState<string | undefined>();
   const [pendingAttachments, setPendingAttachments] = useState<
     UploadedChatAttachment[]
   >([]);
@@ -335,53 +334,31 @@ export default function OverviewComponent({
     return getUserHandle(currentUser);
   }, [currentUser]);
 
-  const internalUserIds = useMemo(() => {
-    return new Set(
-      (usersData ?? [])
-        .filter((user) => isMentionableRole(user.role))
-        .map((user) => String(user.id)),
-    );
-  }, [usersData]);
+  const conversation_id = studentConversationId;
 
-  const chatPeerId = selectedPeerId;
+  useEffect(() => {
+    if (!studentId || !currentUserId) return;
+    if (studentConversationId) return;
+    if (fetchingConversationRef.current) return;
 
-  const directConversation = useMemo(() => {
-    if (!chatConversations || !chatPeerId || !currentUserId) return undefined;
-
-    const peerKey = String(chatPeerId);
-
-    return chatConversations.find(
-      (conversation) =>
-        conversation.type === "direct" &&
-        conversation.member_ids?.includes(peerKey) &&
-        conversation.member_ids?.includes(currentUserId),
-    );
-  }, [chatConversations, chatPeerId, currentUserId]);
-
-  const fallbackConversationId = useMemo(() => {
-    if (!chatConversations || !currentUserId) return undefined;
-
-    const mine = chatConversations.filter((conversation) => {
-      if (conversation.type !== "direct") return false;
-      if (!conversation.member_ids?.includes(currentUserId)) return false;
-
-      return (conversation.member_ids ?? []).every((memberId) =>
-        internalUserIds.has(String(memberId)),
-      );
-    });
-
-    if (!mine.length) return undefined;
-
-    const sorted = [...mine].sort((a, b) => {
-      const timeA = a.updated_at ? new Date(a.updated_at).getTime() : 0;
-      const timeB = b.updated_at ? new Date(b.updated_at).getTime() : 0;
-      return timeB - timeA;
-    });
-
-    return sorted[0]?.id;
-  }, [chatConversations, currentUserId, internalUserIds]);
-
-  const conversation_id = activeConversationId ?? fallbackConversationId;
+    fetchingConversationRef.current = true;
+    getOrCreateContextConversation({
+      context_type: "student",
+      context_user_id: String(studentId),
+    })
+      .then((res) => {
+        const id = extractConversationId(res.data);
+        if (id) {
+          setStudentConversationId(id);
+        } else {
+          setConversationError(true);
+        }
+      })
+      .catch(() => setConversationError(true))
+      .finally(() => {
+        fetchingConversationRef.current = false;
+      });
+  }, [studentId, currentUserId, studentConversationId, getOrCreateContextConversation]);
 
   const { data: chatMessagesData } = useChatMessages({ conversation_id });
 
@@ -496,14 +473,9 @@ export default function OverviewComponent({
     [studentId],
   );
 
-  const handleChatTextChange = useCallback(
-    (value: string) => {
-      setChatText(value);
-      const ids = extractMentionUserIds(value);
-      setSelectedPeerId(ids[0]);
-    },
-    [extractMentionUserIds],
-  );
+  const handleChatTextChange = useCallback((value: string) => {
+    setChatText(value);
+  }, []);
 
   const handleAttachmentUpload = useCallback(
     async (file: File) => {
@@ -542,73 +514,22 @@ export default function OverviewComponent({
 
     if (!content && !hasAttachments) return;
 
-    const mention_user_ids = extractMentionUserIds(content);
-    const peerId = mention_user_ids[0];
-    let targetConversationId = conversation_id;
-
-    if (!targetConversationId) {
-      if (!peerId) {
-        notification.warning({
-          message: "Pilih pengguna",
-          description: "Gunakan @ untuk memilih siapa yang akan di-mention.",
-        });
-        return;
-      }
-
-      if (directConversation?.id) {
-        setActiveConversationId(directConversation.id);
-        targetConversationId = directConversation.id;
-      }
-    }
-
-    if (!targetConversationId) {
-      try {
-        if (creatingConversationRef.current) {
-          notification.info({
-            message: "Menyiapkan chat",
-            description: "Tunggu sebentar, ruang chat sedang dibuat.",
-          });
-          return;
-        }
-
-        creatingConversationRef.current = true;
-
-        const res = await onCreateConversation({
-          type: "direct",
-          member_ids: [String(peerId)],
-        });
-
-        const id = extractConversationId(res.data);
-
-        if (id) {
-          setActiveConversationId(id);
-          targetConversationId = id;
-        }
-      } catch {
-        notification.error({
-          message: "Gagal membuat chat",
-          description: "Coba lagi beberapa saat.",
-        });
-        return;
-      } finally {
-        creatingConversationRef.current = false;
-      }
-    }
-
-    if (!targetConversationId) {
-      notification.error({
-        message: "Chat tidak tersedia",
-        description: "Conversation tidak berhasil dibuat.",
+    if (!conversation_id) {
+      notification.warning({
+        message: "Menyiapkan ruang catatan",
+        description: "Tunggu sebentar, ruang catatan untuk student ini sedang disiapkan.",
       });
       return;
     }
+
+    const mention_user_ids = extractMentionUserIds(content);
 
     try {
       setChatText("");
       setPendingAttachments([]);
 
       const message = await sendMessageViaApi(
-        targetConversationId,
+        conversation_id,
         content,
         mention_user_ids,
         attachmentsToSend,
@@ -636,8 +557,6 @@ export default function OverviewComponent({
     pendingAttachments,
     extractMentionUserIds,
     conversation_id,
-    directConversation?.id,
-    onCreateConversation,
     notification,
     sendMessageViaApi,
     mergeChatMessages,
@@ -988,9 +907,11 @@ export default function OverviewComponent({
             </Typography.Text>
           </div>
 
-          {!conversation_id && !chatPeerId && (
+          {!conversation_id && (
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              Gunakan @ untuk memilih siapa yang akan di-mention.
+              {conversationError
+                ? "Gagal menyiapkan ruang catatan. Coba muat ulang halaman."
+                : "Menyiapkan ruang catatan untuk student ini..."}
             </Typography.Text>
           )}
 
@@ -1260,7 +1181,8 @@ export default function OverviewComponent({
               onClick={() => void handleSendChat()}
               disabled={
                 (!chatText.trim() && pendingAttachments.length === 0) ||
-                !currentUserId
+                !currentUserId ||
+                !conversation_id
               }
               style={{
                 border: "none",
