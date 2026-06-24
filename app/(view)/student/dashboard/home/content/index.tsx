@@ -183,10 +183,6 @@ function getStepsData(user?: StudentUser) {
     return extractStepNumber(a.label) - extractStepNumber(b.label);
   });
 
-  const stepItems = sortedSteps.map((step) => ({
-    title: step.label,
-  }));
-
   const currentStepId = String(user?.current_step_id ?? "");
   const currentIndex = sortedSteps.findIndex((step) => {
     if (step.id === currentStepId) return true;
@@ -201,6 +197,22 @@ function getStepsData(user?: StudentUser) {
       : currentIndex >= 0
         ? currentIndex
         : 0;
+
+  const stepItems = sortedSteps.map((step, index) => {
+    const isDone = visaGranted ? true : index < currentStep;
+    const isCurrent = !visaGranted && index === currentStep;
+    return {
+      title: step.label,
+      description: step.children?.length
+        ? step.children.map((child) => child.label).join(", ")
+        : "Belum ada detail",
+      status: isDone
+        ? ("finish" as const)
+        : isCurrent
+          ? ("process" as const)
+          : ("wait" as const),
+    };
+  });
 
   const pendingTasks: Array<{
     id: string;
@@ -312,7 +324,7 @@ export default function DashboardContent() {
     );
   }, [visaTypes]);
 
-  const { stepItems, currentStep, pendingTasks } = useMemo(
+  const { stepItems, pendingTasks } = useMemo(
     () => getStepsData(student),
     [student],
   );
@@ -439,6 +451,7 @@ export default function DashboardContent() {
     });
 
     pendingTasks.forEach((task) => {
+      if (task.priority === "Current Step") return;
       tasks.push({
         id: `step-${task.id}`,
         title: task.title,
@@ -507,7 +520,7 @@ export default function DashboardContent() {
           <Text strong style={{ fontSize: 14 }}>
             Application Progress
           </Text>
-          <Steps current={currentStep} responsive items={stepItems} />
+          <Steps direction="vertical" size="small" items={stepItems} />
         </Space>
       </Card>
 
