@@ -6,6 +6,7 @@ interface ModalQuestionComponentProps {
   visible: boolean;
   onClose: () => void;
   onSubmit: (data: QuestionPayloadCreateModel) => Promise<QuestionDataModel>;
+  onSaved?: () => void;
   initialValues?: Partial<QuestionPayloadCreateModel>;
   questionId?: string;
   initialOptions?: QuestionDataModel["options"];
@@ -28,6 +29,7 @@ export default function ModalQuestionComponent({
     >
       <FormQuestionManagement
         onSubmit={props.onSubmit}
+        onSaved={props.onSaved}
         initialValues={props.initialValues}
         loading={props.loading}
         base_id={props.base_id}

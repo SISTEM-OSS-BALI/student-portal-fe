@@ -84,10 +84,7 @@ export default function DetailQuestionComponent() {
         ...data,
         base_id: resolvedBaseId,
       };
-      const updated = await onUpdateQuestion({ id: editingQuestion.id, payload });
-      setEditingQuestion(null);
-      setIsModalOpen(false);
-      return updated;
+      return onUpdateQuestion({ id: editingQuestion.id, payload });
     }
 
     if (!resolvedBaseId) {
@@ -97,9 +94,15 @@ export default function DetailQuestionComponent() {
       ...data,
       base_id: resolvedBaseId,
     };
-    const created = await onCreateQuestion(payload);
+    return onCreateQuestion(payload);
+  };
+
+  // Closes the modal only once the question AND its options have actually
+  // been persisted (see FormQuestionComponent), instead of right after the
+  // question's own scalar fields are saved.
+  const handleSaved = () => {
+    setEditingQuestion(null);
     setIsModalOpen(false);
-    return created;
   };
 
   return (
@@ -223,6 +226,7 @@ export default function DetailQuestionComponent() {
           setEditingQuestion(null);
         }}
         onSubmit={handleSubmit}
+        onSaved={handleSaved}
         base_id={base_id ? String(base_id) : undefined}
         questionId={editingQuestion?.id}
         initialOptions={editingQuestion?.options}

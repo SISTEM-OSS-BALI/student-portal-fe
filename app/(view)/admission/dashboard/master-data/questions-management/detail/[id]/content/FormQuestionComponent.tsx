@@ -1,4 +1,5 @@
 import {
+  App,
   Button,
   Form,
   Input,
@@ -14,13 +15,14 @@ import type {
   QuestionPayloadCreateModel,
   QuestionOptionItemDataModel,
 } from "@/app/models/question";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import api from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
 
 interface FormQuestionComponentProps {
   onSubmit: (values: QuestionPayloadCreateModel) => Promise<QuestionDataModel>;
+  onSaved?: () => void;
   initialValues?: Partial<QuestionPayloadCreateModel>;
   loading?: boolean;
   base_id?: string;
@@ -58,7 +60,9 @@ export default function FormQuestionManagement(
   props: FormQuestionComponentProps,
 ) {
   const [form] = Form.useForm<QuestionFormValues>();
+  const { notification } = App.useApp();
   const queryClient = useQueryClient();
+  const [submitting, setSubmitting] = useState(false);
   const inputType = Form.useWatch("input_type", form);
 
   const inputTypeKey = String(inputType ?? "").toUpperCase();
@@ -144,64 +148,82 @@ export default function FormQuestionManagement(
       }
     }
 
-    const saved = await props.onSubmit(payload);
+    setSubmitting(true);
+    try {
+      const saved = await props.onSubmit(payload);
 
-    // sync options for SELECT/RADIO/CHECKBOX
-    if (isOptionType) {
-      const questionId = props.questionId ?? saved.id;
-      const submitted = (values.options ?? [])
-        .map((opt, index) => ({
-          id: opt.id,
-          label: (opt.label ?? "").trim(),
-          value: (opt.value ?? "").trim(),
-          order: typeof opt.order === "number" ? opt.order : index + 1,
-          active: opt.active ?? true,
-        }))
-        .filter((opt) => opt.label || opt.value);
+      // sync options for SELECT/RADIO/CHECKBOX
+      if (isOptionType) {
+        const questionId = props.questionId ?? saved.id;
+        const submitted = (values.options ?? [])
+          .map((opt, index) => ({
+            id: opt.id,
+            label: (opt.label ?? "").trim(),
+            value: (opt.value ?? "").trim(),
+            order: typeof opt.order === "number" ? opt.order : index + 1,
+            active: opt.active ?? true,
+          }))
+          .filter((opt) => opt.label || opt.value);
 
-      // fetch existing options from API to know deletions
-      const existingRes = await api.get(
-        `/api/question-options?question_id=${encodeURIComponent(questionId)}`,
-      );
-      const existing = (existingRes.data?.result ??
-        existingRes.data) as QuestionOptionItemDataModel[];
-      const existingById = new Map(
-        existing.filter((o) => o.id).map((o) => [o.id, o]),
-      );
-      const submittedIds = new Set(
-        submitted.filter((o) => o.id).map((o) => String(o.id)),
-      );
+        // fetch existing options from API to know deletions
+        const existingRes = await api.get(
+          `/api/question-options?question_id=${encodeURIComponent(questionId)}`,
+        );
+        const existing = (existingRes.data?.result ??
+          existingRes.data) as QuestionOptionItemDataModel[];
+        const existingById = new Map(
+          existing.filter((o) => o.id).map((o) => [o.id, o]),
+        );
+        const submittedIds = new Set(
+          submitted.filter((o) => o.id).map((o) => String(o.id)),
+        );
 
-      // delete removed options
-      for (const opt of existing) {
-        if (opt.id && !submittedIds.has(String(opt.id))) {
-          await api.delete(`/api/question-options/${opt.id}`);
+        // delete removed options
+        for (const opt of existing) {
+          if (opt.id && !submittedIds.has(String(opt.id))) {
+            await api.delete(`/api/question-options/${opt.id}`);
+          }
         }
+
+        // create/update submitted options
+        for (const opt of submitted) {
+          if (opt.id && existingById.has(String(opt.id))) {
+            await api.put(`/api/question-options/${opt.id}`, {
+              label: opt.label,
+              value: opt.value,
+              order: opt.order,
+              active: opt.active,
+              question_id: questionId,
+            });
+          } else {
+            await api.post(`/api/question-options`, {
+              question_id: questionId,
+              label: opt.label,
+              value: opt.value,
+              order: opt.order,
+              active: opt.active,
+            });
+          }
+        }
+
+        queryClient.invalidateQueries({ queryKey: ["question-options"] });
+        queryClient.invalidateQueries({ queryKey: ["questions"] });
       }
 
-      // create/update submitted options
-      for (const opt of submitted) {
-        if (opt.id && existingById.has(String(opt.id))) {
-          await api.put(`/api/question-options/${opt.id}`, {
-            label: opt.label,
-            value: opt.value,
-            order: opt.order,
-            active: opt.active,
-            question_id: questionId,
-          });
-        } else {
-          await api.post(`/api/question-options`, {
-            question_id: questionId,
-            label: opt.label,
-            value: opt.value,
-            order: opt.order,
-            active: opt.active,
-          });
-        }
-      }
-
-      queryClient.invalidateQueries({ queryKey: ["question-options"] });
-      queryClient.invalidateQueries({ queryKey: ["questions"] });
+      // Only close/reset the parent's edit state once the question AND its
+      // options have actually been persisted, instead of as soon as the
+      // question's own scalar fields are saved.
+      props.onSaved?.();
+    } catch (error) {
+      notification.error({
+        message: "Gagal menyimpan pertanyaan",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Opsi yang baru ditambahkan mungkin belum tersimpan. Coba lagi.",
+      });
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -383,7 +405,11 @@ export default function FormQuestionManagement(
       </Space>
 
       <Form.Item style={{ marginTop: 12 }}>
-        <Button type="primary" htmlType="submit" loading={props.loading}>
+        <Button
+          type="primary"
+          htmlType="submit"
+          loading={props.loading || submitting}
+        >
           {props.submitLabel ?? "Simpan Perubahan"}
         </Button>
       </Form.Item>
