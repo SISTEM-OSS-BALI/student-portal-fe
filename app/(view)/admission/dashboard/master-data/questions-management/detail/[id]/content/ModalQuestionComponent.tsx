@@ -26,6 +26,7 @@ export default function ModalQuestionComponent({
       title={props.title}
       footer={null}
       destroyOnClose
+      width={600}
     >
       <FormQuestionManagement
         onSubmit={props.onSubmit}

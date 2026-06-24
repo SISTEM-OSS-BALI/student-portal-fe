@@ -1,6 +1,7 @@
 import {
   App,
   Button,
+  Flex,
   Form,
   Input,
   InputNumber,
@@ -333,51 +334,70 @@ export default function FormQuestionManagement(
             {(fields, { add, remove }) => (
               <div style={{ marginTop: 12 }}>
                 {fields.map((field) => (
-                  <Space
+                  <div
                     key={field.key}
-                    align="start"
-                    style={{ display: "flex", marginBottom: 8 }}
+                    style={{
+                      border: "1px solid #e2e8f0",
+                      borderRadius: 10,
+                      padding: 12,
+                      marginBottom: 12,
+                    }}
                   >
                     <Form.Item name={[field.name, "id"]} hidden>
                       <Input />
                     </Form.Item>
 
-                    <Form.Item
-                      name={[field.name, "label"]}
-                      rules={[{ required: true, message: "Label wajib" }]}
+                    <Space.Compact
+                      block
+                      style={{ marginBottom: 8 }}
                     >
-                      <Input placeholder="Label" style={{ width: 180 }} />
-                    </Form.Item>
+                      <Form.Item
+                        name={[field.name, "label"]}
+                        rules={[{ required: true, message: "Label wajib" }]}
+                        style={{ flex: 1, marginBottom: 0 }}
+                      >
+                        <Input placeholder="Label" />
+                      </Form.Item>
 
-                    <Form.Item
-                      name={[field.name, "value"]}
-                      rules={[{ required: true, message: "Value wajib" }]}
-                    >
-                      <Input placeholder="Value" style={{ width: 180 }} />
-                    </Form.Item>
+                      <Form.Item
+                        name={[field.name, "value"]}
+                        rules={[{ required: true, message: "Value wajib" }]}
+                        style={{ flex: 1, marginBottom: 0 }}
+                      >
+                        <Input placeholder="Value" />
+                      </Form.Item>
+                    </Space.Compact>
 
-                    <Form.Item name={[field.name, "order"]}>
-                      <InputNumber
-                        min={1}
-                        placeholder="Order"
-                        style={{ width: 120 }}
+                    <Flex align="center" justify="space-between" gap={12} wrap>
+                      <Flex align="center" gap={16} wrap>
+                        <Form.Item
+                          name={[field.name, "order"]}
+                          style={{ marginBottom: 0 }}
+                        >
+                          <InputNumber
+                            min={1}
+                            placeholder="Order"
+                            style={{ width: 100 }}
+                          />
+                        </Form.Item>
+
+                        <Form.Item
+                          name={[field.name, "active"]}
+                          valuePropName="checked"
+                          label="Active"
+                          style={{ marginBottom: 0 }}
+                        >
+                          <Switch />
+                        </Form.Item>
+                      </Flex>
+
+                      <Button
+                        danger
+                        icon={<DeleteOutlined />}
+                        onClick={() => remove(field.name)}
                       />
-                    </Form.Item>
-
-                    <Form.Item
-                      name={[field.name, "active"]}
-                      valuePropName="checked"
-                      style={{ marginTop: 6 }}
-                    >
-                      <Switch />
-                    </Form.Item>
-
-                    <Button
-                      danger
-                      icon={<DeleteOutlined />}
-                      onClick={() => remove(field.name)}
-                    />
-                  </Space>
+                    </Flex>
+                  </div>
                 ))}
 
                 <Button
