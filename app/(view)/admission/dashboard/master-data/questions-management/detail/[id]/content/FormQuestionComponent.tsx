@@ -157,16 +157,21 @@ export default function FormQuestionManagement(
       if (isOptionType) {
         const questionId = props.questionId ?? saved.id;
         const submitted = (values.options ?? [])
-          .map((opt, index) => ({
+          .map((opt, originalIndex) => ({
+            originalIndex,
             id: opt.id,
             label: (opt.label ?? "").trim(),
             value: (opt.value ?? "").trim(),
-            order: typeof opt.order === "number" ? opt.order : index + 1,
+            order: typeof opt.order === "number" ? opt.order : originalIndex + 1,
             active: opt.active ?? true,
           }))
           .filter((opt) => opt.label || opt.value);
 
-        // fetch existing options from API to know deletions
+        // fetch existing options from API to know deletions, and to fall
+        // back-match by value when the form's local row has no id yet
+        // (e.g. retrying after a previous create succeeded but the id was
+        // never written back) — the DB enforces uniqueness on
+        // (question_id, value), so blindly creating again would 1062.
         const existingRes = await api.get(
           `/api/question-options?question_id=${encodeURIComponent(questionId)}`,
         );
@@ -175,35 +180,58 @@ export default function FormQuestionManagement(
         const existingById = new Map(
           existing.filter((o) => o.id).map((o) => [o.id, o]),
         );
-        const submittedIds = new Set(
-          submitted.filter((o) => o.id).map((o) => String(o.id)),
+        const existingByValue = new Map(
+          existing.map((o) => [o.value.trim().toLowerCase(), o]),
         );
 
-        // delete removed options
+        const matchedExistingIds = new Set<string>();
+        const resolved = submitted.map((opt) => {
+          const byId = opt.id ? existingById.get(String(opt.id)) : undefined;
+          const match =
+            byId ?? existingByValue.get(opt.value.toLowerCase());
+          if (match) matchedExistingIds.add(String(match.id));
+          return { ...opt, existingMatch: match };
+        });
+
+        // delete options that are no longer present in the submitted list
         for (const opt of existing) {
-          if (opt.id && !submittedIds.has(String(opt.id))) {
+          if (!matchedExistingIds.has(String(opt.id))) {
             await api.delete(`/api/question-options/${opt.id}`);
           }
         }
 
-        // create/update submitted options
-        for (const opt of submitted) {
-          if (opt.id && existingById.has(String(opt.id))) {
-            await api.put(`/api/question-options/${opt.id}`, {
+        // create/update submitted options, writing the real id back into
+        // the form so a retry never re-creates an option that already
+        // exists.
+        for (const opt of resolved) {
+          if (opt.existingMatch) {
+            await api.put(`/api/question-options/${opt.existingMatch.id}`, {
               label: opt.label,
               value: opt.value,
               order: opt.order,
               active: opt.active,
               question_id: questionId,
             });
+            form.setFieldValue(
+              ["options", opt.originalIndex, "id"],
+              opt.existingMatch.id,
+            );
           } else {
-            await api.post(`/api/question-options`, {
+            const createdRes = await api.post(`/api/question-options`, {
               question_id: questionId,
               label: opt.label,
               value: opt.value,
               order: opt.order,
               active: opt.active,
             });
+            const created = (createdRes.data?.result ??
+              createdRes.data) as QuestionOptionItemDataModel;
+            if (created?.id) {
+              form.setFieldValue(
+                ["options", opt.originalIndex, "id"],
+                created.id,
+              );
+            }
           }
         }
 
@@ -216,12 +244,19 @@ export default function FormQuestionManagement(
       // question's own scalar fields are saved.
       props.onSaved?.();
     } catch (error) {
+      const backendMessage =
+        (
+          error as {
+            response?: { data?: { error?: { message?: string } } };
+          }
+        )?.response?.data?.error?.message;
       notification.error({
         message: "Gagal menyimpan pertanyaan",
         description:
-          error instanceof Error
+          backendMessage ||
+          (error instanceof Error
             ? error.message
-            : "Opsi yang baru ditambahkan mungkin belum tersimpan. Coba lagi.",
+            : "Opsi yang baru ditambahkan mungkin belum tersimpan. Coba lagi."),
       });
     } finally {
       setSubmitting(false);
