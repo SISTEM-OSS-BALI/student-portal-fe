@@ -16,7 +16,7 @@ import type {
   QuestionPayloadCreateModel,
   QuestionOptionItemDataModel,
 } from "@/app/models/question";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import api from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
@@ -81,7 +81,18 @@ export default function FormQuestionManagement(
     [inputTypeKey],
   );
 
+  const isFirstRenderRef = useRef(true);
+
   useEffect(() => {
+    // Skip the very first run: Form.useWatch can briefly report `undefined`
+    // before it syncs with the form's initialValues, which would otherwise
+    // make this effect wipe out options/placeholder/min-max that were just
+    // seeded from an existing question.
+    if (isFirstRenderRef.current) {
+      isFirstRenderRef.current = false;
+      return;
+    }
+
     if (!supportsPlaceholder) {
       form.setFieldValue("placeholder", "");
     }
