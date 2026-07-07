@@ -256,8 +256,10 @@ export default function GlobalSearchModal({
                       className={`${styles.resultCard} ${
                         active ? styles.resultCardActive : ""
                       }`.trim()}
-                      onClick={() => setSelectedId(item.id)}
-                      onDoubleClick={() => onOpenItem(item)}
+                      onClick={() => {
+                        setSelectedId(item.id);
+                        onOpenItem(item);
+                      }}
                     >
                       <div className={styles.resultIcon}>
                         {getItemIcon(item.type)}
@@ -379,8 +381,8 @@ export default function GlobalSearchModal({
 
         <div className={styles.footer}>
           <Text className={styles.footerText}>
-            Enter untuk membuka hasil terpilih • Double click pada hasil untuk
-            buka cepat
+            Enter untuk membuka hasil terpilih • Klik pada hasil untuk buka
+            langsung
           </Text>
         </div>
       </div>

@@ -400,6 +400,7 @@ function MessageBubble({
                   color: bubbleColor,
                   lineHeight: 1.6,
                   fontSize: 13,
+                  whiteSpace: "pre-wrap",
                 }}
               >
                 {message.text}

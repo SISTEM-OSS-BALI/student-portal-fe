@@ -31,7 +31,12 @@ import {
   Upload,
 } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CloseOutlined, PaperClipOutlined } from "@ant-design/icons";
+import {
+  CheckOutlined,
+  CloseOutlined,
+  EditOutlined,
+  PaperClipOutlined,
+} from "@ant-design/icons";
 import api from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 import type { UploadedChatAttachment } from "@/app/vendor/chat-upload";
@@ -298,6 +303,11 @@ export default function OverviewComponent({
     UploadedChatAttachment[]
   >([]);
   const [uploadingAttachments, setUploadingAttachments] = useState(false);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(
+    null,
+  );
+  const [editingText, setEditingText] = useState("");
+  const [savingEditMessage, setSavingEditMessage] = useState(false);
 
   const { data: translationItems = [] } = useDocumentTranslations({
     queryString: studentId ? `student_id=${studentId}` : undefined,
@@ -562,6 +572,59 @@ export default function OverviewComponent({
     mergeChatMessages,
   ]);
 
+  const handleStartEditMessage = useCallback((message: ChatMessage) => {
+    setEditingMessageId(message.id);
+    setEditingText(message.text ?? "");
+  }, []);
+
+  const handleCancelEditMessage = useCallback(() => {
+    setEditingMessageId(null);
+    setEditingText("");
+  }, []);
+
+  const handleSaveEditMessage = useCallback(async () => {
+    if (!editingMessageId) return;
+
+    const text = editingText.trim();
+    if (!text) return;
+
+    const mention_user_ids = extractMentionUserIds(text);
+
+    setSavingEditMessage(true);
+
+    try {
+      const result = await api.put(`/api/chats/messages/${editingMessageId}`, {
+        text,
+        mention_user_ids,
+      });
+      const updated = (result.data?.result ?? result.data) as ChatMessage;
+      const key = updated.conversation_id;
+
+      if (key) {
+        setLocalMessagesByConversation((prev) => ({
+          ...prev,
+          [key]: mergeChatMessages(prev[key] ?? [], [updated]),
+        }));
+      }
+
+      setEditingMessageId(null);
+      setEditingText("");
+    } catch {
+      notification.error({
+        message: "Gagal menyimpan perubahan",
+        description: "Coba lagi beberapa saat.",
+      });
+    } finally {
+      setSavingEditMessage(false);
+    }
+  }, [
+    editingMessageId,
+    editingText,
+    extractMentionUserIds,
+    mergeChatMessages,
+    notification,
+  ]);
+
   useEffect(() => {
     if (!conversation_id) return;
     if (connected && !lastError) return;
@@ -649,6 +712,7 @@ export default function OverviewComponent({
       meta: string;
       time: string;
       sortTime: number;
+      fileUrl?: string;
     }> = [];
 
     translationItems.forEach((item) => {
@@ -758,6 +822,39 @@ export default function OverviewComponent({
       });
     }
 
+    mergedChatMessages.forEach((message) => {
+      const attachments = message.attachments ?? [];
+      if (!attachments.length) return;
+
+      const rawTime = message.created_at;
+      if (!rawTime) return;
+
+      const isFromCurrentUser =
+        String(message.sender_id) === String(currentUserId);
+      const senderName =
+        message.sender_name ??
+        (isFromCurrentUser
+          ? currentUser?.name
+          : (detailStudentData?.name ?? "Student")) ??
+        "User";
+      const senderRole =
+        message.sender_role ??
+        (isFromCurrentUser ? currentUser?.role : "STUDENT");
+      const fileLabel =
+        attachments.length === 1
+          ? attachments[0].name || "a file"
+          : `${attachments.length} files`;
+
+      items.push({
+        id: `chat-attachment-${message.id}`,
+        title: `${senderName} uploaded ${fileLabel} in conversation`,
+        meta: `${currentStepLabel} • ${formatRoleLabel(senderRole)}`,
+        time: formatRelativeTime(rawTime),
+        sortTime: new Date(rawTime).getTime(),
+        fileUrl: attachments[0]?.url,
+      });
+    });
+
     return items
       .filter((item) => !Number.isNaN(item.sortTime))
       .sort((a, b) => b.sortTime - a.sortTime)
@@ -765,14 +862,19 @@ export default function OverviewComponent({
   }, [
     answerApprovalItems,
     currentStepLabel,
+    currentUser?.name,
+    currentUser?.role,
+    currentUserId,
     cvDocuments,
     detailStudentData?.id,
+    detailStudentData?.name,
     detailStudentData?.student_status,
     detailStudentData?.student_status_updated_at,
     detailStudentData?.student_status_updated_by_name,
     detailStudentData?.visa_granted_at,
     detailStudentData?.visa_status,
     formatRelativeTime,
+    mergedChatMessages,
     sponsorDocuments,
     statementDocuments,
     stepsSource,
@@ -872,7 +974,20 @@ export default function OverviewComponent({
                     size={0}
                     style={{ width: "100%" }}
                   >
-                    <Typography.Text strong>{item.title}</Typography.Text>
+                    {item.fileUrl ? (
+                      <a
+                        href={item.fileUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ color: "#2563eb" }}
+                      >
+                        <Typography.Text strong style={{ color: "#2563eb" }}>
+                          {item.title}
+                        </Typography.Text>
+                      </a>
+                    ) : (
+                      <Typography.Text strong>{item.title}</Typography.Text>
+                    )}
                     <Typography.Text type="secondary">
                       {item.meta}
                     </Typography.Text>
@@ -1003,11 +1118,32 @@ export default function OverviewComponent({
                               </Tag>
                             )}
                           </Space>
+
+                          {isMine && message.text && (
+                            <Button
+                              type="text"
+                              size="small"
+                              icon={<EditOutlined />}
+                              onClick={() => handleStartEditMessage(message)}
+                              style={{ height: 22, padding: "0 4px" }}
+                            />
+                          )}
                         </Flex>
 
                         {message.text && (
-                          <Typography.Text style={{ fontSize: 13 }}>
+                          <Typography.Text
+                            style={{ fontSize: 13, whiteSpace: "pre-wrap" }}
+                          >
                             {renderMessageText(message.text)}
+                            {message.edited_at && (
+                              <Typography.Text
+                                type="secondary"
+                                style={{ fontSize: 11, fontStyle: "italic" }}
+                              >
+                                {" "}
+                                (diedit)
+                              </Typography.Text>
+                            )}
                           </Typography.Text>
                         )}
 
@@ -1127,9 +1263,8 @@ export default function OverviewComponent({
             </div>
           )}
 
-          <Space.Compact
+          <div
             style={{
-              width: "100%",
               border: "1px solid #dbe4ee",
               borderRadius: 14,
               overflow: "hidden",
@@ -1137,64 +1272,116 @@ export default function OverviewComponent({
               background: "#ffffff",
             }}
           >
-            <Upload
-              multiple
-              beforeUpload={handleAttachmentUpload}
-              showUploadList={false}
-            >
-              <Button
-                icon={<PaperClipOutlined />}
-                loading={uploadingAttachments}
+            {editingMessageId && (
+              <Flex
+                align="center"
+                justify="space-between"
                 style={{
-                  border: "none",
-                  borderRight: "1px solid #e2e8f0",
-                  height: 48,
-                  width: 52,
-                  borderRadius: 0,
+                  padding: "8px 14px",
+                  borderBottom: "1px solid #e2e8f0",
+                  background: "#f0fdf4",
+                }}
+              >
+                <Space size={8} align="center">
+                  <EditOutlined style={{ color: "#16a34a" }} />
+                  <Typography.Text style={{ color: "#166534", fontWeight: 600 }}>
+                    Edit pesan
+                  </Typography.Text>
+                </Space>
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<CloseOutlined />}
+                  onClick={handleCancelEditMessage}
+                />
+              </Flex>
+            )}
+
+            <Space.Compact style={{ width: "100%" }}>
+              <Upload
+                multiple
+                beforeUpload={handleAttachmentUpload}
+                showUploadList={false}
+              >
+                <Button
+                  icon={<PaperClipOutlined />}
+                  loading={uploadingAttachments}
+                  disabled={Boolean(editingMessageId)}
+                  style={{
+                    border: "none",
+                    borderRight: "1px solid #e2e8f0",
+                    height: 48,
+                    width: 52,
+                    borderRadius: 0,
+                  }}
+                />
+              </Upload>
+
+              <Mentions
+                placeholder="Tulis catatan atau pesan... (gunakan @ untuk tag)"
+                value={editingMessageId ? editingText : chatText}
+                onChange={editingMessageId ? setEditingText : handleChatTextChange}
+                onPressEnter={(event) => {
+                  if (!event.shiftKey) {
+                    event.preventDefault();
+                    if (editingMessageId) {
+                      void handleSaveEditMessage();
+                    } else {
+                      void handleSendChat();
+                    }
+                  }
+                }}
+                disabled={!currentUserId}
+                style={{ width: "100%" }}
+                options={mentionOptions}
+                styles={{
+                  textarea: {
+                    borderRadius: 0,
+                    minHeight: 48,
+                    paddingTop: 12,
+                    paddingBottom: 12,
+                  },
                 }}
               />
-            </Upload>
 
-            <Mentions
-              placeholder="Tulis catatan atau pesan... (gunakan @ untuk tag)"
-              value={chatText}
-              onChange={handleChatTextChange}
-              onPressEnter={(event) => {
-                event.preventDefault();
-                void handleSendChat();
-              }}
-              disabled={!currentUserId}
-              style={{ width: "100%" }}
-              options={mentionOptions}
-              styles={{
-                textarea: {
-                  borderRadius: 0,
-                  minHeight: 48,
-                  paddingTop: 12,
-                  paddingBottom: 12,
-                },
-              }}
-            />
-
-            <Button
-              type="primary"
-              onClick={() => void handleSendChat()}
-              disabled={
-                (!chatText.trim() && pendingAttachments.length === 0) ||
-                !currentUserId ||
-                !conversation_id
-              }
-              style={{
-                border: "none",
-                borderLeft: "1px solid #e2e8f0",
-                height: 48,
-                minWidth: 88,
-                borderRadius: 0,
-              }}
-            >
-              Send
-            </Button>
-          </Space.Compact>
+              {editingMessageId ? (
+                <Button
+                  type="primary"
+                  shape="circle"
+                  icon={<CheckOutlined />}
+                  loading={savingEditMessage}
+                  onClick={() => void handleSaveEditMessage()}
+                  disabled={!editingText.trim()}
+                  style={{
+                    border: "none",
+                    background: "#22c55e",
+                    height: 48,
+                    width: 52,
+                    borderRadius: 0,
+                  }}
+                />
+              ) : (
+                <Button
+                  type="primary"
+                  onClick={() => void handleSendChat()}
+                  disabled={
+                    (!chatText.trim() && pendingAttachments.length === 0) ||
+                    !currentUserId ||
+                    !conversation_id
+                  }
+                  style={{
+                    border: "none",
+                    borderLeft: "1px solid #e2e8f0",
+                    height: 48,
+                    minWidth: 88,
+                    borderRadius: 0,
+                  }}
+                >
+                  Send
+                </Button>
+              )}
+            </Space.Compact>
+          </div>
         </Space>
       </Card>
     </Space>

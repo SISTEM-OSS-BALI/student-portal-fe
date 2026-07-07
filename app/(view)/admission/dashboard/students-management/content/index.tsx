@@ -201,6 +201,10 @@ function getVisaType(student: UserDataModel): string {
   return String(student.visa_type_name ?? student.visa_type ?? "").trim();
 }
 
+function getConsultantName(student: UserDataModel): string {
+  return String(student.name_consultant ?? "").trim();
+}
+
 function getStudentId(student: UserDataModel): string {
   return String(student.id);
 }
@@ -321,15 +325,18 @@ function getFilterSummaryLabel({
   country,
   visa,
   degree,
+  consultant,
 }: {
   country?: string;
   visa?: string;
   degree?: string;
+  consultant?: string;
 }): string {
   const parts = [
     country ? `Negara: ${country}` : null,
     visa ? `Visa: ${formatVisaType(visa)}` : null,
     degree ? `Jenjang: ${degree}` : null,
+    consultant ? `Konsultan: ${consultant}` : null,
   ].filter(Boolean);
 
   return parts.length ? parts.join(" • ") : "Menampilkan semua student";
@@ -840,6 +847,9 @@ export default function StudentsManagementContent() {
   const [selectedCountry, setSelectedCountry] = useState<string | undefined>();
   const [selectedVisa, setSelectedVisa] = useState<string | undefined>();
   const [selectedDegree, setSelectedDegree] = useState<string | undefined>();
+  const [selectedConsultant, setSelectedConsultant] = useState<
+    string | undefined
+  >();
   const [activeStudentId, setActiveStudentId] = useState<string | null>(null);
   const [dragOverStatus, setDragOverStatus] =
     useState<StudentBoardStatus | null>(null);
@@ -1024,19 +1034,22 @@ export default function StudentsManagementContent() {
   const activeCountryFilter = sanitizeFilterValue(selectedCountry);
   const activeVisaFilter = sanitizeFilterValue(selectedVisa);
   const activeDegreeFilter = sanitizeFilterValue(selectedDegree);
+  const activeConsultantFilter = sanitizeFilterValue(selectedConsultant);
   const activeKeyword = sanitizeFilterValue(keyword);
 
   const hasActiveFilter = Boolean(
     activeKeyword ||
     activeCountryFilter ||
     activeVisaFilter ||
-    activeDegreeFilter,
+    activeDegreeFilter ||
+    activeConsultantFilter,
   );
 
   const resetFilters = useCallback(() => {
     setSelectedCountry(undefined);
     setSelectedVisa(undefined);
     setSelectedDegree(undefined);
+    setSelectedConsultant(undefined);
     setKeyword("");
     resetPagination();
   }, [resetPagination]);
@@ -1052,6 +1065,7 @@ export default function StudentsManagementContent() {
     selectedCountry,
     selectedVisa,
     selectedDegree,
+    selectedConsultant,
     studentsRoleData.length,
     resetPagination,
   ]);
@@ -1148,6 +1162,23 @@ export default function StudentsManagementContent() {
     return Array.from(map.values());
   }, [studentsRoleData]);
 
+  const consultantOptions = useMemo<SelectOption[]>(() => {
+    const map = new Map<string, SelectOption>();
+
+    studentsRoleData.forEach((student) => {
+      const consultant = getConsultantName(student);
+
+      if (consultant) {
+        map.set(consultant, {
+          value: consultant,
+          label: consultant,
+        });
+      }
+    });
+
+    return Array.from(map.values());
+  }, [studentsRoleData]);
+
   const effectiveStudents = useMemo<UserDataModel[]>(() => {
     return studentsRoleData.map((student) =>
       mergeStudentData(student, studentOverrides[getStudentId(student)]),
@@ -1168,6 +1199,7 @@ export default function StudentsManagementContent() {
         getDegreeLabel(student),
         getCampusName(student),
         getVisaType(student),
+        getConsultantName(student),
       ]
         .map((item) => normalizeText(item))
         .join(" ");
@@ -1189,9 +1221,21 @@ export default function StudentsManagementContent() {
         normalizeText(getDegreeLabel(student)) ===
           normalizeText(activeDegreeFilter);
 
-      return matchKeyword && matchCountry && matchVisa && matchDegree;
+      const matchConsultant =
+        !activeConsultantFilter ||
+        normalizeText(getConsultantName(student)) ===
+          normalizeText(activeConsultantFilter);
+
+      return (
+        matchKeyword &&
+        matchCountry &&
+        matchVisa &&
+        matchDegree &&
+        matchConsultant
+      );
     });
   }, [
+    activeConsultantFilter,
     activeCountryFilter,
     activeDegreeFilter,
     activeKeyword,
@@ -1528,6 +1572,7 @@ export default function StudentsManagementContent() {
                     country: selectedCountry,
                     visa: selectedVisa,
                     degree: selectedDegree,
+                    consultant: selectedConsultant,
                   })}
                 </Text>
               </div>
@@ -1630,6 +1675,32 @@ export default function StudentsManagementContent() {
                   style={filterStyle}
                   size="large"
                   options={degreeOptions}
+                />
+              </div>
+
+              <div>
+                <Text
+                  style={{
+                    display: "block",
+                    fontSize: 12,
+                    color: "#667085",
+                    marginBottom: 6,
+                    fontWeight: 600,
+                  }}
+                >
+                  Konsultan
+                </Text>
+
+                <Select
+                  placeholder="Semua konsultan"
+                  allowClear
+                  value={selectedConsultant}
+                  onChange={(value) =>
+                    setSelectedConsultant(sanitizeFilterValue(value))
+                  }
+                  style={filterStyle}
+                  size="large"
+                  options={consultantOptions}
                 />
               </div>
             </div>

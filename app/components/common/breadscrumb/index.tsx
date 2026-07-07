@@ -174,6 +174,19 @@ const PATH_REDIRECTS: Record<string, string> = {
   "/admin/dashboard/evaluator": "/admin/dashboard/evaluator/list",
   "/admin/dashboard/assignment-setting":
     "/admin/dashboard/assignment-setting/screening-question",
+  "/director": "/director/dashboard/home",
+  "/director/dashboard": "/director/dashboard/home",
+  "/admission": "/admission/dashboard/home",
+  "/admission/dashboard": "/admission/dashboard/home",
+  "/student": "/student/dashboard/home",
+  "/student/dashboard": "/student/dashboard/home",
+  "/consultant": "/consultant/dashboard",
+  "/admission/dashboard/students-management/detail":
+    "/admission/dashboard/students-management",
+  "/director/dashboard/students-management/detail":
+    "/director/dashboard/students-management",
+  "/consultant/dashboard/students-management/detail":
+    "/consultant/dashboard/students-management",
 };
 
 export const MainBreadcrumb = () => {
