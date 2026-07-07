@@ -36,6 +36,17 @@ import type { UserDataModel } from "@/app/models/user";
 
 const { Header, Content, Footer } = Layout;
 
+function formatVisaTypeLabel(value?: string | null): string | undefined {
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) return undefined;
+
+  if (trimmed.includes(" ") && !trimmed.includes("_")) {
+    return trimmed;
+  }
+
+  return trimmed.replace(/_/g, " ").toUpperCase();
+}
+
 function formatSearchDate(value?: string | null): string {
   if (!value) return "Tanpa tanggal";
   const date = new Date(value);
@@ -178,7 +189,7 @@ export default function DirectorLayout({
       subtitle: [
         student.stage?.country?.name,
         student.name_campus,
-        student.visa_type ? student.visa_type.replace(/_/g, " ").toUpperCase() : undefined,
+        formatVisaTypeLabel(student.visa_type_name ?? student.visa_type),
       ]
         .filter(Boolean)
         .join(" • "),
@@ -194,7 +205,7 @@ export default function DirectorLayout({
         student.name_campus,
         student.degree,
         student.name_degree,
-        student.visa_type,
+        student.visa_type_name ?? student.visa_type,
         student.stage?.country?.name,
         student.student_status,
         student.status,

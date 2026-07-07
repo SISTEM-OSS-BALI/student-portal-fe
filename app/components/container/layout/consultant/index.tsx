@@ -38,6 +38,17 @@ function getStudentSearchStatus(student: UserDataModel): string {
   );
 }
 
+function formatVisaTypeLabel(value?: string | null): string | undefined {
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) return undefined;
+
+  if (trimmed.includes(" ") && !trimmed.includes("_")) {
+    return trimmed;
+  }
+
+  return trimmed.replace(/_/g, " ").toUpperCase();
+}
+
 export default function ConsultantLayout({
   children,
   username,
@@ -87,7 +98,7 @@ export default function ConsultantLayout({
       subtitle: [
         student.stage?.country?.name,
         student.name_campus,
-        student.visa_type ? student.visa_type.replace(/_/g, " ").toUpperCase() : undefined,
+        formatVisaTypeLabel(student.visa_type_name ?? student.visa_type),
       ]
         .filter(Boolean)
         .join(" • "),
@@ -103,7 +114,7 @@ export default function ConsultantLayout({
         student.name_campus,
         student.degree,
         student.name_degree,
-        student.visa_type,
+        student.visa_type_name ?? student.visa_type,
         student.stage?.country?.name,
         student.student_status,
         student.status,
