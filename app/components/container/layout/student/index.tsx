@@ -32,6 +32,7 @@ import getInitials from "@/app/utils/initials-username";
 import { useAuth } from "@/app/utils/use-auth";
 import {
   usePatchDocumentConsent,
+  usePatchStatementLetter,
   useUser,
   useUsers,
 } from "@/app/hooks/use-users";
@@ -57,6 +58,8 @@ type CanvasPointerEvent =
 
 const DOCUMENT_CONSENT_BUCKET = "student-portal";
 const DOCUMENT_CONSENT_FOLDER = "document-consent-signatures";
+const STATEMENT_LETTER_BUCKET = "student-portal";
+const STATEMENT_LETTER_FOLDER = "statement-letter-signatures";
 const SIGNATURE_CANVAS_HEIGHT = 220;
 const SEARCH_REDIRECT_PATH = "/student/dashboard/home";
 const TOUR_STORAGE_KEY = "student_portal_tour_completed";
@@ -118,6 +121,31 @@ function dataUrlToFile(dataUrl: string, filename: string): Promise<File> {
   return fetch(dataUrl)
     .then((response) => response.blob())
     .then((blob) => new File([blob], filename, { type: "image/png" }));
+}
+
+function getCanvasPointFor(
+  canvas: HTMLCanvasElement,
+  event: CanvasPointerEvent,
+) {
+  const rect = canvas.getBoundingClientRect();
+
+  if ("touches" in event) {
+    const touch = event.touches[0] ?? event.changedTouches[0];
+
+    if (!touch) {
+      return { x: 0, y: 0 };
+    }
+
+    return {
+      x: touch.clientX - rect.left,
+      y: touch.clientY - rect.top,
+    };
+  }
+
+  return {
+    x: event.clientX - rect.left,
+    y: event.clientY - rect.top,
+  };
 }
 
 function isImageMimeType(value?: string | null): boolean {
@@ -196,11 +224,21 @@ export default function StudentLayout({
   const [signatureError, setSignatureError] = useState("");
   const [isDocumentConsentModalOpen, setIsDocumentConsentModalOpen] =
     useState(false);
+  const [isStatementLetterModalOpen, setIsStatementLetterModalOpen] =
+    useState(false);
+  const [isStatementLetterConsentChecked, setIsStatementLetterConsentChecked] =
+    useState(false);
+  const [isStatementLetterDrawing, setIsStatementLetterDrawing] =
+    useState(false);
+  const [statementLetterSignatureError, setStatementLetterSignatureError] =
+    useState("");
   const [unseenPromoCount, setUnseenPromoCount] = useState(0);
   const [tourOpen, setTourOpen] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const hasSignatureRef = useRef(false);
+  const statementLetterCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const hasStatementLetterSignatureRef = useRef(false);
 
   const { data: usersData } = useUsers({ enabled: Boolean(user_id) });
   const { data: informationData = [] } = useInformationCountries({
@@ -219,6 +257,10 @@ export default function StudentLayout({
     withNotification: false,
   });
   const { onUpdate, onUpdateLoading } = usePatchDocumentConsent();
+  const {
+    onUpdate: onUpdateStatementLetter,
+    onUpdateLoading: onUpdateStatementLetterLoading,
+  } = usePatchStatementLetter();
   const { data: activePromos = [] } = usePromos({
     enabled: Boolean(user_id),
     queryString: "active=true",
@@ -229,8 +271,12 @@ export default function StudentLayout({
     queryString: user_id ? `student_id=${user_id}` : undefined,
   });
 
-  const shouldShowDocumentConsentModal =
-    detailUser?.document_consent_signed === false;
+  const shouldShowStatementLetterModal =
+    detailUser?.statement_letter_submitted === false;
+
+  // Superseded by the Surat Pernyataan e-signature gate above; kept out of
+  // the auto-show flow so only the new statement letter blocks the dashboard.
+  const shouldShowDocumentConsentModal = false;
 
   const documentMetaById = useMemo(() => {
     const countryId = String(detailUser?.stage?.country_id ?? "");
@@ -295,6 +341,10 @@ export default function StudentLayout({
   useEffect(() => {
     setIsDocumentConsentModalOpen(shouldShowDocumentConsentModal);
   }, [shouldShowDocumentConsentModal]);
+
+  useEffect(() => {
+    setIsStatementLetterModalOpen(shouldShowStatementLetterModal);
+  }, [shouldShowStatementLetterModal]);
 
   const userNameMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -551,34 +601,6 @@ export default function StudentLayout({
     setSignatureError("");
   };
 
-  const getCanvasPoint = (event: CanvasPointerEvent) => {
-    const canvas = canvasRef.current;
-
-    if (!canvas) {
-      return { x: 0, y: 0 };
-    }
-
-    const rect = canvas.getBoundingClientRect();
-
-    if ("touches" in event) {
-      const touch = event.touches[0] ?? event.changedTouches[0];
-
-      if (!touch) {
-        return { x: 0, y: 0 };
-      }
-
-      return {
-        x: touch.clientX - rect.left,
-        y: touch.clientY - rect.top,
-      };
-    }
-
-    return {
-      x: event.clientX - rect.left,
-      y: event.clientY - rect.top,
-    };
-  };
-
   const startDrawing = (event: CanvasPointerEvent) => {
     const canvas = canvasRef.current;
     if (!canvas) {
@@ -590,7 +612,7 @@ export default function StudentLayout({
       return;
     }
 
-    const point = getCanvasPoint(event);
+    const point = getCanvasPointFor(canvas, event);
 
     context.beginPath();
     context.moveTo(point.x, point.y);
@@ -614,7 +636,7 @@ export default function StudentLayout({
       return;
     }
 
-    const point = getCanvasPoint(event);
+    const point = getCanvasPointFor(canvas, event);
 
     context.lineTo(point.x, point.y);
     context.stroke();
@@ -627,6 +649,89 @@ export default function StudentLayout({
 
   const clearSignature = () => {
     initSignatureCanvas();
+  };
+
+  const initStatementLetterSignatureCanvas = () => {
+    const canvas = statementLetterCanvasRef.current;
+    if (!canvas) {
+      return;
+    }
+
+    const parentWidth = canvas.parentElement?.clientWidth ?? 680;
+    const width = Math.max(parentWidth, 320);
+    const ratio = Math.max(window.devicePixelRatio || 1, 1);
+
+    canvas.width = width * ratio;
+    canvas.height = SIGNATURE_CANVAS_HEIGHT * ratio;
+    canvas.style.width = "100%";
+    canvas.style.height = `${SIGNATURE_CANVAS_HEIGHT}px`;
+
+    const context = canvas.getContext("2d");
+    if (!context) {
+      return;
+    }
+
+    context.setTransform(1, 0, 0, 1, 0, 0);
+    context.scale(ratio, ratio);
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, width, SIGNATURE_CANVAS_HEIGHT);
+    context.lineCap = "round";
+    context.lineJoin = "round";
+    context.lineWidth = 2;
+    context.strokeStyle = "#111827";
+
+    hasStatementLetterSignatureRef.current = false;
+    setStatementLetterSignatureError("");
+  };
+
+  const startDrawingStatementLetter = (event: CanvasPointerEvent) => {
+    const canvas = statementLetterCanvasRef.current;
+    if (!canvas) {
+      return;
+    }
+
+    const context = canvas.getContext("2d");
+    if (!context) {
+      return;
+    }
+
+    const point = getCanvasPointFor(canvas, event);
+
+    context.beginPath();
+    context.moveTo(point.x, point.y);
+
+    setIsStatementLetterDrawing(true);
+    setStatementLetterSignatureError("");
+  };
+
+  const drawStatementLetterSignature = (event: CanvasPointerEvent) => {
+    if (!isStatementLetterDrawing) {
+      return;
+    }
+
+    const canvas = statementLetterCanvasRef.current;
+    if (!canvas) {
+      return;
+    }
+
+    const context = canvas.getContext("2d");
+    if (!context) {
+      return;
+    }
+
+    const point = getCanvasPointFor(canvas, event);
+
+    context.lineTo(point.x, point.y);
+    context.stroke();
+    hasStatementLetterSignatureRef.current = true;
+  };
+
+  const stopDrawingStatementLetter = () => {
+    setIsStatementLetterDrawing(false);
+  };
+
+  const clearStatementLetterSignature = () => {
+    initStatementLetterSignatureCanvas();
   };
 
   const uploadSignatureToSupabase = async (dataUrl: string) => {
@@ -718,6 +823,97 @@ export default function StudentLayout({
     }
   };
 
+  const uploadStatementLetterSignatureToSupabase = async (dataUrl: string) => {
+    if (!user_id) {
+      throw new Error("User tidak ditemukan.");
+    }
+
+    const timestamp = Date.now();
+    const fileName = `statement-letter-signature-${user_id}-${timestamp}.png`;
+    const filePath = `${STATEMENT_LETTER_FOLDER}/${user_id}/${fileName}`;
+    const file = await dataUrlToFile(dataUrl, fileName);
+
+    const { error: uploadError } = await supabase.storage
+      .from(STATEMENT_LETTER_BUCKET)
+      .upload(filePath, file, {
+        cacheControl: "3600",
+        upsert: true,
+        contentType: "image/png",
+      });
+
+    if (uploadError) {
+      throw new Error(uploadError.message);
+    }
+
+    const { data } = supabase.storage
+      .from(STATEMENT_LETTER_BUCKET)
+      .getPublicUrl(filePath);
+
+    if (!data?.publicUrl) {
+      throw new Error("Gagal mendapatkan URL tanda tangan.");
+    }
+
+    return { publicUrl: data.publicUrl, fileName };
+  };
+
+  const resetStatementLetterForm = () => {
+    setIsStatementLetterConsentChecked(false);
+    setStatementLetterSignatureError("");
+    setIsStatementLetterDrawing(false);
+    hasStatementLetterSignatureRef.current = false;
+  };
+
+  const handleSubmitStatementLetter = async () => {
+    if (!user_id) {
+      message.error("User tidak ditemukan.");
+      return;
+    }
+
+    if (!isStatementLetterConsentChecked) {
+      message.error("Anda harus menyetujui surat pernyataan di atas.");
+      return;
+    }
+
+    if (!hasStatementLetterSignatureRef.current) {
+      setStatementLetterSignatureError("Tanda tangan wajib diisi.");
+      return;
+    }
+
+    const canvas = statementLetterCanvasRef.current;
+
+    if (!canvas) {
+      message.error("Canvas tanda tangan tidak tersedia.");
+      return;
+    }
+
+    try {
+      const signatureDataUrl = canvas.toDataURL("image/png");
+      const { publicUrl, fileName } = await uploadStatementLetterSignatureToSupabase(
+        signatureDataUrl,
+      );
+
+      await onUpdateStatementLetter({
+        id: user_id,
+        payload: {
+          statement_letter_file_url: publicUrl,
+          statement_letter_file_name: fileName,
+          statement_letter_submitted_at: new Date().toISOString(),
+          statement_letter_submitted: true,
+        },
+      });
+
+      message.success("Surat pernyataan berhasil disimpan.");
+      resetStatementLetterForm();
+      setIsStatementLetterModalOpen(false);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Gagal menyimpan surat pernyataan.";
+      message.error(errorMessage);
+    }
+  };
+
   useEffect(() => {
     if (!isDocumentConsentModalOpen) {
       return;
@@ -741,9 +937,32 @@ export default function StudentLayout({
     };
   }, [isDocumentConsentModalOpen]);
 
+  useEffect(() => {
+    if (!isStatementLetterModalOpen) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      initStatementLetterSignatureCanvas();
+    }, 100);
+
+    const handleResize = () => {
+      if (!hasStatementLetterSignatureRef.current) {
+        initStatementLetterSignatureCanvas();
+      }
+    };
+
+    window.addEventListener("resize", handleResize);
+
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [isStatementLetterModalOpen]);
+
   const tourSteps: TourProps["steps"] = [
     {
-      title: "Selamat datang di Bali Student Portal!",
+      title: "Selamat datang di OSS Bali Student Portal!",
       description:
         "Mari kami tunjukkan fitur-fitur utama agar kamu bisa memulai dengan cepat.",
       target: null,
@@ -828,7 +1047,7 @@ export default function StudentLayout({
               </div>
               <div>
                 <Typography.Title level={4} className={styles.brandTitle}>
-                  Bali Student Portal
+                  OSS Bali Student Portal
                 </Typography.Title>
                 <Typography.Text className={styles.brandSubtitle}>
                   Student Dashboard
@@ -944,6 +1163,213 @@ export default function StudentLayout({
         onMarkItemRead={onMarkRead}
         onOpenItem={handleOpenMention}
       />
+
+      <Modal
+        title="Surat Pernyataan"
+        open={isStatementLetterModalOpen}
+        footer={null}
+        closable={false}
+        maskClosable={false}
+        keyboard={false}
+        width={760}
+      >
+        <div style={{ display: "grid", gap: 18 }}>
+          <Typography.Paragraph style={{ marginBottom: 0, color: "#4b5563" }}>
+            Mohon baca dan setujui surat pernyataan berikut, lalu bubuhkan
+            tanda tangan digital untuk melanjutkan.
+          </Typography.Paragraph>
+
+          <div
+            style={{
+              maxHeight: 320,
+              overflowY: "auto",
+              padding: 16,
+              border: "1px solid #e5e7eb",
+              borderRadius: 12,
+              background: "#f9fafb",
+            }}
+          >
+            <Typography.Title
+              level={5}
+              style={{ marginTop: 0, textAlign: "center" }}
+            >
+              SURAT PERNYATAAN
+            </Typography.Title>
+
+            <Typography.Paragraph style={{ color: "#374151" }}>
+              Yang bertanda tangan di bawah ini:
+            </Typography.Paragraph>
+            <Typography.Paragraph style={{ color: "#374151", marginBottom: 4 }}>
+              Nama Lengkap : {detailUser?.name || "-"}
+            </Typography.Paragraph>
+            <Typography.Paragraph style={{ color: "#374151" }}>
+              Status Aplikasi : Perpanjangan Visa di Australia (Student Visa &amp;
+              De Facto)
+            </Typography.Paragraph>
+
+            <Typography.Paragraph style={{ color: "#374151" }}>
+              Dengan surat ini, saya menyatakan dengan kesadaran penuh, tanpa
+              paksaan, dan tanpa tekanan dari pihak manapun bahwa:
+            </Typography.Paragraph>
+
+            <ol
+              style={{
+                margin: 0,
+                paddingLeft: 18,
+                color: "#374151",
+                lineHeight: 1.8,
+              }}
+            >
+              <li>
+                Saya benar memilih dan memberikan kuasa kepada One Step
+                Solution (CV. OSS Bali International) sebagai{" "}
+                <i>Education Consultant</i> yang membantu saya dalam
+                memproses: (a) pemberian informasi komprehensif mengenai
+                negara tujuan, kota, jurusan, proses pendaftaran, proses
+                aplikasi visa, akomodasi, serta hal-hal lain terkait studi di
+                luar negeri; (b) proses pendaftaran ke institusi
+                pendidikan/kampus tujuan hingga diterbitkannya{" "}
+                <i>Letter of Offer</i> (LoO) dan{" "}
+                <i>Confirmation of Enrolment</i> (CoE); (c) pelatihan atau
+                kursus Bahasa Inggris (apabila dibutuhkan dan disepakati); (d)
+                koordinasi dan fasilitasi pembayaran biaya penerjemahan
+                dokumen, biaya administrasi kampus, pembayaran biaya visa,
+                serta biaya-biaya terkait lainnya yang akan dituangkan secara
+                rinci dalam Surat Perjanjian selanjutnya setelah mendapatkan
+                LoO/CoE dan Perincian Biaya.
+              </li>
+              <li>
+                Bahwa saya menyatakan telah berusia dewasa menurut hukum yang
+                berlaku, memiliki kapasitas penuh secara legal untuk mengambil
+                keputusan mandiri, serta bertanggung jawab mutlak atas
+                kelanjutan studi, pengajuan visa, dan status imigrasi saya di
+                Australia.
+              </li>
+              <li>
+                Bahwa saya menyadari sepenuhnya bahwa apabila ada perbedaan
+                pendapat atau ketidaksetujuan di dalam internal keluarga saya
+                (termasuk namun tidak terbatas pada perselisihan antara orang
+                tua atau pihak ketiga lainnya), maka: (a) segala bentuk
+                perselisihan internal keluarga adalah tanggung jawab pribadi
+                saya sepenuhnya dan wajib saya selesaikan secara kekeluargaan
+                secara mandiri; (b) CV. OSS Bali International dibebaskan
+                sepenuhnya dari segala bentuk keterlibatan, tuntutan hukum,
+                klaim finansial, komplain, atau kerugian dalam bentuk apa pun
+                yang diajukan oleh pihak orang tua atau anggota keluarga saya
+                di kemudian hari.
+              </li>
+              <li>
+                Bahwa CV. OSS Bali International bertindak murni berdasarkan
+                instruksi tertulis, permintaan resmi, dan persetujuan yang
+                saya berikan selaku pemohon utama (
+                <i>client/student</i>), bukan atas arahan, intervensi, ataupun
+                kendali dari pihak orang tua atau keluarga.
+              </li>
+              <li>
+                Bahwa saya bertanggung jawab penuh atas seluruh pemenuhan
+                finansial (biaya kuliah, visa, dan biaya hidup) serta
+                konsekuensi hukum imigrasi yang timbul dari proses pengajuan
+                visa ini. CV. OSS Bali International tidak dapat dituntut atau
+                disalahkan apabila terjadi penolakan visa atau pembatalan
+                sepihak oleh otoritas imigrasi yang disebabkan oleh intervensi
+                keluarga atau dokumen pendukung finansial yang tidak
+                terpenuhi.
+              </li>
+            </ol>
+
+            <Typography.Paragraph style={{ color: "#374151", marginTop: 12 }}>
+              Demikian surat pernyataan ini saya buat dengan sebenar-benarnya,
+              dalam keadaan sehat jasmani dan rohani, serta memiliki kekuatan
+              hukum yang mengikat sejak tanda tangan digital ini dibubuhkan.
+            </Typography.Paragraph>
+          </div>
+
+          <Checkbox
+            checked={isStatementLetterConsentChecked}
+            onChange={(event) =>
+              setIsStatementLetterConsentChecked(event.target.checked)
+            }
+          >
+            Saya telah membaca, memahami, dan menyetujui seluruh pernyataan di
+            atas.
+          </Checkbox>
+
+          <div>
+            <Typography.Text strong>Tanda Tangan</Typography.Text>
+
+            <div
+              style={{
+                marginTop: 8,
+                border: `1px solid ${
+                  statementLetterSignatureError ? "#ff4d4f" : "#d9d9d9"
+                }`,
+                borderRadius: 12,
+                overflow: "hidden",
+                background: "#ffffff",
+              }}
+            >
+              <canvas
+                ref={statementLetterCanvasRef}
+                style={{
+                  width: "100%",
+                  height: SIGNATURE_CANVAS_HEIGHT,
+                  display: "block",
+                  touchAction: "none",
+                  cursor: "crosshair",
+                  background: "#ffffff",
+                }}
+                onMouseDown={startDrawingStatementLetter}
+                onMouseMove={drawStatementLetterSignature}
+                onMouseUp={stopDrawingStatementLetter}
+                onMouseLeave={stopDrawingStatementLetter}
+                onTouchStart={startDrawingStatementLetter}
+                onTouchMove={drawStatementLetterSignature}
+                onTouchEnd={stopDrawingStatementLetter}
+              />
+            </div>
+
+            {statementLetterSignatureError ? (
+              <Typography.Text style={{ color: "#ff4d4f", fontSize: 12 }}>
+                {statementLetterSignatureError}
+              </Typography.Text>
+            ) : (
+              <Typography.Text style={{ color: "#6b7280", fontSize: 12 }}>
+                Silakan tanda tangan pada area di atas menggunakan mouse atau
+                layar sentuh.
+              </Typography.Text>
+            )}
+          </div>
+
+          <Divider style={{ margin: 0 }} />
+
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
+            <Button onClick={clearStatementLetterSignature}>
+              Clear Signature
+            </Button>
+
+            <Button
+              type="primary"
+              loading={onUpdateStatementLetterLoading}
+              onClick={handleSubmitStatementLetter}
+              disabled={!isStatementLetterConsentChecked}
+            >
+              Saya Setuju dan Tanda Tangan
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/*
+        Modal "Persetujuan Penyerahan Dokumen" (document consent lama).
+        Digantikan oleh gate "Surat Pernyataan" e-signature di atas.
+        Dikomentari (bukan dihapus) agar mudah dikembalikan bila diperlukan.
 
       <Modal
         title="Persetujuan Penyerahan Dokumen"
@@ -1081,6 +1507,7 @@ export default function StudentLayout({
           </div>
         </div>
       </Modal>
+      */}
       <Tour
         open={tourOpen}
         onClose={handleCloseTour}

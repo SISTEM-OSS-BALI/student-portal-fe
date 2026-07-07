@@ -43,6 +43,11 @@ export interface UserDataModel {
   document_consent_signed_at?: string | null;
   document_consent_signed?: boolean;
 
+  statement_letter_file_url?: string | null;
+  statement_letter_file_name?: string | null;
+  statement_letter_submitted_at?: string | null;
+  statement_letter_submitted?: boolean;
+
   notes?: NoteStudentDataModel[];
   stage?: {
     id: string;
@@ -114,6 +119,13 @@ export interface PatchDocumentsConsentPayload {
   document_consent_proof_photo_url?: string | null;
   document_consent_signed_at?: string | null;
   document_consent_signed?: boolean;
+}
+
+export interface PatchStatementLetterPayload {
+  statement_letter_file_url?: string | null;
+  statement_letter_file_name?: string | null;
+  statement_letter_submitted_at?: string | null;
+  statement_letter_submitted?: boolean;
 }
 
 export type UserFormModel = UserLoginModel;

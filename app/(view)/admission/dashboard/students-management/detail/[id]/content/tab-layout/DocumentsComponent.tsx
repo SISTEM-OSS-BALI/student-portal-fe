@@ -20,7 +20,6 @@ import {
   Typography,
 } from "antd";
 import {
-  CameraOutlined,
   CheckCircleOutlined,
   CheckOutlined,
   CloseCircleOutlined,
@@ -56,11 +55,11 @@ type DocumentRow = {
   approval_note?: string | null;
 };
 
-type ConsentData = {
-  signed: boolean;
+type StatementLetterData = {
+  submitted: boolean;
   signatureUrl: string;
-  proofPhotoUrl: string;
-  signedAt: string;
+  fileName: string;
+  submittedAt: string;
 };
 
 const formatDate = (value?: string | null) => {
@@ -100,25 +99,25 @@ const normalizeBoolean = (value: unknown): boolean => {
   return normalized === "true" || normalized === "1" || normalized === "yes";
 };
 
-const normalizeConsentData = (student?: UserDataModel | null): ConsentData => {
+const normalizeStatementLetterData = (
+  student?: UserDataModel | null,
+): StatementLetterData => {
   return {
-    signed: normalizeBoolean(student?.document_consent_signed),
-    signatureUrl: String(student?.document_consent_signature_url ?? "").trim(),
-    proofPhotoUrl: String(
-      student?.document_consent_proof_photo_url ?? "",
-    ).trim(),
-    signedAt: String(student?.document_consent_signed_at ?? "").trim(),
+    submitted: normalizeBoolean(student?.statement_letter_submitted),
+    signatureUrl: String(student?.statement_letter_file_url ?? "").trim(),
+    fileName: String(student?.statement_letter_file_name ?? "").trim(),
+    submittedAt: String(student?.statement_letter_submitted_at ?? "").trim(),
   };
 };
 
-const getConsentStatusMeta = (isSigned: boolean) => {
-  if (isSigned) {
+const getStatementLetterStatusMeta = (isSubmitted: boolean) => {
+  if (isSubmitted) {
     return {
       label: "Sudah ditandatangani",
       color: "green",
       icon: <CheckCircleOutlined />,
       description:
-        "Student sudah menyetujui dan menandatangani surat pernyataan penyerahan dokumen.",
+        "Student sudah membaca, menyetujui, dan menandatangani surat pernyataan perpanjangan visa (Student Visa & De Facto).",
       alertBackground: "#f0fdf4",
       alertBorder: "#bbf7d0",
       alertColor: "#166534",
@@ -130,7 +129,7 @@ const getConsentStatusMeta = (isSigned: boolean) => {
     color: "red",
     icon: <CloseCircleOutlined />,
     description:
-      "Student belum menyelesaikan tanda tangan surat pernyataan penyerahan dokumen.",
+      "Student belum menyelesaikan tanda tangan surat pernyataan perpanjangan visa.",
     alertBackground: "#fff7ed",
     alertBorder: "#fed7aa",
     alertColor: "#9a3412",
@@ -200,9 +199,18 @@ function ConsentInfoItem({
   );
 }
 
-function DocumentConsentCard({ student }: { student?: UserDataModel | null }) {
-  const consent = useMemo(() => normalizeConsentData(student), [student]);
-  const consentStatus = getConsentStatusMeta(consent.signed);
+function StatementLetterCard({
+  student,
+}: {
+  student?: UserDataModel | null;
+}) {
+  const statementLetter = useMemo(
+    () => normalizeStatementLetterData(student),
+    [student],
+  );
+  const statementLetterStatus = getStatementLetterStatusMeta(
+    statementLetter.submitted,
+  );
 
   return (
     <Card
@@ -229,7 +237,7 @@ function DocumentConsentCard({ student }: { student?: UserDataModel | null }) {
 
             <Space direction="vertical" size={2}>
               <Typography.Title level={5} style={{ marginBottom: 0 }}>
-                Surat Pernyataan Penyerahan Dokumen
+                Surat Pernyataan Visa & De Facto
               </Typography.Title>
 
               <Typography.Text type="secondary" style={{ fontSize: 13 }}>
@@ -239,8 +247,8 @@ function DocumentConsentCard({ student }: { student?: UserDataModel | null }) {
           </Space>
 
           <Tag
-            color={consentStatus.color}
-            icon={consentStatus.icon}
+            color={statementLetterStatus.color}
+            icon={statementLetterStatus.icon}
             style={{
               borderRadius: 999,
               padding: "4px 10px",
@@ -248,7 +256,7 @@ function DocumentConsentCard({ student }: { student?: UserDataModel | null }) {
               fontWeight: 600,
             }}
           >
-            {consentStatus.label}
+            {statementLetterStatus.label}
           </Tag>
         </Flex>
 
@@ -256,81 +264,44 @@ function DocumentConsentCard({ student }: { student?: UserDataModel | null }) {
           style={{
             padding: 14,
             borderRadius: 18,
-            background: consentStatus.alertBackground,
-            border: `1px solid ${consentStatus.alertBorder}`,
+            background: statementLetterStatus.alertBackground,
+            border: `1px solid ${statementLetterStatus.alertBorder}`,
           }}
         >
           <Typography.Text
             style={{
               display: "block",
-              color: consentStatus.alertColor,
+              color: statementLetterStatus.alertColor,
               fontSize: 13,
               lineHeight: 1.6,
             }}
           >
-            {consentStatus.description}
+            {statementLetterStatus.description}
           </Typography.Text>
         </div>
-
-        {!student ? (
-          <div
-            style={{
-              padding: 14,
-              borderRadius: 18,
-              background: "#fff7ed",
-              border: "1px solid #fed7aa",
-            }}
-          >
-            <Typography.Text
-              style={{
-                display: "block",
-                color: "#9a3412",
-                fontSize: 13,
-                lineHeight: 1.6,
-              }}
-            >
-              Data student belum dikirim ke komponen dokumen. Pastikan
-              DocumentsComponent menerima props student.
-            </Typography.Text>
-          </div>
-        ) : null}
 
         <Space direction="vertical" size={10} style={{ width: "100%" }}>
           <ConsentInfoItem
             icon={<SignatureOutlined />}
             label="Status Tanda Tangan"
             value={
-              consent.signed ? "Sudah ditandatangani" : "Belum ditandatangani"
+              statementLetter.submitted
+                ? "Sudah ditandatangani"
+                : "Belum ditandatangani"
             }
           />
 
           <ConsentInfoItem
             icon={<FileTextOutlined />}
             label="Tanggal Ditandatangani"
-            value={formatDate(consent.signedAt)}
+            value={formatDate(statementLetter.submittedAt)}
           />
 
           <ConsentInfoItem
             icon={<FileImageOutlined />}
             label="File Tanda Tangan"
             value={
-              consent.signatureUrl ? (
-                <Typography.Text style={{ color: "#15803d" }}>
-                  Tersedia
-                </Typography.Text>
-              ) : (
-                <Typography.Text type="secondary">
-                  Belum tersedia
-                </Typography.Text>
-              )
-            }
-          />
-
-          <ConsentInfoItem
-            icon={<CameraOutlined />}
-            label="Bukti Foto"
-            value={
-              consent.proofPhotoUrl ? (
+              statementLetter.signatureUrl ? (
                 <Typography.Text style={{ color: "#15803d" }}>
                   Tersedia
                 </Typography.Text>
@@ -345,7 +316,7 @@ function DocumentConsentCard({ student }: { student?: UserDataModel | null }) {
 
         <Divider style={{ margin: "4px 0" }} />
 
-        {consent.signatureUrl ? (
+        {statementLetter.signatureUrl ? (
           <div
             style={{
               padding: 14,
@@ -378,7 +349,7 @@ function DocumentConsentCard({ student }: { student?: UserDataModel | null }) {
               }}
             >
               <Image
-                src={consent.signatureUrl}
+                src={statementLetter.signatureUrl}
                 alt="Tanda tangan surat pernyataan"
                 style={{
                   maxHeight: 120,
@@ -395,37 +366,20 @@ function DocumentConsentCard({ student }: { student?: UserDataModel | null }) {
           />
         )}
 
-        <Space direction="vertical" size={8} style={{ width: "100%" }}>
-          <Button
-            block
-            icon={<EyeOutlined />}
-            disabled={!consent.signatureUrl}
-            href={consent.signatureUrl || undefined}
-            target={consent.signatureUrl ? "_blank" : undefined}
-            style={{
-              height: 42,
-              borderRadius: 14,
-              fontWeight: 600,
-            }}
-          >
-            Lihat Tanda Tangan
-          </Button>
-
-          <Button
-            block
-            icon={<CameraOutlined />}
-            disabled={!consent.proofPhotoUrl}
-            href={consent.proofPhotoUrl || undefined}
-            target={consent.proofPhotoUrl ? "_blank" : undefined}
-            style={{
-              height: 42,
-              borderRadius: 14,
-              fontWeight: 600,
-            }}
-          >
-            Lihat Bukti Foto
-          </Button>
-        </Space>
+        <Button
+          block
+          icon={<EyeOutlined />}
+          disabled={!statementLetter.signatureUrl}
+          href={statementLetter.signatureUrl || undefined}
+          target={statementLetter.signatureUrl ? "_blank" : undefined}
+          style={{
+            height: 42,
+            borderRadius: 14,
+            fontWeight: 600,
+          }}
+        >
+          Lihat Tanda Tangan
+        </Button>
       </Space>
     </Card>
   );
@@ -772,7 +726,7 @@ export default function DocumentsComponent({
       </Col>
 
       <Col xs={24} xl={8}>
-        <DocumentConsentCard student={student} />
+        <StatementLetterCard student={student} />
       </Col>
     </Row>
   );
