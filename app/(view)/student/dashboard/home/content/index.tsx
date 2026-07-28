@@ -95,6 +95,7 @@ type StudentUser = {
   visa_type?: string;
   visa_type_name?: string;
   degree?: string;
+  name_degree?: string;
   translation_quota?: number;
   joined_at?: string;
   created_at?: string;
@@ -571,24 +572,6 @@ export default function DashboardContent() {
 
               <Col xs={12} md={6}>
                 <Space align="start">
-                  <FileTextOutlined
-                    style={{ color: "#9ca3af", marginTop: 4 }}
-                  />
-                  <div>
-                    <Text type="secondary" style={{ fontSize: 12 }}>
-                      Document
-                    </Text>
-                    <div>
-                      <Text strong>
-                        {student?.stage?.document?.label || "-"}
-                      </Text>
-                    </div>
-                  </div>
-                </Space>
-              </Col>
-
-              <Col xs={12} md={6}>
-                <Space align="start">
                   <SafetyCertificateOutlined
                     style={{ color: "#9ca3af", marginTop: 4 }}
                   />
@@ -598,6 +581,22 @@ export default function DashboardContent() {
                     </Text>
                     <div>
                       <Text strong>{formatDegree(student?.degree)}</Text>
+                    </div>
+                  </div>
+                </Space>
+              </Col>
+
+              <Col xs={12} md={6}>
+                <Space align="start">
+                  <FileTextOutlined
+                    style={{ color: "#9ca3af", marginTop: 4 }}
+                  />
+                  <div>
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      Nama Degree
+                    </Text>
+                    <div>
+                      <Text strong>{student?.name_degree || "-"}</Text>
                     </div>
                   </div>
                 </Space>
@@ -727,25 +726,25 @@ export default function DashboardContent() {
                   <Text strong style={{ fontSize: 13 }}>
                     {task.title}
                   </Text>
-                  <Tag
-                    color={
-                      task.priority === "Revision Required"
-                        ? "error"
-                        : task.priority === "Required Document"
-                          ? "gold"
-                          : task.priority === "Current Step"
-                            ? "error"
-                            : "processing"
-                    }
-                    style={{
-                      width: "fit-content",
-                      borderRadius: 999,
-                      paddingInline: 10,
-                      fontSize: 11,
-                    }}
-                  >
-                    {task.priority}
-                  </Tag>
+                  {task.priority !== "Upcoming Step" && (
+                    <Tag
+                      color={
+                        task.priority === "Revision Required"
+                          ? "error"
+                          : task.priority === "Required Document"
+                            ? "gold"
+                            : "error"
+                      }
+                      style={{
+                        width: "fit-content",
+                        borderRadius: 999,
+                        paddingInline: 10,
+                        fontSize: 11,
+                      }}
+                    >
+                      {task.priority}
+                    </Tag>
+                  )}
                 </Space>
               </div>
             ))}

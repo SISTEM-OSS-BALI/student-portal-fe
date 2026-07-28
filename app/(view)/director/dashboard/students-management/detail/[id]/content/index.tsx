@@ -202,6 +202,8 @@ export default function StudentDetailContentPage() {
     detailStudentData?.degree ??
     detailStudentData?.name_degree ??
     "Belum ada degree";
+  const studentDegreeName =
+    detailStudentData?.name_degree ?? "Belum ada nama degree";
 
   const visaTypeLabel = detailStudentData?.visa_type_name
     ? detailStudentData.visa_type_name
@@ -535,6 +537,9 @@ export default function StudentDetailContentPage() {
               </Typography.Text>
               <Typography.Text type="secondary">
                 Degree: {studentDegree}
+              </Typography.Text>
+              <Typography.Text type="secondary">
+                Nama Degree: {studentDegreeName}
               </Typography.Text>
 
               <div style={{ marginTop: 10 }}>

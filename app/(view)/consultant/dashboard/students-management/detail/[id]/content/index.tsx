@@ -164,6 +164,9 @@ export default function ConsultantStudentDetailContentPage() {
                 <Typography.Text type="secondary">
                   Degree: {detailStudentData.degree ?? detailStudentData.name_degree ?? "Belum ada degree"}
                 </Typography.Text>
+                <Typography.Text type="secondary">
+                  Nama Degree: {detailStudentData.name_degree ?? "Belum ada nama degree"}
+                </Typography.Text>
               </Space>
             </Space>
 
