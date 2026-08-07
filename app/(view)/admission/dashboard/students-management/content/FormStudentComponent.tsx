@@ -1,5 +1,6 @@
 "use client";
 
+import { useLookupReferral } from "@/app/hooks/use-referral";
 import { useVisaTypes } from "@/app/hooks/use-visa-type-management";
 import { StagesManagementDataModel } from "@/app/models/stages-management";
 import {
@@ -7,7 +8,7 @@ import {
   StudentFormValues,
 } from "@/app/models/user";
 import { Button, Form, Input, InputNumber, Select, Space, Switch } from "antd";
-import { useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 interface FormStudentComponentProps {
   onSubmit: (
@@ -34,6 +35,46 @@ export default function FormStudentComponent({
   const selectedTypeVisa = Form.useWatch("visa_type", form);
 
   const { data: visaTypes } = useVisaTypes({});
+  const { onLookup: onLookupReferral } = useLookupReferral();
+
+  const [referralStatus, setReferralStatus] = useState<
+    "idle" | "loading" | "found" | "not_found"
+  >("idle");
+  const [referralName, setReferralName] = useState<string | null>(null);
+  const referralDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+
+  const checkReferralCode = useCallback(
+    async (code: string) => {
+      const trimmed = code.trim();
+      if (!trimmed) {
+        setReferralStatus("idle");
+        setReferralName(null);
+        return;
+      }
+
+      setReferralStatus("loading");
+      try {
+        const result = await onLookupReferral(trimmed);
+        setReferralStatus("found");
+        setReferralName(result.name);
+      } catch {
+        setReferralStatus("not_found");
+        setReferralName(null);
+      }
+    },
+    [onLookupReferral],
+  );
+
+  const handleReferralCodeChange = (value: string) => {
+    if (referralDebounceRef.current) {
+      clearTimeout(referralDebounceRef.current);
+    }
+    referralDebounceRef.current = setTimeout(() => {
+      checkReferralCode(value);
+    }, 400);
+  };
 
   const selectedVisa = useMemo(() => {
     return (visaTypes ?? []).find((visa) => visa.id === selectedTypeVisa);
@@ -86,12 +127,27 @@ export default function FormStudentComponent({
         name_consultant: selectedStudent.name_consultant ?? undefined,
         source: selectedStudent.source ?? undefined,
         source_category: selectedStudent.source_category ?? undefined,
+        code_referral: selectedStudent.code_referral ?? undefined,
       });
-      return;
+      const codeReferral = selectedStudent.code_referral;
+      const timer = setTimeout(() => {
+        if (codeReferral) {
+          checkReferralCode(codeReferral);
+        } else {
+          setReferralStatus("idle");
+          setReferralName(null);
+        }
+      }, 0);
+      return () => clearTimeout(timer);
     }
 
     form.resetFields();
-  }, [form, selectedStudent]);
+    const timer = setTimeout(() => {
+      setReferralStatus("idle");
+      setReferralName(null);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [form, selectedStudent, checkReferralCode]);
 
   useEffect(() => {
     if (!isStudentVisa) {
@@ -249,6 +305,31 @@ export default function FormStudentComponent({
           <Select.Option value="agent">Agent</Select.Option>
           <Select.Option value="other">Other</Select.Option>
         </Select>
+      </Form.Item>
+
+      <Form.Item
+        name="code_referral"
+        label="Kode Referral"
+        extra={
+          referralStatus === "loading" ? (
+            "Mengecek kode referral..."
+          ) : referralStatus === "found" ? (
+            <span style={{ color: "#52c41a" }}>
+              ✓ Terdaftar atas nama {referralName}
+            </span>
+          ) : referralStatus === "not_found" ? (
+            <span style={{ color: "#ff4d4f" }}>
+              Kode referral tidak ditemukan
+            </span>
+          ) : (
+            "Opsional. Masukkan kode referral jika ada."
+          )
+        }
+      >
+        <Input
+          placeholder="Masukkan kode referral"
+          onChange={(e) => handleReferralCodeChange(e.target.value)}
+        />
       </Form.Item>
 
       <Form.Item

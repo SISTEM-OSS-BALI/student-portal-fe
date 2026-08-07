@@ -21,6 +21,7 @@ export interface UserDataModel {
   visa_type?: string;
   source?: string | null;
   source_category?: string | null;
+  code_referral?: string | null;
   translation_quota?: number;
   has_initial_translations?: boolean;
   no_phone?: string | null;
@@ -77,6 +78,7 @@ export interface UserPayloadCreateModel {
   visa_type?: string;
   source?: string | null;
   source_category?: string | null;
+  code_referral?: string | null;
   translation_quota?: number;
   has_initial_translations?: boolean;
   no_phone?: string | null;
@@ -98,6 +100,7 @@ export interface UserPayloadUpdateModel {
   visa_type?: string;
   source?: string | null;
   source_category?: string | null;
+  code_referral?: string | null;
   translation_quota?: number;
   has_initial_translations?: boolean;
   no_phone?: string | null;
