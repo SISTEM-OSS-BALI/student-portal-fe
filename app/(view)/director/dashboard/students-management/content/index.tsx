@@ -17,6 +17,7 @@ import {
 import {
   FilterOutlined,
   HolderOutlined,
+  PlusOutlined,
   SearchOutlined,
 } from "@ant-design/icons";
 import {
@@ -754,6 +755,7 @@ type StudentsManagementContentProps = {
   readOnly?: boolean;
   title?: string;
   description?: string;
+  onAddStudent?: () => void;
 };
 
 export default function StudentsManagementContent({
@@ -761,6 +763,7 @@ export default function StudentsManagementContent({
   readOnly = false,
   title = "Student Pipeline Management",
   description = "Kelola progres student dengan tampilan board yang lebih ringkas. Data student ditampilkan 10 per halaman pada setiap kolom.",
+  onAddStudent,
 }: StudentsManagementContentProps) {
   const router = useRouter();
 
@@ -1312,6 +1315,23 @@ export default function StudentsManagementContent({
             >
               Filter
             </Button>
+
+            {onAddStudent && (
+              <Button
+                type="primary"
+                size="large"
+                icon={<PlusOutlined />}
+                onClick={onAddStudent}
+                style={{
+                  minWidth: 160,
+                  borderRadius: 16,
+                  height: 52,
+                  fontWeight: 700,
+                }}
+              >
+                Add Student
+              </Button>
+            )}
           </div>
         </Card>
 

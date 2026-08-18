@@ -33,6 +33,7 @@ export default function ModalStudentComponent({
       footer={null}
       title={selectedStudent ? "Edit Student" : "Tambah Student"}
       destroyOnClose
+      width={760}
     >
       <FormStudentComponent
         onSubmit={onSubmit}

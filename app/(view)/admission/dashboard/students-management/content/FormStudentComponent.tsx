@@ -2,6 +2,7 @@
 
 import { useLookupReferral } from "@/app/hooks/use-referral";
 import { useVisaTypes } from "@/app/hooks/use-visa-type-management";
+import { useAuth } from "@/app/utils/use-auth";
 import { StagesManagementDataModel } from "@/app/models/stages-management";
 import {
   UserDataModel,
@@ -36,6 +37,8 @@ export default function FormStudentComponent({
 
   const { data: visaTypes } = useVisaTypes({});
   const { onLookup: onLookupReferral } = useLookupReferral();
+  const { role, user_name } = useAuth();
+  const isConsultant = role === "CONSULTANT";
 
   const [referralStatus, setReferralStatus] = useState<
     "idle" | "loading" | "found" | "not_found"
@@ -142,12 +145,15 @@ export default function FormStudentComponent({
     }
 
     form.resetFields();
+    if (isConsultant && user_name) {
+      form.setFieldsValue({ name_consultant: user_name });
+    }
     const timer = setTimeout(() => {
       setReferralStatus("idle");
       setReferralName(null);
     }, 0);
     return () => clearTimeout(timer);
-  }, [form, selectedStudent, checkReferralCode]);
+  }, [form, selectedStudent, checkReferralCode, isConsultant, user_name]);
 
   useEffect(() => {
     if (!isStudentVisa) {
@@ -161,6 +167,13 @@ export default function FormStudentComponent({
 
   return (
     <Form form={form} layout="vertical" onFinish={onSubmit}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          columnGap: 16,
+        }}
+      >
       <Form.Item
         name="name"
         label="Nama Lengkap"
@@ -276,7 +289,10 @@ export default function FormStudentComponent({
         label="Nama Konsultan"
         rules={[{ required: true, message: "Nama Konsultan wajib diisi" }]}
       >
-        <Input placeholder="Masukkan nama konsultan" />
+        <Input
+          placeholder="Masukkan nama konsultan"
+          disabled={isConsultant}
+        />
       </Form.Item>
 
       <Form.Item
@@ -345,6 +361,7 @@ export default function FormStudentComponent({
           ))}
         </Select>
       </Form.Item>
+      </div>
 
       <Space style={{ width: "100%", justifyContent: "flex-end" }}>
         <Button onClick={onCancel}>Batal</Button>
