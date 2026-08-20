@@ -13,6 +13,7 @@ import {
   LockOutlined,
   InboxOutlined,
   LogoutOutlined,
+  MenuOutlined,
   SearchOutlined,
 } from "@ant-design/icons";
 import getInitials from "@/app/utils/initials-username";
@@ -94,6 +95,8 @@ export default function AdmissionLayout({
 
   const [openInbox, setOpenInbox] = useState(false);
   const [openGlobalSearch, setOpenGlobalSearch] = useState(false);
+  const [siderCollapsed, setSiderCollapsed] = useState(false);
+  const [siderBroken, setSiderBroken] = useState(false);
 
   const { data: usersData } = useUsers({ enabled: Boolean(user_id) });
   const { data: studentsData = [] } = useUserRoleStudents({
@@ -298,10 +301,25 @@ export default function AdmissionLayout({
   return (
     <div>
       <Layout className={styles.root}>
-        <SiderAdmission />
+        <SiderAdmission
+          collapsed={siderCollapsed}
+          onCollapsedChange={setSiderCollapsed}
+          broken={siderBroken}
+          onBrokenChange={setSiderBroken}
+        />
         <Layout className={styles.main}>
           <Header className={styles.header}>
             <div className={styles.headerLeft}>
+              {siderBroken && (
+                <button
+                  className={styles.menuTrigger}
+                  type="button"
+                  aria-label="Toggle menu"
+                  onClick={() => setSiderCollapsed(!siderCollapsed)}
+                >
+                  <MenuOutlined />
+                </button>
+              )}
               <MainBreadcrumb />
             </div>
             <div className={styles.headerRight}>

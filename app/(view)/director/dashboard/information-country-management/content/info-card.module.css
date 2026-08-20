@@ -1,0 +1,24 @@
+.cardRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: start;
+}
+
+.cardActions {
+  align-items: flex-end;
+}
+
+@media (max-width: 640px) {
+  .cardRow {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .cardActions {
+    grid-column: 1 / -1;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    flex-wrap: wrap;
+  }
+}

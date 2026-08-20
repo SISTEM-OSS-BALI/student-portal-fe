@@ -30,6 +30,7 @@ import type {
   InformationCountryPayloadCreateModel,
   InformationCountryPayloadUpdateModel,
 } from "@/app/models/information-country-management";
+import styles from "./info-card.module.css";
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -519,14 +520,8 @@ export default function InformationCountryManagementContent() {
                   }}
                   styles={{ body: { padding: 20 } }}
                 >
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "auto 1fr auto",
-                      gap: 16,
-                      alignItems: "start",
-                    }}
-                  >
+                  <div className={styles.cardRow}>
+
                     <div
                       style={{
                         width: 52,
@@ -545,15 +540,17 @@ export default function InformationCountryManagementContent() {
                     <Space
                       direction="vertical"
                       size={10}
-                      style={{ width: "100%" }}
+                      style={{ width: "100%", minWidth: 0 }}
                     >
-                      <div>
+                      <div style={{ minWidth: 0 }}>
                         <Title
                           level={3}
                           style={{
                             margin: 0,
                             fontSize: 18,
                             lineHeight: 1.35,
+                            wordBreak: "normal",
+                            overflowWrap: "break-word",
                           }}
                         >
                           {item.title}
@@ -579,6 +576,8 @@ export default function InformationCountryManagementContent() {
                           color: "#475569",
                           fontSize: 14,
                           lineHeight: 1.7,
+                          wordBreak: "normal",
+                          overflowWrap: "break-word",
                         }}
                       >
                         {item.description || "Tidak ada deskripsi."}
@@ -596,7 +595,12 @@ export default function InformationCountryManagementContent() {
                       </Space>
                     </Space>
 
-                    <Space direction="vertical" size={14} align="end">
+                    <Space
+                      direction="vertical"
+                      size={14}
+                      align="end"
+                      className={styles.cardActions}
+                    >
                       <Tag
                         style={{
                           margin: 0,

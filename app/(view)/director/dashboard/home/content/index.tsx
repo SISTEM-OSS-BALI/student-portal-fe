@@ -19,6 +19,7 @@ import { useUserRoleStudents } from "@/app/hooks/use-users";
 import type { AnswerApprovalsDataModel } from "@/app/models/answer-approvals";
 import type { InformationCountryDataModel } from "@/app/models/information-country-management";
 import type { UserDataModel } from "@/app/models/user";
+import styles from "./home.module.css";
 
 const { Text } = Typography;
 
@@ -500,16 +501,16 @@ export default function DirectorDashboardHomeContent() {
 
   return (
     <div
+      className={styles.page}
       style={{
-        padding: 24,
         background: "linear-gradient(180deg, #f8fbff 0%, #ffffff 100%)",
         minHeight: "100%",
       }}
     >
       <div
+        className={styles.gridWorkload}
         style={{
           display: "grid",
-          gridTemplateColumns: "minmax(0, 1.45fr) minmax(340px, 0.95fr)",
           gap: 20,
           alignItems: "start",
         }}

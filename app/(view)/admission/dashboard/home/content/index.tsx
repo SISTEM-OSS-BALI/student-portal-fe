@@ -26,6 +26,7 @@ import type { AnswerApprovalsDataModel } from "@/app/models/answer-approvals";
 import type { DocumentTranslationDataModel } from "@/app/models/document-translations";
 import type { InformationCountryDataModel } from "@/app/models/information-country-management";
 import type { UserDataModel } from "@/app/models/user";
+import styles from "./home.module.css";
 
 const { Text } = Typography;
 
@@ -363,11 +364,12 @@ function WorkloadMetricCard({ item }: { item: WorkloadCard }) {
 
 function StudentBadge({ name, country }: { name: string; country: string }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
       <div
         style={{
           width: 38,
           height: 38,
+          flexShrink: 0,
           borderRadius: 999,
           display: "grid",
           placeItems: "center",
@@ -380,7 +382,7 @@ function StudentBadge({ name, country }: { name: string; country: string }) {
       >
         {getInitials(name)}
       </div>
-      <div>
+      <div style={{ minWidth: 0 }}>
         <Text strong style={{ display: "block" }}>
           {name}
         </Text>
@@ -837,16 +839,16 @@ export default function AdmissionDashboardHomeContent() {
 
   return (
     <div
+      className={styles.page}
       style={{
-        padding: 24,
         background: "linear-gradient(180deg, #f8fbff 0%, #ffffff 100%)",
         minHeight: "100%",
       }}
     >
       <div
+        className={styles.gridWorkload}
         style={{
           display: "grid",
-          gridTemplateColumns: "minmax(0, 1.35fr) minmax(320px, 0.95fr)",
           gap: 20,
           alignItems: "start",
         }}
@@ -882,6 +884,7 @@ export default function AdmissionDashboardHomeContent() {
                     borderRadius: 16,
                     padding: "12px 14px",
                     display: "flex",
+                    flexWrap: "wrap",
                     alignItems: "center",
                     justifyContent: "space-between",
                     gap: 12,
@@ -892,10 +895,10 @@ export default function AdmissionDashboardHomeContent() {
 
                   <div style={{ textAlign: "right" }}>
                     <Text
+                      className={styles.alertPrice}
                       style={{
                         color: "#ef4444",
                         fontWeight: 700,
-                        fontSize: 22,
                       }}
                     >
                       {item.remaining}/{item.total} pages
@@ -914,9 +917,9 @@ export default function AdmissionDashboardHomeContent() {
       </div>
 
       <div
+        className={styles.gridPipeline}
         style={{
           display: "grid",
-          gridTemplateColumns: "minmax(0, 1.5fr) minmax(320px, 0.75fr)",
           gap: 20,
           marginTop: 20,
           alignItems: "start",
@@ -1228,9 +1231,9 @@ export default function AdmissionDashboardHomeContent() {
       </div>
 
       <div
+        className={styles.gridActivities}
         style={{
           display: "grid",
-          gridTemplateColumns: "minmax(0, 1fr) minmax(320px, 0.95fr)",
           gap: 20,
           marginTop: 20,
           alignItems: "start",

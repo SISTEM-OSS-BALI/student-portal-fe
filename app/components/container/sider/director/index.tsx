@@ -10,12 +10,23 @@ import { SidebarMainDirector } from "@/app/data/director/sidebar-data";
 
 const { Text } = Typography;
 
-export const SiderDirector = () => {
+export const SiderDirector = ({
+  collapsed,
+  onCollapsedChange,
+  broken,
+  onBrokenChange,
+}: {
+  collapsed: boolean;
+  onCollapsedChange: (collapsed: boolean) => void;
+  broken: boolean;
+  onBrokenChange: (broken: boolean) => void;
+}) => {
   const router = useRouter();
   const pathname = usePathname();
   const { token } = theme.useToken();
 
-  const [collapsed, setCollapsed] = useState(false);
+  const setCollapsed = onCollapsedChange;
+  const setBroken = onBrokenChange;
   const [activeKey, setActiveKey] = useState("/");
   const [openKeys, setOpenKeys] = useState<string[]>([]);
 
@@ -34,6 +45,9 @@ export const SiderDirector = () => {
     const parent = key.split("/").slice(0, 4).join("/");
     if (parent)
       setOpenKeys((prev) => (prev.includes(parent) ? prev : [...prev, parent]));
+    // Auto-close the drawer on mobile after navigating
+    if (broken) setCollapsed(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
 
   // Route on click
@@ -59,19 +73,40 @@ export const SiderDirector = () => {
     );
 
   return (
-    <Sider
-      collapsible
-      collapsed={collapsed}
-      onCollapse={setCollapsed}
-      width={256}
-      style={{
-        background: "#fff",
-        borderRight: `1px solid ${token.colorSplit}`,
-        position: "sticky",
-        top: 0,
-        height: "100vh",
-      }}
-    >
+    <>
+      {broken && !collapsed && (
+        <div
+          onClick={() => setCollapsed(true)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15, 23, 42, 0.45)",
+            zIndex: 999,
+          }}
+        />
+      )}
+      <Sider
+        collapsible
+        collapsed={collapsed}
+        onCollapse={setCollapsed}
+        breakpoint="lg"
+        collapsedWidth={broken ? 0 : 80}
+        onBreakpoint={(brokenState) => {
+          setBroken(brokenState);
+          setCollapsed(brokenState);
+        }}
+        width={256}
+        trigger={broken ? null : undefined}
+        style={{
+          background: "#fff",
+          borderRight: `1px solid ${token.colorSplit}`,
+          position: broken ? "fixed" : "sticky",
+          insetInlineStart: 0,
+          top: 0,
+          height: "100vh",
+          zIndex: 1000,
+        }}
+      >
       {/* Brand */}
       <div
         onClick={() => router.push("/")}
@@ -144,6 +179,7 @@ export const SiderDirector = () => {
           {collapsed ? "v1.0.0" : "v1.0.0 · © OSS"}
         </Text>
       </div>
-    </Sider>
+      </Sider>
+    </>
   );
 };

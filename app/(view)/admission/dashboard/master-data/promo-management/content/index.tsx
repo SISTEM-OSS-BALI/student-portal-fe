@@ -121,12 +121,24 @@ export default function PromoManagementContent() {
   return (
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
       <Card>
-        <Space
-          align="start"
-          style={{ width: "100%", justifyContent: "space-between" }}
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: 16,
+          }}
         >
-          <div>
-            <Title level={3} style={{ marginBottom: 4 }}>
+          <div style={{ minWidth: 0, flex: "1 1 240px" }}>
+            <Title
+              level={3}
+              style={{
+                marginBottom: 4,
+                wordBreak: "normal",
+                overflowWrap: "break-word",
+              }}
+            >
               Promo Management
             </Title>
             <Text type="secondary">
@@ -134,10 +146,15 @@ export default function PromoManagementContent() {
             </Text>
           </div>
 
-          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={openCreate}
+            style={{ flexShrink: 0 }}
+          >
             Create Promo
           </Button>
-        </Space>
+        </div>
       </Card>
 
       <Card>
@@ -146,12 +163,18 @@ export default function PromoManagementContent() {
           loading={fetchLoading}
           dataSource={sortedPromos}
           pagination={{ pageSize: 8 }}
+          scroll={{ x: 720 }}
           columns={[
             {
               title: "Promo",
               key: "promo",
+              width: 220,
               render: (_, record) => (
-                <Space direction="vertical" size={0}>
+                <Space
+                  direction="vertical"
+                  size={0}
+                  style={{ wordBreak: "normal", overflowWrap: "break-word" }}
+                >
                   <Text strong>{record.code}</Text>
                   <Text type="secondary">{record.description || "-"}</Text>
                 </Space>
@@ -161,11 +184,13 @@ export default function PromoManagementContent() {
               title: "Discount",
               dataIndex: "discount",
               key: "discount",
+              width: 110,
               render: (value: number) => <Text>{value}%</Text>,
             },
             {
               title: "Periode",
               key: "period",
+              width: 190,
               render: (_, record) => (
                 <Text>
                   {formatDate(record.valid_from)} - {formatDate(record.valid_to)}
@@ -175,6 +200,7 @@ export default function PromoManagementContent() {
             {
               title: "Status",
               key: "status",
+              width: 110,
               render: (_, record) => {
                 const now = Date.now();
                 const withinRange =

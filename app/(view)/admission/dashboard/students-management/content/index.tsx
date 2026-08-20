@@ -723,7 +723,17 @@ function BoardColumn({
 
         <Flex justify="space-between" align="center" gap={12}>
           <div style={{ minWidth: 0 }}>
-            <Text strong style={{ fontSize: 17, color: "#111827" }}>
+            <Text
+              strong
+              style={{
+                fontSize: 17,
+                color: "#111827",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                display: "block",
+              }}
+            >
               {column.title}
             </Text>
 
@@ -1718,14 +1728,15 @@ export default function StudentsManagementContent() {
           <div
             style={{
               width: "100%",
-              overflowX: "hidden",
+              overflowX: "auto",
+              WebkitOverflowScrolling: "touch",
               paddingBottom: 8,
             }}
           >
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: `repeat(${boardConfig.length}, minmax(0, 1fr))`,
+                gridTemplateColumns: `repeat(${boardConfig.length}, minmax(240px, 1fr))`,
                 gap: 18,
                 alignItems: "stretch",
               }}

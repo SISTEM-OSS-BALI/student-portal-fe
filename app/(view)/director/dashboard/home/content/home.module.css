@@ -1,0 +1,19 @@
+.page {
+  padding: 24px;
+}
+
+.gridWorkload {
+  grid-template-columns: minmax(0, 1.45fr) minmax(340px, 0.95fr);
+}
+
+@media (max-width: 900px) {
+  .gridWorkload {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .page {
+    padding: 12px;
+  }
+}

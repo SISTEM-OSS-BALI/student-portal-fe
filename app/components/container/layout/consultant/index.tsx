@@ -12,6 +12,7 @@ import {
   InboxOutlined,
   LockOutlined,
   LogoutOutlined,
+  MenuOutlined,
   SearchOutlined,
 } from "@ant-design/icons";
 import { useCallback, useMemo, useState } from "react";
@@ -61,6 +62,8 @@ export default function ConsultantLayout({
 
   const [openInbox, setOpenInbox] = useState(false);
   const [openGlobalSearch, setOpenGlobalSearch] = useState(false);
+  const [siderCollapsed, setSiderCollapsed] = useState(false);
+  const [siderBroken, setSiderBroken] = useState(false);
 
   const { data: studentsData = [] } = useUserRoleStudents({
     enabled: Boolean(user_id),
@@ -157,10 +160,25 @@ export default function ConsultantLayout({
   return (
     <div>
       <Layout className={styles.root}>
-        <SiderConsultant />
+        <SiderConsultant
+          collapsed={siderCollapsed}
+          onCollapsedChange={setSiderCollapsed}
+          broken={siderBroken}
+          onBrokenChange={setSiderBroken}
+        />
         <Layout className={styles.main}>
           <Header className={styles.header}>
             <div className={styles.headerLeft}>
+              {siderBroken && (
+                <button
+                  className={styles.menuTrigger}
+                  type="button"
+                  aria-label="Toggle menu"
+                  onClick={() => setSiderCollapsed(!siderCollapsed)}
+                >
+                  <MenuOutlined />
+                </button>
+              )}
               <MainBreadcrumb />
             </div>
             <div className={styles.headerRight}>
