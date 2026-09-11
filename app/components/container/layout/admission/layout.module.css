@@ -2,15 +2,11 @@
   min-height: 100vh;
   background: #f2f4f8;
   font-family: "Manrope", "Sora", "Space Grotesk", sans-serif;
-  overflow-x: hidden;
-  overflow-y: visible;
 }
 
 .main {
   background: linear-gradient(135deg, #f7f3ee 0%, #f5f7fb 55%, #eef3f9 100%);
   min-width: 0;
-  overflow-x: hidden;
-  overflow-y: visible;
 }
 
 .header {

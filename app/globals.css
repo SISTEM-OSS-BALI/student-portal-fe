@@ -12,6 +12,9 @@ html, body, * {
 html, body {
   max-width: 100vw;
   overflow-x: hidden;
+  /* `clip` hides horizontal overflow without turning body into a scroll
+     container, which would break the sidebars' `position: sticky`. */
+  overflow-x: clip;
 }
 
 /* html, body {
