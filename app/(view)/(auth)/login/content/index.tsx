@@ -129,7 +129,6 @@ export default function LoginContent() {
 
         <div className={styles.partnersSection}>
           <div className={styles.divider} />
-          <span className={styles.partnersLabel}>Partner</span>
           <div className={styles.partners}>
             {partners.map((partner) => (
               <div key={partner.title} className={styles.partnerItem}>
