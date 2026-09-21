@@ -1,16 +1,42 @@
 "use client";
 
-import { notification } from "antd";
+import { Image as AntdImage, notification } from "antd";
 import Image from "next/image";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import React from "react";
 
-import styles from "../auth.module.css";
+import styles from "../login.module.css";
 
 import { UserFormModel } from "@/app/models/user";
 import FormLogin from "./FormLoginComponent";
 import { useLogin } from "@/app/hooks/use-users";
+
+const steps = [
+  "Pantau progres dokumen dan status visa kamu",
+  "Chat langsung dengan tim admission & consultant",
+  "Dapatkan notifikasi setiap ada update penting",
+];
+
+const partners = [
+  {
+    src: "/assets/images/pte-badge.png",
+    alt: "PTE Partner 2026",
+    title: "PTE Partner 2026",
+    subtitle: "Pearson Test of English",
+  },
+  {
+    src: "/assets/images/pte-badge-2.png",
+    alt: "PTE Registration Center",
+    title: "PTE Registration Center",
+    subtitle: "Pearson Test of English",
+  },
+  {
+    src: "/assets/images/trained-british-council.png",
+    alt: "British Council UK Knowledge-Trained Counsellor",
+    title: "British Council",
+    subtitle: "UK Knowledge-Trained Agent & Counsellor — Code 100273",
+  },
+];
 
 export default function LoginContent() {
   const router = useRouter();
@@ -47,87 +73,89 @@ export default function LoginContent() {
     }
   };
 
-  const highlightStats = [
-    { value: "180+", label: "Mata kuliah aktif tiap semester" },
-    { value: "12K+", label: "Mahasiswa terdaftar di OSS" },
-    { value: "24/7", label: "Layanan bantuan akademik" },
-  ];
-
   return (
-    <div className={styles.wrapper}>
-      <span className={`${styles.glow} ${styles.glowPrimary}`} />
-      <span className={`${styles.glow} ${styles.glowSecondary}`} />
-
-      <div className={styles.content}>
-        <div className={styles.grid}>
-          <div className={styles.leftPane}>
-            <span className={styles.badge}>OSS Student Portal</span>
-            <h1 className={styles.title}>
-              Atur perjalanan kampusmu lewat <span>OSS Bali</span> portal
-            </h1>
-            <p className={styles.subtitle}>
-              Pantau progress mu tanpa pindah aplikasi
-            </p>
-
-            <ul className={styles.highlights}>
-              {highlightStats.map((item) => (
-                <li key={item.label} className={styles.highlightItem}>
-                  <span className={styles.statValue}>{item.value}</span>
-                  <span className={styles.statLabel}>{item.label}</span>
-                </li>
-              ))}
-            </ul>
-
-            <div className={styles.infoCard}>
-              <div className={styles.infoCardImage}>
-                <Image
-                  src="/assets/images/icon.png"
-                  alt="OSS Student Portal"
-                  width={64}
-                  height={64}
-                  priority
-                  unoptimized
-                />
-              </div>
-              <div className={styles.infoCardText}>
-                <span className={styles.infoTitle}>
-                  Portal mahasiswa terintegrasi OSS
-                </span>
-                <span className={styles.infoSubtitle}>
-                  Akses akademik, finansial, dan layanan kampus dari satu akun
-                </span>
-              </div>
+    <div className={styles.page}>
+      <div className={styles.card}>
+        <div className={styles.brandPane}>
+          <div className={styles.brandHeader}>
+            <div className={styles.brandLogo}>
+              <Image
+                src="/assets/images/icon.png"
+                alt="OSS Student Portal"
+                width={40}
+                height={40}
+                priority
+                unoptimized
+              />
+            </div>
+            <div className={styles.brandTitleGroup}>
+              <span className={styles.brandTitle}>OSS Student Portal</span>
+              <span className={styles.brandSubtitle}>
+                One Step Solution Bali
+              </span>
             </div>
           </div>
 
-          <div>
-            <div className={styles.formCard}>
-              <div className={styles.formHeader}>
-                <p className={styles.formHeaderTitle}>Selamat datang kembali</p>
-                <p className={styles.formHeaderSubtitle}>
-                  Masuk untuk melanjutkan aktivitas kuliahmu.
-                </p>
+          <h1 className={styles.heading}>
+            Perjalanan studimu, <span>lebih terarah.</span>
+          </h1>
+          <p className={styles.heroSubtitle}>
+            Dokumen, progres visa, dan komunikasi dengan tim OSS Bali ada di satu
+            tempat.
+          </p>
+
+          <ol className={styles.stepList}>
+            {steps.map((step, index) => (
+              <li key={step} className={styles.stepItem}>
+                <span className={styles.stepNumber}>{index + 1}</span>
+                <span>{step}</span>
+              </li>
+            ))}
+          </ol>
+
+        </div>
+
+        <div className={styles.formPane}>
+          <div className={styles.formInner}>
+            <h2 className={styles.formTitle}>Masuk ke OSS Student Portal</h2>
+            <p className={styles.formSubtitle}>
+              Gunakan email dan kata sandi akun Anda yang terdaftar di sistem
+              OSS Bali.
+            </p>
+
+            <FormLogin onFinish={handleLogin} loading={onLoginLoading} />
+          </div>
+        </div>
+
+        <div className={styles.partnersSection}>
+          <div className={styles.divider} />
+          <span className={styles.partnersLabel}>Partner</span>
+          <div className={styles.partners}>
+            {partners.map((partner) => (
+              <div key={partner.title} className={styles.partnerItem}>
+                <div className={styles.partnerBadge}>
+                  <AntdImage
+                    src={partner.src}
+                    alt={partner.alt}
+                    height={68}
+                    preview
+                  />
+                </div>
+                <div>
+                  <span className={styles.partnerTitle}>{partner.title}</span>
+                  <span className={styles.partnerSubtitle}>
+                    {partner.subtitle}
+                  </span>
+                </div>
               </div>
-
-              <p className={styles.formHelper}>
-                Gunakan email kampus dan kata sandi yang terdaftar di sistem
-                OSS.
-              </p>
-
-              <FormLogin onFinish={handleLogin} loading={onLoginLoading} />
-
-              <div className={styles.formFooter} style={{ marginTop: 12 }}>
-                <Link href="/forgot-password">Lupa kata sandi?</Link>
-              </div>
-
-              <div className={styles.formFooter}>
-                <span>Belum punya akun?</span>
-                <Link href="/register">Daftar sekarang</Link>
-              </div>
-            </div>
+            ))}
           </div>
         </div>
       </div>
+
+      <span className={styles.pageFooter}>
+        © {new Date().getFullYear()} One Step Solution Bali
+      </span>
     </div>
   );
 }

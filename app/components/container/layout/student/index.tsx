@@ -52,6 +52,27 @@ import styles from "./layout.module.css";
 
 const { Header, Content, Footer } = Layout;
 
+const partners = [
+  {
+    src: "/assets/images/pte-badge.png",
+    alt: "PTE Partner 2026",
+    title: "PTE Partner 2026",
+    subtitle: "Pearson Test of English",
+  },
+  {
+    src: "/assets/images/pte-badge-2.png",
+    alt: "PTE Registration Center",
+    title: "PTE Registration Center",
+    subtitle: "Pearson Test of English",
+  },
+  {
+    src: "/assets/images/trained-british-council.png",
+    alt: "British Council UK Knowledge-Trained Counsellor",
+    title: "British Council",
+    subtitle: "UK Knowledge-Trained Agent & Counsellor — Code 100273",
+  },
+];
+
 type CanvasPointerEvent =
   | React.MouseEvent<HTMLCanvasElement>
   | React.TouchEvent<HTMLCanvasElement>;
@@ -1143,6 +1164,31 @@ export default function StudentLayout({
         </Content>
 
         <Footer className={styles.footer}>
+          <div className={styles.footerPartners}>
+            <span className={styles.footerPartnersLabel}>Partner</span>
+            <div className={styles.footerPartnerList}>
+              {partners.map((partner) => (
+                <div key={partner.title} className={styles.footerPartnerItem}>
+                  <div className={styles.footerPartnerBadge}>
+                    <Image
+                      src={partner.src}
+                      alt={partner.alt}
+                      height={44}
+                      preview
+                    />
+                  </div>
+                  <div>
+                    <span className={styles.footerPartnerTitle}>
+                      {partner.title}
+                    </span>
+                    <span className={styles.footerPartnerSubtitle}>
+                      {partner.subtitle}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
           OSS Student Portal • Student Dashboard
         </Footer>
       </Layout>
