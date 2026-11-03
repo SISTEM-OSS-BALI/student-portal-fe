@@ -27,6 +27,8 @@ export interface UserDataModel {
   no_phone?: string | null;
 
   visa_granted_at?: string | null;
+  // Waktu pertama visa diajukan (status Submit); dasar fee referral Overseas.
+  visa_submitted_at?: string | null;
   visa_grant_duration_days?: number | null;
   visa_grant_duration_label?: string | null;
 
@@ -70,6 +72,8 @@ export interface UserPayloadCreateModel {
   current_step_id?: string | null;
   visa_status?: string;
   visa_granted_at?: string | null;
+  // Waktu pertama visa diajukan (status Submit); dasar fee referral Overseas.
+  visa_submitted_at?: string | null;
   student_status?: string;
   name_consultant?: string | null;
   name_campus?: string;
@@ -92,6 +96,8 @@ export interface UserPayloadUpdateModel {
   current_step_id?: string | null;
   visa_status?: string;
   visa_granted_at?: string | null;
+  // Waktu pertama visa diajukan (status Submit); dasar fee referral Overseas.
+  visa_submitted_at?: string | null;
   student_status?: string;
   name_consultant?: string | null;
   name_campus?: string;

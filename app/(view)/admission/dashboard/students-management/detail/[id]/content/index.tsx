@@ -59,8 +59,9 @@ const allowedTabKeys = new Set([
 ]);
 
 const visaStatusOptions = [
-  { value: "Grant", label: "Grant" },
   { value: "Waiting", label: "Waiting" },
+  { value: "Submit", label: "Submit" },
+  { value: "Grant", label: "Grant" },
   { value: "Refused", label: "Refused" },
 ];
 
