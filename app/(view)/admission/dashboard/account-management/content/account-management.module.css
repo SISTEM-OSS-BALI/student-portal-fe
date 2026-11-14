@@ -1,0 +1,221 @@
+.pageWrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+}
+
+/* Main Container Card matching students-management (pipeline) */
+.mainCard {
+  background: #ffffff;
+  border-radius: 20px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.03);
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* Toolbar Controls */
+.toolbarRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.toolbarLeft {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+.toolbarRight {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.searchInput {
+  border-radius: 10px;
+  height: 38px;
+  width: 320px;
+  max-width: 100%;
+  font-size: 13px;
+}
+
+.searchInput :global(.ant-input) {
+  font-size: 13px;
+}
+
+.searchInput :global(.ant-input::placeholder) {
+  font-size: 13px;
+}
+
+.segmentedControl {
+  border-radius: 10px;
+  padding: 3px;
+  background: #f1f5f9;
+  height: 38px;
+  display: flex;
+  align-items: center;
+}
+
+.summaryCount {
+  font-size: 13px;
+  color: #64748b;
+}
+
+/* Grid of Team Member Cards matching .studentCard */
+.cardsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 14px;
+  width: 100%;
+}
+
+.userCard {
+  background: #ffffff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 16px;
+  transition: all 0.18s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.userCard:hover {
+  border-color: #93c5fd;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+}
+
+.userAvatar {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 700;
+  background-color: #eff6ff;
+  color: #1b3d6d;
+  border: 1px solid #bfdbfe;
+}
+
+.actionButton {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #1b3d6d;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-size: 12px;
+}
+
+.actionButton:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.actionButtonDelete {
+  border-color: #fee2e2;
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.actionButtonDelete:hover {
+  background: #fee2e2;
+  border-color: #fca5a5;
+}
+
+@media (max-width: 768px) {
+  .mainCard {
+    padding: 14px 12px;
+    border-radius: 16px;
+    gap: 12px;
+  }
+
+  .toolbarRow {
+    gap: 8px !important;
+  }
+
+  .toolbarLeft {
+    width: 100%;
+    display: flex;
+    gap: 8px;
+    flex-wrap: nowrap;
+  }
+
+  .searchInput {
+    height: 32px !important;
+    min-height: 32px !important;
+    flex: 1 1 auto !important;
+    width: 100% !important;
+    border-radius: 8px !important;
+  }
+
+  .toolbarRow :global(.ant-input-affix-wrapper) {
+    height: 32px !important;
+    min-height: 32px !important;
+    font-size: 11.5px !important;
+    border-radius: 8px !important;
+    padding: 2px 8px !important;
+  }
+
+  .toolbarRow :global(.ant-input),
+  .searchInput :global(.ant-input) {
+    font-size: 11.5px !important;
+  }
+
+  .toolbarRow :global(.ant-input::placeholder),
+  .searchInput :global(.ant-input::placeholder) {
+    font-size: 11.5px !important;
+  }
+
+  .segmentedControl,
+  .toolbarRow :global(.ant-segmented) {
+    height: 32px !important;
+    min-height: 32px !important;
+    font-size: 11.5px !important;
+    border-radius: 8px !important;
+    padding: 2px !important;
+    flex-shrink: 0;
+  }
+
+  .toolbarRow :global(.ant-segmented-item) {
+    height: 28px !important;
+    line-height: 28px !important;
+    font-size: 11.5px !important;
+  }
+
+  .toolbarRight {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .summaryCount {
+    font-size: 11px !important;
+  }
+
+  .cardsGrid {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  .userCard {
+    padding: 12px !important;
+    border-radius: 12px !important;
+    gap: 10px !important;
+  }
+}

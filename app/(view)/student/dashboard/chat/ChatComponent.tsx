@@ -24,6 +24,7 @@ import type { TourProps } from "antd";
 import {
   ClockCircleOutlined,
   CloseOutlined,
+  MessageOutlined,
   PaperClipOutlined,
   PlusOutlined,
   QuestionCircleOutlined,
@@ -37,6 +38,7 @@ import {
   useCreateChatConversation,
 } from "@/app/hooks/use-chat";
 import { useChatSocket } from "@/app/hooks/use-chat-socket";
+import PageHeader from "@/app/components/common/page-header";
 import type { ChatMessage } from "@/app/models/chat";
 import type {
   TicketMessageDataModel,
@@ -44,12 +46,28 @@ import type {
 } from "@/app/models/ticket-message";
 import { useAuth } from "@/app/utils/use-auth";
 import { usePageTour } from "@/app/hooks/use-page-tour";
-import { useUsers } from "@/app/hooks/use-users";
+import { useUser, useUsers } from "@/app/hooks/use-users";
+import type { UserDataModel } from "@/app/models/user";
+import {
+  formatChatDateGroup,
+  formatChatMessageTime,
+  formatChatTimeOnly,
+  getStudentAvatarUrl,
+  isSameDay,
+} from "@/app/utils/student-helpers";
 import type { UploadedChatAttachment } from "@/app/vendor/chat-upload";
 import { uploadChatFiles } from "@/app/vendor/chat-upload";
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
+
+const getUserAvatarUrl = (user?: UserDataModel | null): string | undefined => {
+  if (!user) return undefined;
+  if (user.profile_picture_url && user.profile_picture_url.trim()) {
+    return user.profile_picture_url.trim();
+  }
+  return getStudentAvatarUrl(user);
+};
 
 const ticketFormStyle = { marginBottom: 14 } satisfies React.CSSProperties;
 
@@ -114,27 +132,7 @@ const formatRelativeTime = (value?: string) => {
 };
 
 const formatMessageTime = (value?: string) => {
-  if (!value) return "";
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-
-  return date.toLocaleTimeString("en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-};
-
-const formatMessageDate = (value?: string) => {
-  if (!value) return "";
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  });
+  return formatChatMessageTime(value);
 };
 
 const buildTicketSummary = (ticket: TicketMessageDataModel) => {
@@ -189,11 +187,13 @@ function ChatBubbleItem({
   isMine,
   currentUserName,
   currentUserRole,
+  senderAvatarUrl,
 }: {
   message: ChatMessage;
   isMine: boolean;
   currentUserName?: string;
   currentUserRole?: string;
+  senderAvatarUrl?: string | null;
 }) {
   const senderName =
     message.sender_name ??
@@ -203,10 +203,13 @@ function ChatBubbleItem({
     message.sender_role ??
     (isMine ? (currentUserRole ?? "STUDENT") : "ADMISSION");
 
+  const avatarSrc =
+    message.sender_profile_picture?.trim() ||
+    senderAvatarUrl?.trim() ||
+    undefined;
+
   const attachments = message.attachments ?? [];
-  const time = formatMessageTime(message.created_at);
-  const date = formatMessageDate(message.created_at);
-  const timeLabel = [time, date].filter(Boolean).join(" · ");
+  const time = formatChatTimeOnly(message.created_at);
 
   const avatarBg = isMine ? "#0f4f95" : "#f59e0b";
   const bubbleBg = isMine ? "#dcf8c6" : "#ffffff";
@@ -227,18 +230,19 @@ function ChatBubbleItem({
           flexDirection: isMine ? "row-reverse" : "row",
           alignItems: "flex-end",
           gap: 12,
-          width: "100%",
-          maxWidth: 920,
+          maxWidth: "80%",
         }}
       >
         <Avatar
-          size={44}
+          size={40}
+          src={avatarSrc}
           style={{
             background: avatarBg,
             color: "#ffffff",
             fontWeight: 700,
-            fontSize: 14,
+            fontSize: 13,
             flexShrink: 0,
+            border: "1px solid #e2e8f0",
           }}
         >
           {getInitials(senderName)}
@@ -248,109 +252,53 @@ function ChatBubbleItem({
           style={{
             display: "flex",
             flexDirection: "column",
-            alignItems: isMine ? "flex-start" : "flex-end",
-            flex: 1,
+            alignItems: isMine ? "flex-end" : "flex-start",
             minWidth: 0,
           }}
         >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: isMine ? "flex-start" : "flex-end",
-              gap: 10,
-              flexWrap: "wrap",
-              width: "100%",
-              marginBottom: 8,
-            }}
-          >
-            {isMine ? (
-              <>
-                <Text
-                  strong
-                  style={{
-                    fontSize: 14,
-                    color: "#334155",
-                    lineHeight: 1.2,
-                  }}
-                >
-                  {senderName}
-                </Text>
-
-                <Tag
-                  color={getRoleTagColor(senderRole)}
-                  style={{
-                    margin: 0,
-                    borderRadius: 12,
-                    paddingInline: 10,
-                    height: 26,
-                    display: "inline-flex",
-                    alignItems: "center",
-                    fontSize: 11,
-                    fontWeight: 600,
-                  }}
-                >
-                  {formatRoleLabel(senderRole)}
-                </Tag>
-
-                <Text
-                  type="secondary"
-                  style={{
-                    fontSize: 13,
-                    color: "#8c8c8c",
-                    lineHeight: 1.2,
-                  }}
-                >
-                  {timeLabel}
-                </Text>
-              </>
-            ) : (
-              <>
-                <Text
-                  type="secondary"
-                  style={{
-                    fontSize: 13,
-                    color: "#8c8c8c",
-                    lineHeight: 1.2,
-                  }}
-                >
-                  {timeLabel}
-                </Text>
-
-                <Text
-                  strong
-                  style={{
-                    fontSize: 14,
-                    color: "#334155",
-                    lineHeight: 1.2,
-                  }}
-                >
-                  {senderName}
-                </Text>
-
-                <Tag
-                  color={getRoleTagColor(senderRole)}
-                  style={{
-                    margin: 0,
-                    borderRadius: 12,
-                    paddingInline: 10,
-                    height: 26,
-                    display: "inline-flex",
-                    alignItems: "center",
-                    fontSize: 11,
-                    fontWeight: 600,
-                  }}
-                >
-                  {formatRoleLabel(senderRole)}
-                </Tag>
-              </>
-            )}
-          </div>
-
-          <div style={{ maxWidth: "72%", position: "relative" }}>
+          {!isMine && (
             <div
               style={{
-                minWidth: attachments.length && !message.text ? 180 : 160,
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                marginBottom: 4,
+                paddingLeft: 2,
+              }}
+            >
+              <Text
+                strong
+                style={{
+                  fontSize: 13,
+                  color: "#334155",
+                  lineHeight: 1.2,
+                }}
+              >
+                {senderName}
+              </Text>
+
+              <Tag
+                color={getRoleTagColor(senderRole)}
+                style={{
+                  margin: 0,
+                  borderRadius: 12,
+                  paddingInline: 8,
+                  height: 20,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  fontSize: 10,
+                  fontWeight: 600,
+                }}
+              >
+                {formatRoleLabel(senderRole)}
+              </Tag>
+            </div>
+          )}
+
+          <div style={{ maxWidth: "100%", position: "relative" }}>
+            <div
+              style={{
+                minWidth: attachments.length && !message.text ? 180 : 140,
                 background: bubbleBg,
                 color: bubbleText,
                 border: bubbleBorder,
@@ -359,8 +307,8 @@ function ChatBubbleItem({
                   : "6px 16px 16px 16px",
                 padding:
                   attachments.length && !message.text
-                    ? "14px 18px"
-                    : "14px 20px",
+                    ? "12px 16px 8px"
+                    : "12px 18px 8px",
                 boxShadow: "0 2px 10px rgba(15, 23, 42, 0.06)",
               }}
             >
@@ -432,6 +380,28 @@ function ChatBubbleItem({
                 )}
               </div>
             ) : null}
+
+            {/* Jam di pojok kanan bawah bubble chat ala WhatsApp */}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                alignItems: "center",
+                marginTop: 4,
+                userSelect: "none",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 10.5,
+                  color: isMine ? "#166534" : "#94a3b8",
+                  lineHeight: 1,
+                  fontWeight: 500,
+                }}
+              >
+                {time}
+              </span>
+            </div>
             </div>
             <div
               style={{
@@ -461,43 +431,6 @@ export default function ChatComponent() {
   const { open: tourOpen, close: closeTour, restart: restartTour } = usePageTour(
     "student_tour_chat_done",
   );
-
-  const tourSteps: TourProps["steps"] = [
-    {
-      title: "Chat dengan Tim Admission",
-      description:
-        "Gunakan fitur chat ini untuk berkomunikasi langsung dengan tim admission kamu.",
-      target: null,
-    },
-    {
-      title: "Daftar Subject / Ticket",
-      description:
-        "Semua ticket percakapan kamu tampil di sini. Klik salah satu untuk membuka riwayat chat.",
-      target: () => document.getElementById("chat-ticket-list")!,
-      placement: "right",
-    },
-    {
-      title: "Buat Ticket Baru",
-      description:
-        "Klik tombol ini untuk membuat ticket percakapan baru dengan tim admission.",
-      target: () => document.getElementById("chat-new-ticket-btn")!,
-      placement: "bottom",
-    },
-    {
-      title: "Area Pesan",
-      description:
-        "Riwayat pesan dengan tim admission ditampilkan di sini. Pesan kamu muncul di kanan, pesan dari admission di kiri.",
-      target: () => document.getElementById("chat-messages-area")!,
-      placement: "top",
-    },
-    {
-      title: "Kirim Pesan",
-      description:
-        "Ketik pesanmu di sini. Tekan Enter untuk mengirim, atau Shift+Enter untuk baris baru. Kamu juga bisa melampirkan file.",
-      target: () => document.getElementById("chat-input-area")!,
-      placement: "top",
-    },
-  ];
 
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
@@ -529,6 +462,7 @@ export default function ChatComponent() {
     enabled: Boolean(user_id),
   });
 
+  const { data: currentAuthUser } = useUser({ id: user_id });
   const { data: users = [], fetchLoading: usersLoading } = useUsers({
     enabled: Boolean(user_id),
   });
@@ -537,6 +471,29 @@ export default function ChatComponent() {
     if (!user_id) return undefined;
     return users.find((user) => String(user.id) === String(user_id));
   }, [users, user_id]);
+
+  const effectiveCurrentUser = currentAuthUser ?? currentUser;
+
+  const effectiveConsultantName =
+    effectiveCurrentUser?.name_consultant?.trim() || undefined;
+
+  const { userAvatarMap, userAvatarByNameMap } = useMemo(() => {
+    const idMap = new Map<string, string>();
+    const nameMap = new Map<string, string>();
+
+    const registerUser = (u?: UserDataModel | null) => {
+      if (!u) return;
+      const url = getUserAvatarUrl(u);
+      if (!url) return;
+      if (u.id) idMap.set(String(u.id), url);
+      if (u.name) nameMap.set(u.name.trim().toLowerCase(), url);
+    };
+
+    registerUser(effectiveCurrentUser);
+    users.forEach((u) => registerUser(u));
+
+    return { userAvatarMap: idMap, userAvatarByNameMap: nameMap };
+  }, [effectiveCurrentUser, users]);
 
   const admissionUsers = useMemo(() => {
     return users.filter(
@@ -591,6 +548,49 @@ export default function ChatComponent() {
       ...(localMessagesByConversation[selectedConversationId] ?? []),
     ]);
   }, [fetchedMessages, localMessagesByConversation, selectedConversationId]);
+
+  const tourSteps: TourProps["steps"] = useMemo(() => {
+    return [
+      {
+        title: "Chat dengan Tim Admission",
+        description:
+          "Gunakan fitur chat ini untuk berkomunikasi langsung dengan tim admission kamu.",
+        target: null,
+      },
+      {
+        title: "Daftar Subject / Ticket",
+        description:
+          "Semua ticket percakapan kamu tampil di sini. Klik salah satu untuk membuka riwayat chat.",
+        target: () => document.getElementById("chat-ticket-list")!,
+        placement: "right",
+      },
+      {
+        title: "Buat Ticket Baru",
+        description:
+          "Klik tombol ini untuk membuat ticket percakapan baru dengan tim admission.",
+        target: () => document.getElementById("chat-new-ticket-btn")!,
+        placement: "bottom",
+      },
+      ...(selectedTicket
+        ? [
+            {
+              title: "Area Pesan",
+              description:
+                "Riwayat pesan dengan tim admission ditampilkan di sini. Pesan kamu muncul di kanan, pesan dari admission di kiri.",
+              target: () => document.getElementById("chat-messages-area")!,
+              placement: "top" as const,
+            },
+            {
+              title: "Kirim Pesan",
+              description:
+                "Ketik pesanmu di sini. Tekan Enter untuk mengirim, atau Shift+Enter untuk baris baru. Kamu juga bisa melampirkan file.",
+              target: () => document.getElementById("chat-input-area")!,
+              placement: "top" as const,
+            },
+          ]
+        : []),
+    ];
+  }, [selectedTicket]);
 
   const handleOpenModal = () => {
     setModalVisible(true);
@@ -870,23 +870,34 @@ export default function ChatComponent() {
   ]);
 
   return (
-    <div
-      style={{
-        minHeight: "100%",
-        padding: 24,
-        borderRadius: 28,
-      }}
-    >
-      <Row gutter={[24, 24]}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 20, width: "100%" }}>
+      <PageHeader
+        title="Pesan dan Bantuan"
+        subtitle="Komunikasi langsung dengan staf admisi dan konsultan pendidikan"
+        icon={<MessageOutlined />}
+        headerExtra={
+          <Button
+            type="text"
+            shape="circle"
+            icon={<QuestionCircleOutlined style={{ fontSize: 18, color: "#94a3b8" }} />}
+            onClick={restartTour}
+            title="Panduan"
+            aria-label="Panduan"
+          />
+        }
+      />
+
+      <Row gutter={[20, 20]}>
         <Col xs={24} lg={9} xl={8}>
           <Card
             id="chat-ticket-list"
             loading={fetchLoading}
             style={{
               height: "100%",
-              borderRadius: 24,
-              borderColor: "#dbe5ff",
-              boxShadow: "0 20px 45px rgba(15, 23, 42, 0.06)",
+              borderRadius: 20,
+              borderColor: "#e2e8f0",
+              boxShadow: "0 1px 3px rgba(15, 23, 42, 0.04)",
+              background: "#ffffff",
             }}
             styles={{ body: { padding: 20 } }}
           >
@@ -900,10 +911,10 @@ export default function ChatComponent() {
                 }}
               >
                 <Space direction="vertical" size={2}>
-                  <Title level={3} style={{ margin: 0 }}>
+                  <span style={{ fontSize: 14.5, fontWeight: 700, color: "#0f172a" }}>
                     Subject
-                  </Title>
-                  <Text type="secondary">
+                  </span>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
                     Pilih subject untuk membuka percakapannya.
                   </Text>
                 </Space>
@@ -913,9 +924,15 @@ export default function ChatComponent() {
                   type="primary"
                   icon={<PlusOutlined />}
                   onClick={handleOpenModal}
-                  style={{ borderRadius: 999 }}
+                  style={{
+                    height: 32,
+                    borderRadius: 7,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    paddingInline: 12,
+                  }}
                 >
-                  New Ticket
+                  Tiket Baru
                 </Button>
               </div>
 
@@ -933,14 +950,14 @@ export default function ChatComponent() {
                           width: "100%",
                           textAlign: "left",
                           padding: 16,
-                          borderRadius: 20,
+                          borderRadius: 14,
                           cursor: "pointer",
                           border: isSelected
-                            ? "1.5px solid #4f7cff"
-                            : "1px solid #dbe5ff",
-                          background: isSelected ? "#eff5ff" : "#ffffff",
+                            ? "1.5px solid #2563eb"
+                            : "1px solid #e2e8f0",
+                          background: isSelected ? "#eff6ff" : "#ffffff",
                           boxShadow: isSelected
-                            ? "0 12px 24px rgba(79, 124, 255, 0.12)"
+                            ? "0 4px 12px rgba(37, 99, 235, 0.08)"
                             : "none",
                         }}
                       >
@@ -1018,7 +1035,7 @@ export default function ChatComponent() {
                   >
                     <Empty
                       image={Empty.PRESENTED_IMAGE_SIMPLE}
-                      description="Belum ada ticket yang pernah dibuat."
+                      description="Belum ada tiket percakapan."
                     />
                   </Card>
                 )}
@@ -1028,16 +1045,17 @@ export default function ChatComponent() {
         </Col>
 
         <Col xs={24} lg={15} xl={16}>
-          <Space direction="vertical" size={20} style={{ width: "100%" }}>
-            <Card
-              style={{
-                borderRadius: 24,
-                borderColor: "#dbe5ff",
-                boxShadow: "0 20px 45px rgba(15, 23, 42, 0.06)",
-              }}
-              styles={{ body: { padding: 20 } }}
-            >
-              {selectedTicket ? (
+          {selectedTicket ? (
+            <Space direction="vertical" size={20} style={{ width: "100%" }}>
+              <Card
+                style={{
+                  borderRadius: 20,
+                  borderColor: "#e2e8f0",
+                  boxShadow: "0 1px 3px rgba(15, 23, 42, 0.04)",
+                  background: "#ffffff",
+                }}
+                styles={{ body: { padding: 20 } }}
+              >
                 <div
                   style={{
                     display: "flex",
@@ -1064,11 +1082,11 @@ export default function ChatComponent() {
                       On Going
                     </span>
 
-                    <Title level={2} style={{ margin: 0 }}>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: "#0f172a", lineHeight: 1.3 }}>
                       {selectedTicket.name}
-                    </Title>
+                    </div>
 
-                    <Text type="secondary" style={{ fontSize: 16 }}>
+                    <Text type="secondary" style={{ fontSize: 12.5 }}>
                       {buildTicketSummary(selectedTicket)}
                     </Text>
                   </Space>
@@ -1076,47 +1094,40 @@ export default function ChatComponent() {
                   <Card
                     style={{
                       minWidth: 280,
-                      borderRadius: 18,
-                      borderColor: "#dbe5ff",
-                      background: "#f8fbff",
+                      borderRadius: 12,
+                      borderColor: "#e2e8f0",
+                      background: "#f8fafc",
                     }}
-                    styles={{ body: { padding: 18 } }}
+                    styles={{ body: { padding: 14 } }}
                   >
-                    <Space direction="vertical" size={8}>
+                    <Space direction="vertical" size={6}>
                       <Space size={8} align="center">
-                        <TagOutlined style={{ color: "#2563eb" }} />
-                        <Text strong>Ticket</Text>
+                        <TagOutlined style={{ color: "#2563eb", fontSize: 12 }} />
+                        <Text strong style={{ fontSize: 12.5 }}>Ticket</Text>
                       </Space>
-                      <Text type="secondary" style={{ fontSize: 14 }}>
+                      <Text type="secondary" style={{ fontSize: 12 }}>
                         {getTicketCode(selectedTicket)}
                       </Text>
-                      <Text strong style={{ fontSize: 16 }}>
+                      <Text strong style={{ fontSize: 13.5, color: "#0f172a" }}>
                         {selectedTicket.name}
                       </Text>
-                      <Text type="secondary">PIC: Admission Team</Text>
                     </Space>
                   </Card>
                 </div>
-              ) : (
-                <Empty
-                  image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  description="Pilih ticket dari sisi kiri untuk melihat percakapan."
-                />
-              )}
-            </Card>
+              </Card>
 
-            <Card
-              loading={messagesLoading}
-              style={{
-                borderRadius: 24,
-                borderColor: "#dbe5ff",
-                boxShadow: "0 20px 45px rgba(15, 23, 42, 0.06)",
-              }}
-              styles={{ body: { padding: 16 } }}
-            >
-              <Space direction="vertical" size={16} style={{ width: "100%" }}>
-                {selectedTicket ? (
-                  mergedMessages.length ? (
+              <Card
+                loading={messagesLoading}
+                style={{
+                  borderRadius: 14,
+                  borderColor: "#e2e8f0",
+                  boxShadow: "0 1px 3px rgba(15, 23, 42, 0.04)",
+                  background: "#ffffff",
+                }}
+                styles={{ body: { padding: 20 } }}
+              >
+                <Space direction="vertical" size={16} style={{ width: "100%" }}>
+                  {mergedMessages.length ? (
                     <div
                       id="chat-messages-area"
                       style={{
@@ -1128,23 +1139,67 @@ export default function ChatComponent() {
                         paddingBottom: 4,
                       }}
                     >
-                      {mergedMessages.map((message) => {
+                      {mergedMessages.map((message, index) => {
+                        const isNewDateGroup =
+                          index === 0 ||
+                          !isSameDay(
+                            mergedMessages[index - 1]?.created_at,
+                            message.created_at,
+                          );
+
                         const isMine =
                           String(message.sender_id) === String(user_id);
+                        const senderIdKey = String(message.sender_id ?? "");
+                        const senderNameKey = (message.sender_name ?? "").trim().toLowerCase();
+
+                        const senderAvatar =
+                          userAvatarMap.get(senderIdKey) ||
+                          (senderNameKey ? userAvatarByNameMap.get(senderNameKey) : undefined) ||
+                          (isMine ? getUserAvatarUrl(effectiveCurrentUser) : undefined);
 
                         return (
-                          <ChatBubbleItem
-                            key={message.id}
-                            message={message}
-                            isMine={isMine}
-                            currentUserName={currentUser?.name}
-                            currentUserRole={currentUser?.role}
-                          />
+                          <div key={message.id} style={{ width: "100%" }}>
+                            {isNewDateGroup && (
+                              <div
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "center",
+                                  margin: "8px 0 16px",
+                                }}
+                              >
+                                <span
+                                  style={{
+                                    background: "#f1f5f9",
+                                    color: "#64748b",
+                                    fontSize: 11.5,
+                                    fontWeight: 600,
+                                    padding: "4px 14px",
+                                    borderRadius: 14,
+                                    border: "1px solid #e2e8f0",
+                                    boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+                                    letterSpacing: "0.2px",
+                                    userSelect: "none",
+                                  }}
+                                >
+                                  {formatChatDateGroup(message.created_at)}
+                                </span>
+                              </div>
+                            )}
+
+                            <ChatBubbleItem
+                              message={message}
+                              isMine={isMine}
+                              currentUserName={effectiveCurrentUser?.name ?? currentUser?.name}
+                              currentUserRole={effectiveCurrentUser?.role ?? currentUser?.role}
+                              senderAvatarUrl={senderAvatar}
+                            />
+                          </div>
                         );
                       })}
                     </div>
                   ) : (
                     <div
+                      id="chat-messages-area"
                       style={{
                         minHeight: 260,
                         display: "grid",
@@ -1160,140 +1215,196 @@ export default function ChatComponent() {
                         }
                       />
                     </div>
-                  )
-                ) : (
-                  <div
-                    style={{
-                      minHeight: 260,
-                      display: "grid",
-                      placeItems: "center",
-                    }}
-                  >
-                    <Empty
-                      image={Empty.PRESENTED_IMAGE_SIMPLE}
-                      description="Pilih ticket dari daftar di kiri."
-                    />
-                  </div>
-                )}
+                  )}
 
-                <Divider style={{ margin: "4px 0" }} />
+                  <Divider style={{ margin: "4px 0" }} />
 
-                {pendingAttachments.length ? (
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                    {pendingAttachments.map((attachment, index) => (
-                      <div
-                        key={`${attachment.url}-${index}`}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 6,
-                          padding: "6px 10px",
-                          borderRadius: 12,
-                          border: "1px solid #e2e8f0",
-                          background: "#f8fafc",
-                        }}
-                      >
-                        <Text style={{ fontSize: 12 }}>{attachment.name}</Text>
-                        <Button
-                          type="text"
-                          size="small"
-                          icon={<CloseOutlined />}
-                          onClick={() => handleRemoveAttachment(index)}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-
-                <div
-                  id="chat-input-area"
-                  style={{
-                    display: "flex",
-                    alignItems: "stretch",
-                    width: "100%",
-                    border: "1px solid #d9d9d9",
-                    borderRadius: 18,
-                    overflow: "hidden",
-                    background: "#ffffff",
-                  }}
-                >
-                  <Upload
-                    multiple
-                    beforeUpload={handleAttachmentUpload}
-                    showUploadList={false}
-                    accept="image/*,.pdf,.doc,.docx"
-                  >
-                    <Button
-                      type="text"
-                      icon={<PaperClipOutlined />}
-                      loading={uploadingAttachments}
-                      style={{
-                        width: 64,
-                        height: "100%",
-                        minHeight: 88,
-                        border: "none",
-                        borderRight: "1px solid #e5e7eb",
-                        borderRadius: 0,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    />
-                  </Upload>
+                  {pendingAttachments.length ? (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                      {pendingAttachments.map((attachment, index) => (
+                        <div
+                          key={`${attachment.url}-${index}`}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 6,
+                            padding: "6px 10px",
+                            borderRadius: 12,
+                            border: "1px solid #e2e8f0",
+                            background: "#f8fafc",
+                          }}
+                        >
+                          <Text style={{ fontSize: 12 }}>{attachment.name}</Text>
+                          <Button
+                            type="text"
+                            size="small"
+                            icon={<CloseOutlined />}
+                            onClick={() => handleRemoveAttachment(index)}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
 
                   <div
+                    id="chat-input-area"
                     style={{
-                      flex: 1,
-                      minHeight: 88,
                       display: "flex",
                       alignItems: "stretch",
+                      width: "100%",
+                      border: "1px solid #e2e8f0",
+                      borderRadius: 14,
+                      overflow: "hidden",
+                      background: "#ffffff",
                     }}
                   >
-                    <TextArea
-                      placeholder="Tulis pesan atau unggah gambar..."
-                      value={chatText}
-                      onChange={(event) => setChatText(event.target.value)}
-                      autoSize={{ minRows: 2, maxRows: 4 }}
-                      onPressEnter={(event) => {
-                        if (!event.shiftKey) {
-                          event.preventDefault();
-                          void handleSendMessage();
-                        }
-                      }}
-                      variant="borderless"
+                    <Upload
+                      multiple
+                      beforeUpload={handleAttachmentUpload}
+                      showUploadList={false}
+                      accept="image/*,.pdf,.doc,.docx"
+                    >
+                      <Button
+                        type="text"
+                        icon={<PaperClipOutlined />}
+                        loading={uploadingAttachments}
+                        style={{
+                          width: 64,
+                          height: "100%",
+                          minHeight: 88,
+                          border: "none",
+                          borderRight: "1px solid #e5e7eb",
+                          borderRadius: 0,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      />
+                    </Upload>
+
+                    <div
                       style={{
                         flex: 1,
-                        height: "100%",
                         minHeight: 88,
-                        padding: "16px 18px",
-                        resize: "none",
+                        display: "flex",
+                        alignItems: "stretch",
+                      }}
+                    >
+                      <TextArea
+                        placeholder="Tulis pesan atau unggah gambar..."
+                        value={chatText}
+                        onChange={(event) => setChatText(event.target.value)}
+                        autoSize={{ minRows: 2, maxRows: 4 }}
+                        onPressEnter={(event) => {
+                          if (!event.shiftKey) {
+                            event.preventDefault();
+                            void handleSendMessage();
+                          }
+                        }}
+                        variant="borderless"
+                        style={{
+                          flex: 1,
+                          height: "100%",
+                          minHeight: 88,
+                          padding: "16px 18px",
+                          resize: "none",
+                          boxShadow: "none",
+                        }}
+                      />
+                    </div>
+
+                    <Button
+                      type="primary"
+                      onClick={() => void handleSendMessage()}
+                      loading={sendingMessage}
+                      disabled={
+                        (!chatText.trim() && pendingAttachments.length === 0) ||
+                        !selectedTicket
+                      }
+                      style={{
+                        width: 108,
+                        minHeight: 88,
+                        height: "100%",
+                        borderRadius: 0,
                         boxShadow: "none",
                       }}
-                    />
+                    >
+                      Send
+                    </Button>
                   </div>
-
-                  <Button
-                    type="primary"
-                    onClick={() => void handleSendMessage()}
-                    loading={sendingMessage}
-                    disabled={
-                      (!chatText.trim() && pendingAttachments.length === 0) ||
-                      !selectedTicket
-                    }
-                    style={{
-                      width: 108,
-                      minHeight: 88,
-                      height: "100%",
-                      borderRadius: 0,
-                      boxShadow: "none",
-                    }}
-                  >
-                    Send
-                  </Button>
-                </div>
-              </Space>
+                </Space>
+              </Card>
+            </Space>
+          ) : (
+            <Card
+              style={{
+                borderRadius: 20,
+                borderColor: "#e2e8f0",
+                boxShadow: "0 1px 3px rgba(15, 23, 42, 0.04)",
+                background: "#ffffff",
+                minHeight: 520,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                textAlign: "center",
+              }}
+              styles={{
+                body: {
+                  padding: "48px 24px",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: "100%",
+                },
+              }}
+            >
+              <div
+                style={{
+                  width: 72,
+                  height: 72,
+                  borderRadius: "50%",
+                  backgroundColor: "#eff6ff",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginBottom: 20,
+                }}
+              >
+                <MessageOutlined style={{ fontSize: 32, color: "#2563eb" }} />
+              </div>
+              <Title level={4} style={{ marginBottom: 8, color: "#0f172a" }}>
+                Belum Ada Tiket Percakapan
+              </Title>
+              <Paragraph
+                type="secondary"
+                style={{
+                  maxWidth: 460,
+                  fontSize: 14,
+                  lineHeight: 1.6,
+                  marginBottom: 24,
+                }}
+              >
+                Untuk memulai percakapan dengan tim Admission, Anda perlu membuat tiket terlebih dahulu. Setiap percakapan dikelompokkan berdasarkan tiket.
+              </Paragraph>
+              <Button
+                type="primary"
+                icon={<PlusOutlined />}
+                size="large"
+                onClick={handleOpenModal}
+                style={{
+                  borderRadius: 10,
+                  height: 44,
+                  paddingLeft: 24,
+                  paddingRight: 24,
+                  fontWeight: 600,
+                  backgroundColor: "#1e3a8a",
+                }}
+              >
+                Buat Tiket Baru
+              </Button>
             </Card>
-          </Space>
+          )}
         </Col>
       </Row>
 

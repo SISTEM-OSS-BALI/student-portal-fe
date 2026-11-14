@@ -1,11 +1,12 @@
 "use client";
 
-import { Card, Empty, Space, Tag, Tour, Typography } from "antd";
+import { Button, Card, Empty, Space, Tag, Tour, Typography } from "antd";
 import type { TourProps } from "antd";
 import { FireOutlined, GiftOutlined, QuestionCircleOutlined, ThunderboltOutlined } from "@ant-design/icons";
 
 import { usePromos } from "@/app/hooks/use-promo";
 import { usePageTour } from "@/app/hooks/use-page-tour";
+import PageHeader from "@/app/components/common/page-header";
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -54,77 +55,48 @@ export default function PromoContent() {
 
   return (
     <>
-      <Space direction="vertical" size={16} style={{ width: "100%" }}>
-        <Card
-          id="promo-header"
-          style={{
-            borderRadius: 20,
-            border: "1px solid #dbeafe",
-            background:
-              "linear-gradient(135deg, #ffffff 0%, #eff6ff 45%, #dbeafe 100%)",
-          }}
-          bodyStyle={{ padding: 24 }}
-        >
-          <Space direction="vertical" size={8} style={{ width: "100%" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-              <Tag
-                style={{
-                  width: "fit-content",
-                  borderRadius: 999,
-                  padding: "4px 10px",
-                  border: "1px solid #bfdbfe",
-                  background: "#ffffff",
-                  color: "#1d4ed8",
-                  fontWeight: 700,
-                }}
-              >
-                <ThunderboltOutlined /> Promo Eksklusif Student
-              </Tag>
-              <button
-                type="button"
-                onClick={restartTour}
-                title="Lihat panduan halaman ini"
-                style={{
-                  border: "none",
-                  background: "none",
-                  cursor: "pointer",
-                  color: "#94a3b8",
-                  fontSize: 16,
-                  padding: 4,
-                }}
-              >
-                <QuestionCircleOutlined />
-              </button>
-            </div>
-
-            <Title level={2} style={{ margin: 0 }}>
-              Nikmati Promo Menarik yang diberikan Khusus untuk Kamu!
-            </Title>
-
-            <Text style={{ color: "#475569", fontSize: 16 }}>
-              Pilih promo terbaik 
-            </Text>
-          </Space>
-        </Card>
+      <div style={{ display: "flex", flexDirection: "column", gap: 20, width: "100%" }}>
+        <PageHeader
+          title="Promo dan Penawaran"
+          subtitle="Klaim voucer potongan biaya dan penawaran khusus mahasiswa"
+          icon={<GiftOutlined />}
+          headerExtra={
+            <Button
+              type="text"
+              shape="circle"
+              icon={<QuestionCircleOutlined style={{ fontSize: 18, color: "#94a3b8" }} />}
+              onClick={restartTour}
+              title="Panduan"
+              aria-label="Panduan"
+            />
+          }
+        />
 
         {promos.length === 0 && !fetchLoading ? (
-          <Card>
+          <Card
+            style={{
+              borderRadius: 14,
+              border: "1px solid #e2e8f0",
+              boxShadow: "0 1px 3px rgba(15, 23, 42, 0.04)",
+              background: "#ffffff",
+            }}
+          >
             <Empty description="Belum ada promo aktif." />
           </Card>
         ) : null}
 
-        <div id="promo-list">
+        <div id="promo-list" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           {promos.map((promo) => (
             <Card
               key={promo.id}
               loading={fetchLoading}
               style={{
-                borderRadius: 18,
+                borderRadius: 14,
                 border: "1px solid #e2e8f0",
-                boxShadow: "0 14px 32px rgba(15, 23, 42, 0.06)",
-                marginBottom: 16,
+                boxShadow: "0 1px 3px rgba(15, 23, 42, 0.04)",
+                background: "#ffffff",
               }}
-              bodyStyle={{ padding: 22 }}
+              styles={{ body: { padding: "18px 20px" } }}
             >
               <Space direction="vertical" size={12} style={{ width: "100%" }}>
                 <Space
@@ -136,12 +108,12 @@ export default function PromoContent() {
                       style={{
                         width: 38,
                         height: 38,
-                        borderRadius: 12,
+                        borderRadius: 10,
                         display: "grid",
                         placeItems: "center",
                         background: "#eff6ff",
                         color: "#2563eb",
-                        fontSize: 18,
+                        fontSize: 16,
                       }}
                     >
                       <GiftOutlined />
@@ -151,15 +123,15 @@ export default function PromoContent() {
                         style={{
                           display: "block",
                           color: "#64748b",
-                          fontSize: 12,
+                          fontSize: 11,
                           fontWeight: 600,
                         }}
                       >
                         KODE PROMO
                       </Text>
-                      <Title level={4} style={{ margin: 0 }}>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: "#0f172a", margin: 0 }}>
                         {promo.code}
-                      </Title>
+                      </div>
                     </div>
                   </Space>
 
@@ -167,23 +139,24 @@ export default function PromoContent() {
                     style={{
                       margin: 0,
                       borderRadius: 999,
-                      padding: "6px 10px",
+                      padding: "4px 10px",
                       border: "1px solid #bfdbfe",
                       background: "#dbeafe",
                       color: "#1d4ed8",
                       fontWeight: 700,
+                      fontSize: 11.5,
                     }}
                   >
                     <FireOutlined /> {promo.discount}% OFF
                   </Tag>
                 </Space>
 
-                <Paragraph style={{ margin: 0, color: "#334155" }}>
+                <Paragraph style={{ margin: 0, color: "#334155", fontSize: 12.5, lineHeight: 1.55 }}>
                   {promo.description ||
                     "Promo khusus periode terbatas. Gunakan sekarang untuk mengurangi total biaya layanan Anda."}
                 </Paragraph>
 
-                <Text type="secondary" style={{ fontSize: 13 }}>
+                <Text type="secondary" style={{ fontSize: 12 }}>
                   Berlaku {formatDate(promo.valid_from)} sampai{" "}
                   {formatDate(promo.valid_to)}
                 </Text>
@@ -204,7 +177,7 @@ export default function PromoContent() {
             </Card>
           ))}
         </div>
-      </Space>
+      </div>
 
       <Tour
         open={tourOpen}

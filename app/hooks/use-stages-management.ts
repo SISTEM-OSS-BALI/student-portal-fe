@@ -7,6 +7,10 @@ import {
   StagesManagementPayloadCreateModel,
   StagesManagementPayloadUpdateModel,
 } from "../models/stages-management";
+import {
+  normalizeDocumentLabel,
+  getStandardDocumentRequired,
+} from "../utils/document-standards";
 
 const stagesUrl = "/api/stages";
 
@@ -28,7 +32,24 @@ export const useStagesManagement = ({
       const result = await api.get(url);
       const payload = (result.data?.result ??
         result.data) as StagesManagementDataModel[];
-      return Array.isArray(payload) ? payload : [];
+      const items = Array.isArray(payload) ? payload : [];
+      return items.map((stage) => {
+        if (stage.document) {
+          const userLabel = stage.document.label ? stage.document.label.trim() : "";
+          return {
+            ...stage,
+            document: {
+              ...stage.document,
+              label: userLabel || normalizeDocumentLabel(stage.document),
+              required:
+                stage.document.required !== undefined
+                  ? stage.document.required
+                  : getStandardDocumentRequired(stage.document),
+            },
+          };
+        }
+        return stage;
+      });
     },
   });
 

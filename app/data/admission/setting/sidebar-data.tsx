@@ -17,32 +17,32 @@ export const SidebarSettingAdmission = (): MenuProps["items"] => {
       children: [
         {
           key: "/admission/dashboard/master-data/questions-management",
-          label: menuLabel("Manajemen Pertanyaan"),
+          label: menuLabel("Question Forms"),
           icon: <FontAwesomeIcon icon={faCircle} style={{ fontSize: 10 }} />,
         },
         {
           key: "/admission/dashboard/master-data/documents-management",
-          label: menuLabel("Manajemen Dokumen"),
+          label: menuLabel("Document"),
           icon: <FontAwesomeIcon icon={faCircle} style={{ fontSize: 10 }} />,
         },
         {
           key: "/admission/dashboard/master-data/child-steps-management",
-          label: menuLabel("Kategori Step"),
+          label: menuLabel("Step Categories"),
           icon: <FontAwesomeIcon icon={faCircle} style={{ fontSize: 10 }} />,
         },
         {
           key: "/admission/dashboard/master-data/steps-management",
-          label: menuLabel("Manajemen Step"),
+          label: menuLabel("Steps Management"),
           icon: <FontAwesomeIcon icon={faCircle} style={{ fontSize: 10 }} />,
         },
         {
           key: "/admission/dashboard/master-data/visa-type-management",
-          label: menuLabel("Manajemen Tipe Visa"),
+          label: menuLabel("Visa Types"),
           icon: <FontAwesomeIcon icon={faCircle} style={{ fontSize: 10 }} />,
         },
         {
           key: "/admission/dashboard/master-data/promo-management",
-          label: menuLabel("Manajemen Promo"),
+          label: menuLabel("Promos"),
           icon: <FontAwesomeIcon icon={faCircle} style={{ fontSize: 10 }} />,
         }
       ],

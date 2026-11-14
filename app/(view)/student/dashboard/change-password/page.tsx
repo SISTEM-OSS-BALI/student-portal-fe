@@ -1,12 +1,7 @@
 "use client";
 
-import ChangePasswordContent from "@/app/components/common/change-password-content";
+import ProfileContent from "@/app/components/common/profile-content";
 
 export default function StudentChangePasswordPage() {
-  return (
-    <ChangePasswordContent
-      title="Change Password"
-      description="Ubah password akun student Anda."
-    />
-  );
+  return <ProfileContent defaultTab="security" />;
 }

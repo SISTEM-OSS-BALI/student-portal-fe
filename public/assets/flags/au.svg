@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1280 640" width="1280" height="640">
+  <clipPath id="s">
+    <path d="M0,0 v320 h640 v-320 z"/>
+  </clipPath>
+  <clipPath id="t">
+    <path d="M0,0 L640,320 M640,0 L0,320" stroke-width="60" stroke="#000"/>
+  </clipPath>
+  <rect width="1280" height="640" fill="#00008b"/>
+  <path d="M0,0 L640,320 M640,0 L0,320" stroke="#fff" stroke-width="60" clip-path="url(#s)"/>
+  <path d="M0,0 L640,320 M640,0 L0,320" stroke="#cc0000" stroke-width="40" clip-path="url(#t)"/>
+  <path d="M320,0 v320 M0,160 h640" stroke="#fff" stroke-width="100" clip-path="url(#s)"/>
+  <path d="M320,0 v320 M0,160 h640" stroke="#cc0000" stroke-width="60" clip-path="url(#s)"/>
+  <!-- Commonwealth Star -->
+  <g transform="translate(320,480) scale(75)" fill="#fff">
+    <polygon points="0,-1 0.2225,-0.445 0.7818,-0.6235 0.445,-0.2225 0.9749,0.2225 0.445,0.2225 0.4339,0.9009 0,0.5 
+      -0.4339,0.9009 -0.445,0.2225 -0.9749,0.2225 -0.445,-0.2225 -0.7818,-0.6235 -0.2225,-0.445"/>
+  </g>
+  <!-- Alpha Crucis -->
+  <g transform="translate(960,544) scale(40)" fill="#fff">
+    <polygon points="0,-1 0.2225,-0.445 0.7818,-0.6235 0.445,-0.2225 0.9749,0.2225 0.445,0.2225 0.4339,0.9009 0,0.5 
+      -0.4339,0.9009 -0.445,0.2225 -0.9749,0.2225 -0.445,-0.2225 -0.7818,-0.6235 -0.2225,-0.445"/>
+  </g>
+  <!-- Beta Crucis -->
+  <g transform="translate(832,280) scale(40)" fill="#fff">
+    <polygon points="0,-1 0.2225,-0.445 0.7818,-0.6235 0.445,-0.2225 0.9749,0.2225 0.445,0.2225 0.4339,0.9009 0,0.5 
+      -0.4339,0.9009 -0.445,0.2225 -0.9749,0.2225 -0.445,-0.2225 -0.7818,-0.6235 -0.2225,-0.445"/>
+  </g>
+  <!-- Gamma Crucis -->
+  <g transform="translate(960,112) scale(40)" fill="#fff">
+    <polygon points="0,-1 0.2225,-0.445 0.7818,-0.6235 0.445,-0.2225 0.9749,0.2225 0.445,0.2225 0.4339,0.9009 0,0.5 
+      -0.4339,0.9009 -0.445,0.2225 -0.9749,0.2225 -0.445,-0.2225 -0.7818,-0.6235 -0.2225,-0.445"/>
+  </g>
+  <!-- Delta Crucis -->
+  <g transform="translate(1072,240) scale(40)" fill="#fff">
+    <polygon points="0,-1 0.2225,-0.445 0.7818,-0.6235 0.445,-0.2225 0.9749,0.2225 0.445,0.2225 0.4339,0.9009 0,0.5 
+      -0.4339,0.9009 -0.445,0.2225 -0.9749,0.2225 -0.445,-0.2225 -0.7818,-0.6235 -0.2225,-0.445"/>
+  </g>
+  <!-- Epsilon Crucis (5-pointed star) -->
+  <g transform="translate(1013.3,362.7) scale(25)" fill="#fff">
+    <polygon points="0,-1 0.5878,0.8090 -0.9511,-0.3090 0.9511,-0.3090 -0.5878,0.8090"/>
+  </g>
+</svg>

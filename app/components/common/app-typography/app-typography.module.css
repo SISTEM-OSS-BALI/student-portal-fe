@@ -1,0 +1,106 @@
+/* Typography Design System: H1, H2, H3, Teks Biasa (Body), Label, Caption */
+.h1 {
+  font-family: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  font-size: 20px !important;
+  font-weight: 700 !important;
+  line-height: 1.25 !important;
+  color: #0f172a !important;
+  margin: 0 !important;
+  letter-spacing: -0.01em !important;
+}
+
+.h2 {
+  font-family: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  line-height: 1.3 !important;
+  color: #0f172a !important;
+  margin: 0 !important;
+  letter-spacing: -0.005em !important;
+}
+
+.h3 {
+  font-family: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  font-size: 13.5px !important;
+  font-weight: 600 !important;
+  line-height: 1.35 !important;
+  color: #1e293b !important;
+  margin: 0 !important;
+}
+
+.text {
+  font-family: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  font-size: 13px !important;
+  font-weight: 400;
+  line-height: 1.5 !important;
+  color: #334155;
+  margin: 0;
+}
+
+.textStrong {
+  font-weight: 600 !important;
+}
+
+.textDefault {
+  color: #334155 !important;
+}
+
+.textSecondary {
+  color: #64748b !important;
+}
+
+.textMuted {
+  color: #94a3b8 !important;
+}
+
+.textDanger {
+  color: #ef4444 !important;
+}
+
+.label {
+  font-family: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  line-height: 1.35 !important;
+  color: #1e293b !important;
+  display: inline-flex;
+  align-items: center;
+}
+
+.labelRequired::before {
+  content: "* ";
+  color: #ef4444;
+  margin-right: 4px;
+  font-weight: 700;
+}
+
+.caption {
+  font-family: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  font-size: 11.5px !important;
+  line-height: 1.4 !important;
+  color: #64748b !important;
+}
+
+/* Responsivitas Mobile */
+@media (max-width: 768px) {
+  .h1 {
+    font-size: 17px !important;
+  }
+
+  .h2 {
+    font-size: 14px !important;
+  }
+
+  .h3 {
+    font-size: 13px !important;
+  }
+
+  .text,
+  .label {
+    font-size: 12px !important;
+  }
+
+  .caption {
+    font-size: 11px !important;
+  }
+}

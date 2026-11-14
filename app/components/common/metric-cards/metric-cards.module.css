@@ -1,0 +1,180 @@
+.cardsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
+  gap: 12px;
+  width: 100%;
+}
+
+.metricCard {
+  background: #ffffff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 14px 16px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 8px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+}
+
+.metricCard:hover {
+  border-color: #93c5fd;
+  background: #f8fafc;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05);
+}
+
+.metricCardActive {
+  border-color: #2563eb !important;
+  background: #eff6ff !important;
+  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.12) !important;
+}
+
+.activeIndicator {
+  position: absolute;
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 4px;
+  border-radius: 0 4px 4px 0;
+  background: #2563eb;
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.iconTitleGroup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.cardIcon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.cardTitle {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #1e293b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.countGroup {
+  display: flex;
+  flex-direction: column;
+}
+
+.countNumber {
+  font-size: 26px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.cardCaption {
+  font-size: 11.5px;
+  color: #64748b;
+  line-height: 1.3;
+}
+
+@media (max-width: 768px) {
+  .cardsGrid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+
+  .metricCard {
+    padding: 10px 12px;
+    border-radius: 12px;
+    gap: 6px;
+  }
+
+  .cardIcon {
+    width: 24px;
+    height: 24px;
+    border-radius: 7px;
+    font-size: 12px;
+  }
+
+  .cardTitle {
+    font-size: 12px;
+  }
+
+  .countNumber {
+    font-size: 20px;
+  }
+
+  .cardCaption {
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 540px) {
+  .cardsGrid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .metricCard {
+    padding: 8px 10px 8px 12px;
+    border-radius: 12px;
+    gap: 4px;
+    min-height: 52px;
+  }
+
+  .cardHeader {
+    margin-bottom: 0;
+  }
+
+  .iconTitleGroup {
+    gap: 6px;
+  }
+
+  .cardIcon {
+    width: 20px;
+    height: 20px;
+    border-radius: 6px;
+    font-size: 10.5px;
+  }
+
+  .cardTitle {
+    font-size: 11.5px;
+    font-weight: 600;
+  }
+
+  .countNumber {
+    font-size: 18px;
+    font-weight: 800;
+    line-height: 1;
+  }
+
+  .cardCaption {
+    display: none;
+  }
+
+  .activeIndicator {
+    top: 6px;
+    bottom: 6px;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+  }
+}

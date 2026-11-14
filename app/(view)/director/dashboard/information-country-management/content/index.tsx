@@ -18,10 +18,12 @@ import {
 import type { SelectProps } from "antd";
 import {
   ExclamationCircleOutlined,
+  GlobalOutlined,
   InfoCircleOutlined,
   PlusOutlined,
   SearchOutlined,
 } from "@ant-design/icons";
+import PageHeader from "@/app/components/common/page-header";
 
 import { useCountriesManagement } from "@/app/hooks/use-country-management";
 import { useInformationCountries } from "@/app/hooks/use-information-country-management";
@@ -206,6 +208,7 @@ function InformationFormModal({
         <Form.Item
           name="title"
           label="Title"
+          tooltip="Judul informasi atau pengumuman resmi terkait negara tujuan."
           rules={[{ required: true, message: "Title is required" }]}
         >
           <Input placeholder="Update syarat visa Australia per 01/09" />
@@ -214,6 +217,7 @@ function InformationFormModal({
         <Form.Item
           name="slug"
           label="Slug"
+          tooltip="Pengenal unik URL halaman informasi."
           extra="Slug dibuat otomatis dari title, tetapi masih bisa Anda ubah manual."
           rules={[{ required: true, message: "Slug is required" }]}
         >
@@ -223,6 +227,7 @@ function InformationFormModal({
         <Form.Item
           name="country_id"
           label="Country"
+          tooltip="Negara tujuan studi yang terkait dengan informasi ini."
           rules={[{ required: true, message: "Country is required" }]}
         >
           <Select
@@ -236,12 +241,17 @@ function InformationFormModal({
         <Form.Item
           name="priority"
           label="Priority"
+          tooltip="Tingkat prioritas penayangan informasi kepada pengguna."
           rules={[{ required: true, message: "Priority is required" }]}
         >
           <Select options={priorityOptions} placeholder="Select priority" />
         </Form.Item>
 
-        <Form.Item name="description" label="Description">
+        <Form.Item
+          name="description"
+          label="Description"
+          tooltip="Rincian isi pengumuman atau petunjuk lengkap."
+        >
           <TextArea
             rows={5}
             placeholder="Tulis pengumuman, kebijakan, deadline, atau informasi penting lainnya."
@@ -370,143 +380,108 @@ export default function InformationCountryManagementContent() {
         minHeight: "100%",
       }}
     >
-      <Space direction="vertical" size={24} style={{ width: "100%" }}>
+      <Space direction="vertical" size={16} style={{ width: "100%" }}>
+        <PageHeader
+          title="Country Information"
+          subtitle="Kelola informasi dan panduan negara"
+          icon={<GlobalOutlined />}
+          onAddNew={openCreateModal}
+          addNewText="Add Info"
+        />
+
+        {/* Toolbar Controls */}
         <div
           style={{
             display: "flex",
+            alignItems: "center",
             justifyContent: "space-between",
-            alignItems: "flex-start",
-            gap: 20,
+            gap: 12,
             flexWrap: "wrap",
+            background: "#ffffff",
+            padding: "12px 16px",
+            borderRadius: 14,
+            border: "1px solid #e2e8f0",
+            boxShadow: "0 1px 3px rgba(0, 0, 0, 0.02)",
           }}
-        >
-          <Space align="start" size={14}>
-            <div
-              style={{
-                width: 48,
-                height: 48,
-                borderRadius: 16,
-                display: "grid",
-                placeItems: "center",
-                background: "#020617",
-                color: "#ffffff",
-                boxShadow: "0 12px 22px rgba(15, 23, 42, 0.16)",
-                flexShrink: 0,
-              }}
-            >
-              <ExclamationCircleOutlined style={{ fontSize: 20 }} />
-            </div>
-
-            <Space direction="vertical" size={0}>
-              <Title
-                level={2}
-                style={{
-                  margin: 0,
-                  fontSize: 30,
-                  lineHeight: 1.2,
-                }}
-              >
-                Information Management
-              </Title>
-              <Text
-                type="secondary"
-                style={{
-                  fontSize: 14,
-                  lineHeight: 1.6,
-                  maxWidth: 840,
-                }}
-              >
-                Kelola pengumuman dan informasi penting untuk setiap negara
-                seperti visa, kebijakan, deadline, dan pembaruan dokumen.
-              </Text>
-            </Space>
-          </Space>
-
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={openCreateModal}
-            style={{
-              borderRadius: 999,
-              minWidth: 180,
-              height: 44,
-              paddingInline: 20,
-              fontSize: 15,
-              fontWeight: 600,
-              background: "linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)",
-              boxShadow: "0 10px 22px rgba(37, 99, 235, 0.24)",
-            }}
-          >
-            Add Information
-          </Button>
-        </div>
-
-        <Card
-          style={{
-            borderRadius: 24,
-            borderColor: "#dbe4ee",
-            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.8)",
-          }}
-          styles={{ body: { padding: 20 } }}
         >
           <div
             style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-              gap: 16,
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              flexWrap: "wrap",
+              flex: 1,
             }}
           >
-            <div>
-              <Text
-                strong
-                style={{ display: "block", marginBottom: 8, fontSize: 14 }}
-              >
-                Country
-              </Text>
+            <div style={{ minWidth: 180 }}>
               <Select
                 value={selectedCountry}
                 onChange={setSelectedCountry}
-                style={{ width: "100%" }}
+                style={{ width: "100%", height: 34, fontSize: 12.5 }}
                 options={countryFilterOptions}
               />
             </div>
 
-            <div>
-              <Text
-                strong
-                style={{ display: "block", marginBottom: 8, fontSize: 14 }}
-              >
-                Priority
-              </Text>
+            <div style={{ minWidth: 160 }}>
               <Select
                 value={selectedPriority}
                 onChange={setSelectedPriority}
-                style={{ width: "100%" }}
+                style={{ width: "100%", height: 34, fontSize: 12.5 }}
                 options={priorityFilterOptions}
               />
             </div>
 
-            <div>
-              <Text
-                strong
-                style={{ display: "block", marginBottom: 8, fontSize: 14 }}
-              >
-                Search
-              </Text>
+            <div style={{ flex: "1 1 260px", minWidth: 200 }}>
               <Input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                prefix={<SearchOutlined style={{ color: "#94a3b8" }} />}
+                prefix={
+                  <SearchOutlined style={{ color: "#94a3b8", fontSize: 13 }} />
+                }
                 placeholder="Search title, slug, or description..."
-                style={{ borderRadius: 999, height: 42 }}
+                allowClear
+                style={{
+                  borderRadius: 8,
+                  height: 34,
+                  fontSize: 12.5,
+                  borderColor: "#e2e8f0",
+                  background: "#ffffff",
+                }}
               />
             </div>
           </div>
-        </Card>
 
-        <Space direction="vertical" size={16} style={{ width: "100%" }}>
-          {filteredInformations.length ? (
-            filteredInformations.map((item) => {
+          <div style={{ display: "flex", alignItems: "center" }}>
+            <span style={{ fontSize: 13, color: "#64748b" }}>
+              Showing <strong>{filteredInformations.length}</strong> items
+            </span>
+          </div>
+        </div>
+
+        {/* List of Information or Empty State */}
+        {!filteredInformations.length ? (
+          <div
+            style={{
+              padding: "48px 24px",
+              textAlign: "center",
+              background: "#ffffff",
+              borderRadius: 16,
+              border: "1px dashed #cbd5e1",
+            }}
+          >
+            <Empty
+              description={
+                search ||
+                selectedCountry !== "all" ||
+                selectedPriority !== "all"
+                  ? "Tidak ada dokumen informasi yang sesuai dengan filter"
+                  : "Belum ada information document."
+              }
+            />
+          </div>
+        ) : (
+          <Space direction="vertical" size={14} style={{ width: "100%" }}>
+            {filteredInformations.map((item) => {
               const priorityStyle = getPriorityTagStyle(item.priority);
 
               return (
@@ -514,40 +489,43 @@ export default function InformationCountryManagementContent() {
                   key={item.id}
                   loading={fetchLoading}
                   style={{
-                    borderRadius: 24,
-                    borderColor: "#dbe4ee",
-                    boxShadow: "0 12px 28px rgba(15, 23, 42, 0.05)",
+                    borderRadius: 16,
+                    borderColor: "#e2e8f0",
+                    background: "#ffffff",
+                    boxShadow: "0 1px 3px rgba(0, 0, 0, 0.02)",
                   }}
-                  styles={{ body: { padding: 20 } }}
+                  styles={{ body: { padding: 18 } }}
                 >
                   <div className={styles.cardRow}>
-
                     <div
                       style={{
-                        width: 52,
-                        height: 52,
-                        borderRadius: 18,
+                        width: 44,
+                        height: 44,
+                        borderRadius: 12,
                         display: "grid",
                         placeItems: "center",
                         background: "#eff6ff",
-                        color: "#2563eb",
+                        color: "#1b3d6d",
+                        fontSize: 20,
                         flexShrink: 0,
                       }}
                     >
-                      <InfoCircleOutlined style={{ fontSize: 24 }} />
+                      <InfoCircleOutlined />
                     </div>
 
                     <Space
                       direction="vertical"
-                      size={10}
+                      size={8}
                       style={{ width: "100%", minWidth: 0 }}
                     >
                       <div style={{ minWidth: 0 }}>
                         <Title
-                          level={3}
+                          level={4}
                           style={{
                             margin: 0,
-                            fontSize: 18,
+                            fontSize: 16,
+                            fontWeight: 700,
+                            color: "#0f172a",
                             lineHeight: 1.35,
                             wordBreak: "normal",
                             overflowWrap: "break-word",
@@ -559,7 +537,7 @@ export default function InformationCountryManagementContent() {
                         <Text
                           type="secondary"
                           style={{
-                            fontSize: 14,
+                            fontSize: 13,
                             lineHeight: 1.6,
                           }}
                         >
@@ -574,8 +552,8 @@ export default function InformationCountryManagementContent() {
                         style={{
                           margin: 0,
                           color: "#475569",
-                          fontSize: 14,
-                          lineHeight: 1.7,
+                          fontSize: 13.5,
+                          lineHeight: 1.6,
                           wordBreak: "normal",
                           overflowWrap: "break-word",
                         }}
@@ -584,11 +562,11 @@ export default function InformationCountryManagementContent() {
                       </Paragraph>
 
                       <Space size={18} wrap>
-                        <Text style={{ color: "#475569", fontSize: 14 }}>
+                        <Text style={{ color: "#64748b", fontSize: 12.5 }}>
                           <Text strong>Last Updated:</Text>{" "}
                           {formatDateTime(item.updated_at)}
                         </Text>
-                        <Text style={{ color: "#475569", fontSize: 14 }}>
+                        <Text style={{ color: "#64748b", fontSize: 12.5 }}>
                           <Text strong>Created:</Text>{" "}
                           {formatDateTime(item.created_at)}
                         </Text>
@@ -597,15 +575,15 @@ export default function InformationCountryManagementContent() {
 
                     <Space
                       direction="vertical"
-                      size={14}
+                      size={12}
                       align="end"
                       className={styles.cardActions}
                     >
                       <Tag
                         style={{
                           margin: 0,
-                          borderRadius: 999,
-                          padding: "6px 12px",
+                          borderRadius: 6,
+                          padding: "4px 10px",
                           fontWeight: 600,
                           fontSize: 12,
                           color: priorityStyle.color,
@@ -619,10 +597,12 @@ export default function InformationCountryManagementContent() {
                       <Space size={8}>
                         <Button
                           onClick={() => openEditModal(item)}
-                          size="middle"
+                          size="small"
                           style={{
-                            borderRadius: 999,
-                            paddingInline: 16,
+                            borderRadius: 8,
+                            height: 32,
+                            paddingInline: 12,
+                            fontWeight: 500,
                           }}
                         >
                           Edit
@@ -640,10 +620,12 @@ export default function InformationCountryManagementContent() {
                         >
                           <Button
                             danger
-                            size="middle"
+                            size="small"
                             style={{
-                              borderRadius: 999,
-                              paddingInline: 16,
+                              borderRadius: 8,
+                              height: 32,
+                              paddingInline: 12,
+                              fontWeight: 500,
                             }}
                           >
                             Delete
@@ -654,16 +636,9 @@ export default function InformationCountryManagementContent() {
                   </div>
                 </Card>
               );
-            })
-          ) : (
-            <Card
-              style={{ borderRadius: 24, borderColor: "#dbe4ee" }}
-              styles={{ body: { padding: 32 } }}
-            >
-              <Empty description="Belum ada information document." />
-            </Card>
-          )}
-        </Space>
+            })}
+          </Space>
+        )}
       </Space>
 
       <InformationFormModal

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import {
+  Avatar,
   Button,
   Card,
   Empty,
@@ -15,10 +16,13 @@ import {
   Typography,
 } from "antd";
 import {
+  ArrowsAltOutlined,
   FilterOutlined,
   HolderOutlined,
   PlusOutlined,
   SearchOutlined,
+  ShrinkOutlined,
+  UserOutlined,
 } from "@ant-design/icons";
 import {
   closestCorners,
@@ -44,9 +48,17 @@ import { useVisaTypes } from "@/app/hooks/use-visa-type-management";
 
 import {
   useUpdateStudentStatusUser,
+  useUpdateVisaStatusUser,
   useUserRoleStudents,
 } from "@/app/hooks/use-users";
 import type { UserDataModel } from "@/app/models/user";
+import {
+  getStudentAvatarUrl,
+  getCountryName as getCountryNameHelper,
+  getStudentVisaName,
+  getStudentCampus,
+  compareStudentsByNewest,
+} from "@/app/utils/student-helpers";
 
 const { Text, Title } = Typography;
 
@@ -56,7 +68,12 @@ const filterStyle: CSSProperties = {
   width: "100%",
 };
 
-type StudentBoardStatus = "ONGOING" | "POSTPONE" | "CANCEL" | "STUDENT_DONE";
+type StudentBoardStatus =
+  | "ONGOING"
+  | "WAITING_VISA"
+  | "POSTPONE"
+  | "CANCEL"
+  | "STUDENT_DONE";
 
 type SelectOption = {
   value: string;
@@ -84,6 +101,22 @@ const boardConfig: BoardColumnConfig[] = [
     accent: "linear-gradient(135deg, #22c55e 0%, #16a34a 100%)",
   },
   {
+    key: "WAITING_VISA",
+    title: "Waiting Visa",
+    color: "#0284c7",
+    softBg: "linear-gradient(180deg, #f0f9ff 0%, #ffffff 32%)",
+    borderColor: "#bae6fd",
+    accent: "linear-gradient(135deg, #38bdf8 0%, #0284c7 100%)",
+  },
+  {
+    key: "STUDENT_DONE",
+    title: "Student Done (Grant)",
+    color: "#1d4ed8",
+    softBg: "linear-gradient(180deg, #eff6ff 0%, #ffffff 32%)",
+    borderColor: "#bfdbfe",
+    accent: "linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)",
+  },
+  {
     key: "POSTPONE",
     title: "Post Pone",
     color: "#b45309",
@@ -93,19 +126,11 @@ const boardConfig: BoardColumnConfig[] = [
   },
   {
     key: "CANCEL",
-    title: "Cancel",
+    title: "Cancel (Refused)",
     color: "#b42318",
     softBg: "linear-gradient(180deg, #fff4f3 0%, #ffffff 32%)",
     borderColor: "#f5c4bf",
     accent: "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)",
-  },
-  {
-    key: "STUDENT_DONE",
-    title: "Student Done",
-    color: "#1d4ed8",
-    softBg: "linear-gradient(180deg, #eff6ff 0%, #ffffff 32%)",
-    borderColor: "#bfdbfe",
-    accent: "linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)",
   },
 ];
 
@@ -170,7 +195,7 @@ function normalizeStudentResponse(value: unknown): UserDataModel[] {
 }
 
 function getCountryName(student: UserDataModel): string {
-  return String(student.stage?.country?.name ?? "").trim();
+  return getCountryNameHelper(student);
 }
 
 function getDegreeLabel(student: UserDataModel): string {
@@ -178,16 +203,18 @@ function getDegreeLabel(student: UserDataModel): string {
 }
 
 function getCampusName(student: UserDataModel): string {
-  return String(student.name_campus ?? "").trim();
+  return getStudentCampus(student);
 }
 
 function getVisaType(student: UserDataModel): string {
-  return String(student.visa_type_name ?? student.visa_type ?? "").trim();
+  return getStudentVisaName(student);
 }
 
 function getConsultantName(student: UserDataModel): string {
   return String(student.name_consultant ?? "").trim();
 }
+
+
 
 function getStudentId(student: UserDataModel): string {
   return String(student.id);
@@ -209,8 +236,12 @@ function resolveBoardStatus(value: unknown): StudentBoardStatus {
   if (
     rawStatus.includes("student done") ||
     rawStatus.includes("done") ||
+    rawStatus.includes("grant") ||
+    rawStatus.includes("granted") ||
     rawStatus.includes("completed") ||
-    rawStatus.includes("finish")
+    rawStatus.includes("finish") ||
+    rawStatus.includes("selesai") ||
+    rawStatus.includes("lulus")
   ) {
     return "STUDENT_DONE";
   }
@@ -219,8 +250,11 @@ function resolveBoardStatus(value: unknown): StudentBoardStatus {
     rawStatus.includes("cancel") ||
     rawStatus.includes("canceled") ||
     rawStatus.includes("cancelled") ||
+    rawStatus.includes("refuse") ||
+    rawStatus.includes("refused") ||
     rawStatus.includes("reject") ||
-    rawStatus.includes("drop")
+    rawStatus.includes("drop") ||
+    rawStatus.includes("batal")
   ) {
     return "CANCEL";
   }
@@ -230,26 +264,94 @@ function resolveBoardStatus(value: unknown): StudentBoardStatus {
     rawStatus.includes("post pone") ||
     rawStatus.includes("pending") ||
     rawStatus.includes("reschedule") ||
-    rawStatus.includes("hold")
+    rawStatus.includes("hold") ||
+    rawStatus.includes("tunda")
   ) {
     return "POSTPONE";
+  }
+
+  if (
+    rawStatus.includes("waiting visa") ||
+    rawStatus.includes("waiting_visa") ||
+    rawStatus.includes("visa waiting") ||
+    rawStatus.includes("waiting") ||
+    rawStatus.includes("proses visa") ||
+    rawStatus.includes("lodgement") ||
+    rawStatus.includes("lodged")
+  ) {
+    return "WAITING_VISA";
   }
 
   return "ONGOING";
 }
 
 function getStudentBoardStatus(student: UserDataModel): StudentBoardStatus {
-  return resolveBoardStatus(student.student_status ?? student.status);
+  return resolveBoardStatus(student.visa_status ?? student.student_status ?? student.status);
+}
+
+function getCurrentStepLabel(student: UserDataModel): string {
+  const boardStatus = getStudentBoardStatus(student);
+
+  // 1. Standarisasi jelas dan profesional per status pipeline:
+  if (boardStatus === "CANCEL") {
+    return "Cancelled";
+  }
+  if (boardStatus === "POSTPONE") {
+    return "On Hold";
+  }
+  if (boardStatus === "STUDENT_DONE") {
+    return "Complete";
+  }
+  if (boardStatus === "WAITING_VISA") {
+    return "Visa Processing";
+  }
+
+  // 2. Untuk status ONGOING (Siswa aktif berjalan):
+  const currentStepId = String(student.current_step_id ?? "").trim();
+  if (currentStepId) {
+    const steps = student.stage?.country?.steps ?? [];
+    const step = steps.find((item) => item.id === currentStepId);
+    if (step?.label) return step.label;
+
+    const defaultStepLabels: Record<string, string> = {
+      stp_prep: "Preparation",
+      stp_prog: "Progress",
+      stp_comp: "Complete",
+    };
+
+    if (defaultStepLabels[currentStepId]) {
+      return defaultStepLabels[currentStepId];
+    }
+  }
+
+  return "Preparation";
+}
+
+function getStepTone(stepLabel: string): { color: string } {
+  switch (stepLabel) {
+    case "Cancelled":
+      return { color: "#dc2626" };
+    case "On Hold":
+      return { color: "#d97706" };
+    case "Complete":
+      return { color: "#16a34a" };
+    case "Visa Processing":
+      return { color: "#0284c7" };
+    default:
+      return { color: "#334155" };
+  }
 }
 
 function getStudentStatusPayload(status: StudentBoardStatus): string {
   switch (status) {
+    case "WAITING_VISA":
+      return "WAITING VISA";
     case "POSTPONE":
       return "POSTPONE";
     case "CANCEL":
-      return "CANCEL";
+      return "CANCEL (REFUSED)";
     case "STUDENT_DONE":
-      return "STUDENT DONE";
+      return "STUDENT DONE (GRANT)";
     default:
       return "ON GOING";
   }
@@ -262,6 +364,13 @@ function getStatusTagMeta(status: StudentBoardStatus): {
   borderColor: string;
 } {
   switch (status) {
+    case "WAITING_VISA":
+      return {
+        label: "Waiting Visa",
+        color: "#0284c7",
+        background: "#f0f9ff",
+        borderColor: "#bae6fd",
+      };
     case "POSTPONE":
       return {
         label: "Post Pone",
@@ -271,14 +380,14 @@ function getStatusTagMeta(status: StudentBoardStatus): {
       };
     case "CANCEL":
       return {
-        label: "Cancel",
+        label: "Cancel (Refused)",
         color: "#b42318",
         background: "#fff1f0",
         borderColor: "#ffccc7",
       };
     case "STUDENT_DONE":
       return {
-        label: "Student Done",
+        label: "Student Done (Grant)",
         color: "#1d4ed8",
         background: "#eff6ff",
         borderColor: "#bfdbfe",
@@ -364,9 +473,6 @@ function StudentCardInner({
   isDragging?: boolean;
   showDragHandle?: boolean;
 }) {
-  const status = getStudentBoardStatus(student);
-  const statusMeta = getStatusTagMeta(status);
-
   return (
     <div
       style={{
@@ -385,24 +491,22 @@ function StudentCardInner({
     >
       <Flex justify="space-between" align="flex-start" gap={12}>
         <Flex gap={10} align="flex-start" style={{ minWidth: 0, flex: 1 }}>
-          <div
+          <Avatar
+            src={getStudentAvatarUrl(student)}
             style={{
-              width: 40,
-              height: 40,
-              borderRadius: 14,
-              background: "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)",
-              color: "#fff",
-              display: "grid",
-              placeItems: "center",
-              fontSize: 14,
+              backgroundColor: "#eff6ff",
+              color: "#1b3d6d",
+              border: "1px solid #bfdbfe",
+              borderRadius: 12,
+              fontSize: 13,
               fontWeight: 700,
-              letterSpacing: 0.3,
               flexShrink: 0,
-              boxShadow: "0 10px 20px rgba(79, 70, 229, 0.2)",
+              width: 38,
+              height: 38,
             }}
           >
             {getStudentInitials(student)}
-          </div>
+          </Avatar>
 
           <div style={{ minWidth: 0, flex: 1 }}>
             <Flex align="center" gap={6} wrap style={{ marginBottom: 5 }}>
@@ -419,21 +523,6 @@ function StudentCardInner({
               >
                 {student.name || "Nama student belum tersedia"}
               </Text>
-
-              <Tag
-                style={{
-                  marginRight: 0,
-                  borderRadius: 999,
-                  padding: "1px 8px",
-                  fontSize: 10,
-                  fontWeight: 600,
-                  color: statusMeta.color,
-                  background: statusMeta.background,
-                  borderColor: statusMeta.borderColor,
-                }}
-              >
-                {statusMeta.label}
-              </Tag>
             </Flex>
 
             <Text
@@ -462,24 +551,98 @@ function StudentCardInner({
               {buildStudentSecondaryLine(student)}
             </Text>
 
-            <Tag
-              style={{
-                marginRight: 0,
-                borderRadius: 999,
-                padding: "5px 10px",
-                fontSize: 10,
-                fontWeight: 700,
-                color: "#3153d4",
-                background: "#eef4ff",
-                borderColor: "#bfd2ff",
-                letterSpacing: 0.25,
-                maxWidth: "100%",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-              }}
-            >
-              {formatVisaType(getVisaType(student))}
-            </Tag>
+            <div style={{ marginBottom: 6, display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+              {getConsultantName(student) ? (
+                <Tag
+                  color="purple"
+                  style={{
+                    borderRadius: 999,
+                    fontSize: 10,
+                    padding: "1px 8px",
+                    margin: 0,
+                    fontWeight: 600,
+                  }}
+                >
+                  <UserOutlined style={{ marginRight: 3 }} />
+                  Consultant: {getConsultantName(student)}
+                </Tag>
+              ) : (
+                <Tag
+                  style={{
+                    borderRadius: 999,
+                    fontSize: 10,
+                    padding: "1px 8px",
+                    margin: 0,
+                    fontWeight: 500,
+                    color: "#94a3b8",
+                    background: "#f8fafc",
+                    border: "1px dashed #cbd5e1",
+                  }}
+                >
+                  Tanpa Konsultan
+                </Tag>
+              )}
+
+              {student.source ? (
+                <Tag
+                  color="cyan"
+                  style={{
+                    borderRadius: 6,
+                    fontSize: 10,
+                    padding: "1px 6px",
+                    margin: 0,
+                    fontWeight: 600,
+                    textTransform: "capitalize",
+                  }}
+                >
+                  Leads: {student.source}
+                </Tag>
+              ) : (
+                <Tag
+                  style={{
+                    borderRadius: 6,
+                    fontSize: 10,
+                    padding: "1px 6px",
+                    margin: 0,
+                    color: "#94a3b8",
+                    background: "#f8fafc",
+                    border: "1px dashed #cbd5e1",
+                  }}
+                >
+                  Tanpa Lead
+                </Tag>
+              )}
+            </div>
+
+            <Flex align="center" justify="space-between" wrap gap={6} style={{ marginTop: 4, paddingTop: 6, borderTop: "1px solid #f1f5f9" }}>
+              {(() => {
+                const stepLabel = getCurrentStepLabel(student);
+                return (
+                  <span style={{ fontSize: 11, color: "#64748b" }}>
+                    Step: <strong style={{ color: getStepTone(stepLabel).color }}>{stepLabel}</strong>
+                  </span>
+                );
+              })()}
+
+              <Tag
+                style={{
+                  marginRight: 0,
+                  borderRadius: 999,
+                  padding: "2px 8px",
+                  fontSize: 10,
+                  fontWeight: 600,
+                  color: "#3153d4",
+                  background: "#eef4ff",
+                  borderColor: "#bfd2ff",
+                  letterSpacing: 0.2,
+                  maxWidth: "100%",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
+              >
+                {formatVisaType(getVisaType(student))}
+              </Tag>
+            </Flex>
           </div>
         </Flex>
 
@@ -573,6 +736,8 @@ function BoardColumn({
   isHighlighted,
   disableInteraction,
   showDragHandle = true,
+  isExpanded,
+  onToggleExpand,
 }: {
   column: BoardColumnConfig;
   students: UserDataModel[];
@@ -583,6 +748,8 @@ function BoardColumn({
   isHighlighted: boolean;
   disableInteraction?: boolean;
   showDragHandle?: boolean;
+  isExpanded?: boolean;
+  onToggleExpand?: () => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: column.key,
@@ -635,19 +802,35 @@ function BoardColumn({
 
         <Flex justify="space-between" align="center" gap={12}>
           <div style={{ minWidth: 0 }}>
-            <Text
-              strong
-              style={{
-                fontSize: 17,
-                color: "#111827",
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                display: "block",
-              }}
-            >
-              {column.title}
-            </Text>
+            <Flex align="center" gap={8}>
+              <Text
+                strong
+                style={{
+                  fontSize: 17,
+                  color: "#111827",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  display: "block",
+                }}
+              >
+                {column.title}
+              </Text>
+              {isExpanded && (
+                <Tag
+                  color="blue"
+                  style={{
+                    borderRadius: 999,
+                    fontSize: 11,
+                    margin: 0,
+                    padding: "1px 8px",
+                    fontWeight: 600,
+                  }}
+                >
+                  Mode Melebar
+                </Tag>
+              )}
+            </Flex>
 
             <Text
               style={{
@@ -661,22 +844,56 @@ function BoardColumn({
             </Text>
           </div>
 
-          <div
-            style={{
-              minWidth: 38,
-              height: 38,
-              borderRadius: 14,
-              background: column.softBg,
-              color: column.color,
-              border: `1px solid ${column.borderColor}`,
-              display: "grid",
-              placeItems: "center",
-              fontWeight: 800,
-              fontSize: 13,
-            }}
-          >
-            {students.length}
-          </div>
+          <Space size={6} align="center">
+            <div
+              style={{
+                minWidth: 38,
+                height: 38,
+                borderRadius: 14,
+                background: column.softBg,
+                color: column.color,
+                border: `1px solid ${column.borderColor}`,
+                display: "grid",
+                placeItems: "center",
+                fontWeight: 800,
+                fontSize: 13,
+              }}
+            >
+              {students.length}
+            </div>
+            {onToggleExpand && (
+              <Button
+                size="small"
+                type="text"
+                icon={
+                  isExpanded ? (
+                    <ShrinkOutlined style={{ fontSize: 13, color: "#2563eb" }} />
+                  ) : (
+                    <ArrowsAltOutlined style={{ fontSize: 12, color: "#64748b" }} />
+                  )
+                }
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleExpand();
+                }}
+                title={
+                  isExpanded
+                    ? "Kembalikan ke tampilan 5 kolom"
+                    : `Lebarkan kolom ${column.title}`
+                }
+                style={{
+                  width: 32,
+                  height: 32,
+                  padding: 0,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderRadius: 10,
+                  background: isExpanded ? "#eff6ff" : "#f1f5f9",
+                }}
+              />
+            )}
+          </Space>
         </Flex>
       </div>
 
@@ -687,12 +904,16 @@ function BoardColumn({
         <div
           style={{
             padding: 14,
-            display: "flex",
-            flexDirection: "column",
+            display: isExpanded ? "grid" : "flex",
+            gridTemplateColumns: isExpanded
+              ? "repeat(auto-fill, minmax(310px, 1fr))"
+              : undefined,
+            flexDirection: isExpanded ? undefined : "column",
             gap: 12,
             flex: 1,
             overflowY: "auto",
             overscrollBehavior: "contain",
+            alignContent: isExpanded ? "start" : undefined,
           }}
         >
           {students.length === 0 ? (
@@ -771,8 +992,8 @@ type StudentsManagementContentProps = {
 export default function StudentsManagementContent({
   detailBasePath = "/director/dashboard/students-management/detail",
   readOnly = false,
-  title = "Student Pipeline Management",
-  description = "Kelola progres student dengan tampilan board yang lebih ringkas. Data student ditampilkan 10 per halaman pada setiap kolom.",
+  title = "Pipeline Siswa",
+  description = "Kelola progres dan status siswa",
   onAddStudent,
 }: StudentsManagementContentProps) {
   const router = useRouter();
@@ -792,11 +1013,14 @@ export default function StudentsManagementContent({
   const [studentOverrides, setStudentOverrides] = useState<
     Record<string, Partial<UserDataModel>>
   >({});
+  const [expandedColumnKey, setExpandedColumnKey] =
+    useState<StudentBoardStatus | null>(null);
 
   const [pageByStatus, setPageByStatus] = useState<
     Record<StudentBoardStatus, number>
   >({
     ONGOING: 1,
+    WAITING_VISA: 1,
     POSTPONE: 1,
     CANCEL: 1,
     STUDENT_DONE: 1,
@@ -804,6 +1028,8 @@ export default function StudentsManagementContent({
 
   const { onUpdate: onUpdateStudentStatus, onUpdateLoading } =
     useUpdateStudentStatusUser();
+
+  const { onUpdate: onUpdateVisaStatus } = useUpdateVisaStatusUser();
 
   const { data: rawStudentsRoleData } = useUserRoleStudents();
   const { data: visaTypesData = [] } = useVisaTypes({});
@@ -830,6 +1056,7 @@ export default function StudentsManagementContent({
   const resetPagination = useCallback(() => {
     setPageByStatus({
       ONGOING: 1,
+      WAITING_VISA: 1,
       POSTPONE: 1,
       CANCEL: 1,
       STUDENT_DONE: 1,
@@ -915,7 +1142,7 @@ export default function StudentsManagementContent({
     studentsRoleData.forEach((student) => {
       const country = getCountryName(student);
 
-      if (country) {
+      if (country && country !== "-") {
         map.set(country, {
           value: country,
           label: country,
@@ -987,15 +1214,19 @@ export default function StudentsManagementContent({
   }, [studentsRoleData]);
 
   const effectiveStudents = useMemo<UserDataModel[]>(() => {
-    return studentsRoleData.map((student) =>
-      mergeStudentData(student, studentOverrides[getStudentId(student)]),
-    );
+    return studentsRoleData
+      .map((student) =>
+        mergeStudentData(student, studentOverrides[getStudentId(student)]),
+      )
+      .sort(compareStudentsByNewest);
   }, [studentOverrides, studentsRoleData]);
 
   const filteredStudents = useMemo<UserDataModel[]>(() => {
-    if (!hasActiveFilter) return effectiveStudents;
+    if (!hasActiveFilter) {
+      return [...effectiveStudents].sort(compareStudentsByNewest);
+    }
 
-    return effectiveStudents.filter((student) => {
+    const filtered = effectiveStudents.filter((student) => {
       const haystack = [
         student.name,
         student.email,
@@ -1026,10 +1257,17 @@ export default function StudentsManagementContent({
         normalizeText(getDegreeLabel(student)) ===
           normalizeText(activeDegreeFilter);
 
-      const matchConsultant =
-        !activeConsultantFilter ||
-        normalizeText(getConsultantName(student)) ===
-          normalizeText(activeConsultantFilter);
+      const matchConsultant = (() => {
+        if (!activeConsultantFilter) return true;
+        const sConsultant = normalizeText(getConsultantName(student));
+        const target = normalizeText(activeConsultantFilter);
+        return (
+          sConsultant === target ||
+          sConsultant.split(/\s+/)[0] === target.split(/\s+/)[0] ||
+          sConsultant.includes(target) ||
+          target.includes(sConsultant)
+        );
+      })();
 
       return (
         matchKeyword &&
@@ -1039,6 +1277,8 @@ export default function StudentsManagementContent({
         matchConsultant
       );
     });
+
+    return filtered.sort(compareStudentsByNewest);
   }, [
     effectiveStudents,
     hasActiveFilter,
@@ -1071,6 +1311,7 @@ export default function StudentsManagementContent({
   >(() => {
     const grouped: Record<StudentBoardStatus, UserDataModel[]> = {
       ONGOING: [],
+      WAITING_VISA: [],
       POSTPONE: [],
       CANCEL: [],
       STUDENT_DONE: [],
@@ -1081,6 +1322,11 @@ export default function StudentsManagementContent({
       grouped[status].push(student);
     });
 
+    // Urutkan setiap kolom status agar data siswa yang baru masuk selalu muncul paling atas
+    (Object.keys(grouped) as StudentBoardStatus[]).forEach((statusKey) => {
+      grouped[statusKey].sort(compareStudentsByNewest);
+    });
+
     return grouped;
   }, [filteredStudents, getEffectiveBoardStatus]);
 
@@ -1089,20 +1335,24 @@ export default function StudentsManagementContent({
   >(() => {
     return {
       ONGOING: groupedStudents.ONGOING.slice(
-        (pageByStatus.ONGOING - 1) * PAGE_SIZE,
-        pageByStatus.ONGOING * PAGE_SIZE,
+        ((pageByStatus.ONGOING || 1) - 1) * PAGE_SIZE,
+        (pageByStatus.ONGOING || 1) * PAGE_SIZE,
+      ),
+      WAITING_VISA: groupedStudents.WAITING_VISA.slice(
+        ((pageByStatus.WAITING_VISA || 1) - 1) * PAGE_SIZE,
+        (pageByStatus.WAITING_VISA || 1) * PAGE_SIZE,
       ),
       POSTPONE: groupedStudents.POSTPONE.slice(
-        (pageByStatus.POSTPONE - 1) * PAGE_SIZE,
-        pageByStatus.POSTPONE * PAGE_SIZE,
+        ((pageByStatus.POSTPONE || 1) - 1) * PAGE_SIZE,
+        (pageByStatus.POSTPONE || 1) * PAGE_SIZE,
       ),
       CANCEL: groupedStudents.CANCEL.slice(
-        (pageByStatus.CANCEL - 1) * PAGE_SIZE,
-        pageByStatus.CANCEL * PAGE_SIZE,
+        ((pageByStatus.CANCEL || 1) - 1) * PAGE_SIZE,
+        (pageByStatus.CANCEL || 1) * PAGE_SIZE,
       ),
       STUDENT_DONE: groupedStudents.STUDENT_DONE.slice(
-        (pageByStatus.STUDENT_DONE - 1) * PAGE_SIZE,
-        pageByStatus.STUDENT_DONE * PAGE_SIZE,
+        ((pageByStatus.STUDENT_DONE || 1) - 1) * PAGE_SIZE,
+        (pageByStatus.STUDENT_DONE || 1) * PAGE_SIZE,
       ),
     };
   }, [groupedStudents, pageByStatus]);
@@ -1159,21 +1409,30 @@ export default function StudentsManagementContent({
 
       if (currentStatus === nextStatus) return;
 
+      const statusPayload = getStudentStatusPayload(nextStatus);
+
       setStudentOverrides((prev) => ({
         ...prev,
         [draggedId]: {
           ...prev[draggedId],
-          student_status: getStudentStatusPayload(nextStatus),
+          student_status: statusPayload,
+          visa_status: statusPayload,
         },
       }));
 
       setMovingStudentId(draggedId);
 
       try {
-        const response = await onUpdateStudentStatus({
-          id: draggedId,
-          student_status: getStudentStatusPayload(nextStatus),
-        });
+        const [response] = await Promise.all([
+          onUpdateStudentStatus({
+            id: draggedId,
+            student_status: statusPayload,
+          }),
+          onUpdateVisaStatus({
+            id: draggedId,
+            visa_status: statusPayload,
+          }),
+        ]);
 
         const updatedStudent = (response?.data?.result ?? response?.data) as
           | UserDataModel
@@ -1535,12 +1794,18 @@ export default function StudentsManagementContent({
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: `repeat(${boardConfig.length}, minmax(240px, 1fr))`,
+                gridTemplateColumns:
+                  expandedColumnKey
+                    ? "1fr"
+                    : `repeat(${boardConfig.length}, minmax(240px, 1fr))`,
                 gap: 18,
                 alignItems: "stretch",
               }}
             >
-              {boardConfig.map((column) => (
+              {(expandedColumnKey
+                ? boardConfig.filter((c) => c.key === expandedColumnKey)
+                : boardConfig
+              ).map((column) => (
                 <BoardColumn
                   key={column.key}
                   column={column}
@@ -1556,6 +1821,12 @@ export default function StudentsManagementContent({
                     readOnly || (onUpdateLoading && movingStudentId !== null)
                   }
                   showDragHandle={!readOnly}
+                  isExpanded={Boolean(expandedColumnKey)}
+                  onToggleExpand={() =>
+                    setExpandedColumnKey(
+                      expandedColumnKey === column.key ? null : column.key,
+                    )
+                  }
                 />
               ))}
             </div>

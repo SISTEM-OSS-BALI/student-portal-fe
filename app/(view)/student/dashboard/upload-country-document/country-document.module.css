@@ -1,0 +1,350 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+  padding-bottom: 90px;
+}
+
+.card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
+.card :global(.ant-card-body) {
+  padding: 18px 20px;
+}
+
+.headerBadgeList {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.headerBadge {
+  border-radius: 999px;
+  padding: 3px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 20px;
+  margin: 0;
+}
+
+.headerDesc {
+  color: #64748b;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.progressCard {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 14px 18px;
+}
+
+.progressHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.progressTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.progressPercent {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.progressFooter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.docItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid #f1f5f9;
+  background: #ffffff;
+  transition: all 0.2s ease;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.docItemUploaded {
+  border-color: #d1fae5;
+  background: #f0fdf4;
+}
+
+.docItemContent {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 200px;
+  flex: 1 1 220px;
+}
+
+.docItemIcon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+.docItemIconUploaded {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.docItemDetails {
+  min-width: 0;
+  flex: 1;
+  width: 100%;
+  overflow: hidden;
+}
+
+.docItemHeader {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  margin-bottom: 3px;
+  width: 100%;
+}
+
+.docItemBadges {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.docItemTitle {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e293b;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: keep-all;
+  display: block;
+  max-width: 100%;
+  line-height: 1.35;
+}
+
+.docItemActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+
+.card :global(input.ant-input),
+.card :global(.ant-input-affix-wrapper),
+.card :global(.ant-select-selector) {
+  height: 34px;
+  font-size: 12.5px;
+  border-radius: 8px;
+}
+
+.stickyBar {
+  position: sticky;
+  bottom: 16px;
+  z-index: 100;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 12px 18px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+/* ==========================================================================
+   Mobile & Tablet Responsiveness (< 820px)
+   ========================================================================== */
+@media (max-width: 820px) {
+  .container {
+    gap: 12px;
+    padding-bottom: 120px;
+  }
+
+  .card {
+    border-radius: 12px;
+  }
+
+  .card :global(.ant-card-body) {
+    padding: 12px 14px;
+  }
+
+  .card :global(input.ant-input),
+  .card :global(.ant-input-affix-wrapper),
+  .card :global(.ant-select-selector) {
+    height: 32px !important;
+    font-size: 12px !important;
+    border-radius: 7px !important;
+  }
+
+  .headerBadgeList {
+    gap: 6px !important;
+  }
+
+  .headerBadge {
+    padding: 1px 8px !important;
+    font-size: 11px !important;
+    line-height: 18px !important;
+    border-radius: 6px !important;
+    gap: 4px !important;
+  }
+
+  .headerBadge svg {
+    font-size: 11px !important;
+  }
+
+  .headerDesc {
+    font-size: 11.5px !important;
+    line-height: 1.4 !important;
+  }
+
+  .progressCard {
+    border-radius: 10px !important;
+    padding: 10px 12px !important;
+  }
+
+  .progressTitle {
+    font-size: 11.5px !important;
+  }
+
+  .progressPercent {
+    font-size: 11.5px !important;
+  }
+
+  .progressFooter {
+    font-size: 10.5px !important;
+    margin-top: 4px !important;
+  }
+
+  /* Susun card item secara vertikal agar judul dokumen memiliki lebar penuh 100% */
+  .docItem {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    padding: 10px 12px !important;
+    gap: 10px !important;
+    border-radius: 9px;
+  }
+
+  .docItemContent {
+    align-items: flex-start !important;
+    gap: 8px !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    flex: 1 1 100% !important;
+  }
+
+  .docItemIcon {
+    width: 28px !important;
+    height: 28px !important;
+    font-size: 14px !important;
+    border-radius: 7px !important;
+  }
+
+  .docItemDetails {
+    min-width: 0 !important;
+    width: 100% !important;
+    flex: 1 1 100% !important;
+    overflow: hidden !important;
+  }
+
+  .docItemHeader {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 3px !important;
+    margin-bottom: 2px !important;
+  }
+
+  .docItemBadges {
+    display: flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+    flex-wrap: wrap !important;
+  }
+
+  .docItemBadges :global(.ant-tag) {
+    font-size: 10px !important;
+    line-height: 16px !important;
+    padding-inline: 4px !important;
+    border-radius: 4px !important;
+  }
+
+  .docItemTitle {
+    font-size: 12px !important;
+    font-weight: 700 !important;
+    line-height: 1.35 !important;
+    white-space: normal !important;
+    overflow-wrap: break-word !important;
+    word-break: keep-all !important;
+    display: block !important;
+    max-width: 100% !important;
+  }
+
+  /* Baris tombol aksi terpisah di baris bawah dan tersusun rapi */
+  .docItemActions {
+    width: 100% !important;
+    justify-content: flex-end !important;
+    padding-top: 8px !important;
+    border-top: 1px dashed #e2e8f0 !important;
+    gap: 6px !important;
+    flex-wrap: wrap !important;
+    margin-left: 0 !important;
+  }
+
+  .docItemActions :global(.ant-btn) {
+    height: 26px !important;
+    font-size: 11px !important;
+    border-radius: 6px !important;
+    padding: 0 9px !important;
+  }
+
+  /* Sticky bar dibuat kompak dan tidak menutupi kartu */
+  .stickyBar {
+    bottom: 8px;
+    border-radius: 12px;
+    padding: 8px 12px;
+    gap: 6px;
+  }
+
+  .stickyBar :global(.ant-btn) {
+    width: 100%;
+    height: 34px !important;
+    font-size: 12px !important;
+    border-radius: 7px !important;
+  }
+}

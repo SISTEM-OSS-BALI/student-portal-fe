@@ -1,6 +1,6 @@
 "use client";
 
-import { Image as AntdImage, notification } from "antd";
+import { App, Image as AntdImage } from "antd";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import React from "react";
@@ -41,6 +41,7 @@ const partners = [
 export default function LoginContent() {
   const router = useRouter();
   const { onLogin, onLoginLoading } = useLogin();
+  const { notification } = App.useApp();
 
   const handleLogin = async (values: UserFormModel) => {
     try {
@@ -52,7 +53,7 @@ export default function LoginContent() {
           router.push("/admission/dashboard/home");
           return;
         case "CONSULTANT":
-          router.push("/consultant/dashboard/students-management");
+          router.push("/consultant/dashboard/home");
           return;
         case "DIRECTOR":
           router.push("/director/dashboard/home");
@@ -136,7 +137,9 @@ export default function LoginContent() {
                   <AntdImage
                     src={partner.src}
                     alt={partner.alt}
-                    height={68}
+                    width={52}
+                    height={52}
+                    style={{ objectFit: "contain" }}
                     preview
                   />
                 </div>

@@ -1,6 +1,14 @@
-import { Card, Col, Row, Space, Tag, Typography } from "antd";
+"use client";
+
 import { useMemo, useState } from "react";
-import SearchBarComponent from "@/app/components/common/search-bar";
+import { Button, Empty, Input, Popconfirm, Space, Tag } from "antd";
+import {
+  DeleteOutlined,
+  EditOutlined,
+  OrderedListOutlined,
+  SearchOutlined,
+} from "@ant-design/icons";
+
 import FormStepManagement from "./FormStepManagement";
 import { useStepsManagement, useStepManagement } from "@/app/hooks/use-steps-management";
 import { useChildStepsManagement } from "@/app/hooks/use-child-steps-management";
@@ -8,18 +16,19 @@ import type {
   StepsManagementDataModel,
   StepsManagementPayloadCreateModel,
 } from "@/app/models/steps-management";
-
-const { Text, Title } = Typography;
+import SplitMasterDetailLayout, {
+  splitMasterDetailStyles,
+} from "@/app/components/common/split-master-detail";
 
 export default function StepsManagementContent() {
   const [selectedStep, setSelectedStep] =
     useState<StepsManagementDataModel | null>(null);
   const [stepQuery, setStepQuery] = useState("");
 
-  const { data: childSteps } = useChildStepsManagement({});
+  const { data: childSteps = [] } = useChildStepsManagement({});
 
   const {
-    data: steps,
+    data: steps = [],
     onCreate: onCreateStep,
     onCreateLoading: onCreateStepLoading,
     onDelete: onDeleteStep,
@@ -53,11 +62,14 @@ export default function StepsManagementContent() {
     setSelectedStep(null);
   };
 
-  const handleDeleteStep = async () => {
-    if (!selectedStep) return;
+  const handleDeleteStep = async (stepId?: string) => {
+    const idToDelete = stepId ?? selectedStep?.id;
+    if (!idToDelete) return;
     try {
-      await onDeleteStep(selectedStep.id);
-      setSelectedStep(null);
+      await onDeleteStep(idToDelete);
+      if (selectedStep?.id === idToDelete) {
+        setSelectedStep(null);
+      }
     } catch {
       // handled by notification hook
     }
@@ -80,123 +92,196 @@ export default function StepsManagementContent() {
   }, [childSteps]);
 
   return (
-    <div style={{ padding: "8px 4px" }}>
-      <Space direction="vertical" size={16} style={{ width: "100%" }}>
-        <div>
-          <Title level={3} style={{ marginBottom: 4 }}>
-            Manajemen Steps
-          </Title>
-          <Text type="secondary">
-            Buat dan kelola step detail yang terhubung ke kategori step.
-          </Text>
-        </div>
+    <SplitMasterDetailLayout
+      pageTitle="Step Management"
+      pageSubtitle="Configure pipeline steps and requirements"
+      pageIcon={<OrderedListOutlined />}
+      onAddNew={() => setSelectedStep(null)}
+      addNewText="Add Step"
+      listTitle="Step List"
+      listCount={filteredSteps.length}
+      listFilter={
+        <Input
+          allowClear
+          value={stepQuery}
+          onChange={(e) => setStepQuery(e.target.value)}
+          placeholder="Search step name..."
+          prefix={<SearchOutlined style={{ color: "#94a3b8", fontSize: 13 }} />}
+          style={{ width: "100%", height: 34, borderRadius: 8, borderColor: "#e2e8f0", fontSize: 12.5 }}
+        />
+      }
+      listContent={
+        filteredSteps.length === 0 ? (
+          <Empty
+            description={
+              stepQuery
+                ? "No steps match your search"
+                : "No steps registered yet"
+            }
+          />
+        ) : (
+          filteredSteps.map((step) => {
+            const isSelected = selectedStep?.id === step.id;
+            const children = step.children ?? [];
+            const fallbackChildren =
+              children.length === 0 && step.child_ids?.length
+                ? step.child_ids.map((id) => ({
+                    id,
+                    label: childLabelById.get(id) ?? id,
+                  }))
+                : [];
+            const allChildren =
+              children.length > 0 ? children : fallbackChildren;
 
-        <Row gutter={[16, 16]}>
-          <Col xs={24} md={10}>
-            <Card bodyStyle={{ padding: 20 }}>
-              <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                <div>
-                  <Title level={5} style={{ marginBottom: 4 }}>
-                    Daftar Steps
-                  </Title>
-                  <Text type="secondary">
-                    Pilih step untuk mengubah atau hapus data.
-                  </Text>
-                </div>
-                <SearchBarComponent
-                  placeholder="Cari step..."
-                  handleChange={setStepQuery}
-                />
-              </Space>
-              <Space
-                direction="vertical"
-                size={8}
-                style={{ width: "100%", marginTop: 12 }}
+            return (
+              <div
+                key={step.id}
+                className={`${splitMasterDetailStyles.cardItem} ${
+                  isSelected ? splitMasterDetailStyles.cardItemActive : ""
+                }`}
+                onClick={() => handleSelectStep(step)}
               >
-                {filteredSteps.length === 0 ? (
-                  <Text type="secondary">Belum ada step.</Text>
-                ) : null}
-                {filteredSteps.map((step) => {
-                  const isSelected = selectedStep?.id === step.id;
-                  const children = step.children ?? [];
-                  const fallbackChildren =
-                    children.length === 0 && step.child_ids?.length
-                      ? step.child_ids.map((id) => ({
-                          id,
-                          label: childLabelById.get(id) ?? id,
-                        }))
-                      : [];
-                  return (
-                    <Card
-                      key={step.id}
-                      type="inner"
-                      hoverable
-                      onClick={() => handleSelectStep(step)}
-                      bodyStyle={{ padding: "10px 12px" }}
+                {isSelected && (
+                  <div className={splitMasterDetailStyles.activeIndicator} />
+                )}
+
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "flex-start",
+                    gap: 10,
+                  }}
+                >
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div
                       style={{
-                        borderColor: isSelected ? "#2f54eb" : "#e5e7eb",
-                        background: isSelected ? "#e6f0ff" : "#f8fafc",
-                        borderRadius: 10,
-                        cursor: "pointer",
+                        fontWeight: 700,
+                        fontSize: 14.5,
+                        color: isSelected ? "#1d4ed8" : "#0f172a",
+                        marginBottom: 4,
                       }}
                     >
-                      <Space
-                        direction="vertical"
-                        size={4}
-                        style={{ width: "100%" }}
-                      >
-                        <Title level={5} style={{ margin: 0 }}>
-                          {step.label}
-                        </Title>
-                        {children.length > 0 || fallbackChildren.length > 0 ? (
-                          <Space size={6} wrap>
-                            {(children.length > 0
-                              ? children
-                              : fallbackChildren
-                            ).map((child) => (
-                              <Tag key={child.id} color="blue">
-                                {child.label}
-                              </Tag>
-                            ))}
-                          </Space>
-                        ) : (
-                          <Tag color="default" style={{ alignSelf: "flex-start" }}>
-                            Tanpa kategori
-                          </Tag>
-                        )}
-                      </Space>
-                    </Card>
-                  );
-                })}
-              </Space>
-            </Card>
-          </Col>
+                      {step.label}
+                    </div>
+                  </div>
 
-          <Col xs={24} md={14}>
-            <Card bodyStyle={{ padding: 20 }}>
-              <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                <div>
-                  <Title level={5} style={{ marginBottom: 4 }}>
-                    Form Step
-                  </Title>
-                  <Text type="secondary">
-                    Hubungkan step ke satu atau beberapa kategori step.
-                  </Text>
+                  <Space size={6} onClick={(e) => e.stopPropagation()}>
+                    <Button
+                      size="small"
+                      type={isSelected ? "primary" : "default"}
+                      icon={<EditOutlined />}
+                      onClick={() => handleSelectStep(step)}
+                      style={{
+                        borderRadius: 8,
+                        fontSize: 12,
+                        fontWeight: 600,
+                        height: 30,
+                        background: isSelected ? "#1b3d6d" : undefined,
+                        borderColor: isSelected ? "#1b3d6d" : undefined,
+                      }}
+                    >
+                      {isSelected ? "Editing" : "Edit"}
+                    </Button>
+
+                    <Popconfirm
+                      title="Delete Step"
+                      description={`Are you sure you want to delete step "${step.label}"?`}
+                      onConfirm={() => handleDeleteStep(step.id)}
+                      okText="Delete"
+                      cancelText="Cancel"
+                      okButtonProps={{ danger: true }}
+                    >
+                      <Button
+                        size="small"
+                        danger
+                        type="text"
+                        icon={<DeleteOutlined style={{ fontSize: 14 }} />}
+                        title="Delete this step"
+                        style={{ borderRadius: 8, height: 30, width: 30 }}
+                      />
+                    </Popconfirm>
+                  </Space>
                 </div>
-                <FormStepManagement
-                  selectedStep={selectedStep}
-                  childStepsData={childSteps ?? []}
-                  onSubmit={handleSubmitStep}
-                  onDelete={handleDeleteStep}
-                  onCancel={() => setSelectedStep(null)}
-                  loading={stepFormLoading}
-                  deleteLoading={onDeleteStepLoading}
-                />
-              </Space>
-            </Card>
-          </Col>
-        </Row>
-      </Space>
-    </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    marginTop: 8,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  {allChildren.length > 0 ? (
+                    allChildren.map((child) => (
+                      <Tag
+                        key={child.id}
+                        color="blue"
+                        style={{
+                          borderRadius: 6,
+                          fontSize: 11,
+                          marginRight: 0,
+                          background: "#eff6ff",
+                          borderColor: "#bfdbfe",
+                          color: "#1d4ed8",
+                        }}
+                      >
+                        {child.label}
+                      </Tag>
+                    ))
+                  ) : (
+                    <Tag
+                      style={{
+                        borderRadius: 6,
+                        fontSize: 11,
+                        marginRight: 0,
+                        background: "#f1f5f9",
+                        borderColor: "#e2e8f0",
+                        color: "#64748b",
+                      }}
+                    >
+                      No category
+                    </Tag>
+                  )}
+                </div>
+              </div>
+            );
+          })
+        )
+      }
+      formTitle={selectedStep ? "Edit Step" : "Add Step"}
+      formSubtitle={
+        selectedStep
+          ? "Modify registration stage configuration."
+          : "Link registration stage to step categories."
+      }
+      formTag={
+        selectedStep ? (
+          <Tag color="blue" style={{ borderRadius: 6, fontWeight: 600 }}>
+            Edit Mode
+          </Tag>
+        ) : (
+          <Tag color="green" style={{ borderRadius: 6, fontWeight: 600 }}>
+            New
+          </Tag>
+        )
+      }
+      isEditing={Boolean(selectedStep)}
+      onCancelEdit={() => setSelectedStep(null)}
+      onAddNewFromForm={() => setSelectedStep(null)}
+      formContent={
+        <FormStepManagement
+          selectedStep={selectedStep}
+          childStepsData={childSteps}
+          onSubmit={handleSubmitStep}
+          onDelete={() => handleDeleteStep()}
+          onCancel={() => setSelectedStep(null)}
+          loading={stepFormLoading}
+          deleteLoading={onDeleteStepLoading}
+        />
+      }
+    />
   );
 }
+

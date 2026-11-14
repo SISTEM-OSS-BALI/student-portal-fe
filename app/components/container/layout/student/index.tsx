@@ -6,24 +6,29 @@ import {
   Button,
   Checkbox,
   Divider,
+  Drawer,
   Dropdown,
-  Image,
+  Image as AntImage,
   Layout,
   Modal,
   Tour,
   Typography,
   message,
 } from "antd";
+import Image from "next/image";
 import type { TourProps } from "antd";
 import {
+  BellOutlined,
+  DownOutlined,
   FileTextOutlined,
   GiftOutlined,
   HomeOutlined,
   InboxOutlined,
-  LockOutlined,
   LogoutOutlined,
+  MenuOutlined,
   MessageOutlined,
   QuestionCircleOutlined,
+  SearchOutlined,
   UserOutlined,
 } from "@ant-design/icons";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -48,7 +53,7 @@ import GlobalSearchModal, {
 } from "@/app/components/common/global-search-modal";
 import { normalizedRole } from "@/app/utils/normalized";
 import { supabase } from "@/app/vendor/supabase-client";
-import styles from "./layout.module.css";
+import styles from "../admission/layout.module.css";
 
 const { Header, Content, Footer } = Layout;
 
@@ -240,6 +245,12 @@ export default function StudentLayout({
 
   const [openInbox, setOpenInbox] = useState(false);
   const [openGlobalSearch, setOpenGlobalSearch] = useState(false);
+  const [openMobileNav, setOpenMobileNav] = useState(false);
+
+  const navigateFromMobile = (path: string) => {
+    setOpenMobileNav(false);
+    router.push(path);
+  };
   const [isConsentChecked, setIsConsentChecked] = useState(false);
   const [isDrawing, setIsDrawing] = useState(false);
   const [signatureError, setSignatureError] = useState("");
@@ -273,6 +284,8 @@ export default function StudentLayout({
     id: user_id,
   });
   const { onMarkRead } = useMarkMentionRead();
+  const isStudentRole =
+    String(role ?? detailUser?.role ?? "STUDENT").toUpperCase() === "STUDENT";
   const { data: ticketMessages = [] } = useTicketMessages({
     enabled: Boolean(user_id),
     withNotification: false,
@@ -434,19 +447,29 @@ export default function StudentLayout({
     return [...infoItems, ...mentionItems];
   }, [informationData, mentionMessages]);
 
+  const displayUserName = useMemo(() => {
+    if (!username) return "Student";
+    const cleaned = username.replace(/^student\s+/i, "").trim();
+    return cleaned || "Student";
+  }, [username]);
+
   const menuItems = useMemo(
     () => [
       {
-        key: "change-password",
-        icon: <LockOutlined />,
-        label: "Change Password",
+        key: "profile",
+        icon: <UserOutlined />,
+        label: "My Profile",
         onClick: () => {
-          router.push("/student/dashboard/change-password");
+          router.push("/student/dashboard/profile");
         },
+      },
+      {
+        type: "divider" as const,
       },
       {
         key: "logout",
         icon: <LogoutOutlined />,
+        danger: true,
         label: "Logout",
         onClick: () => {
           logout();
@@ -514,13 +537,13 @@ export default function StudentLayout({
   }, [activePromos, pathname, user_id]);
 
   useEffect(() => {
-    if (!user_id) return;
+    if (!user_id || pathname !== "/student/dashboard/home") return;
     const completed = window.localStorage.getItem(TOUR_STORAGE_KEY);
     if (!completed) {
       const timer = window.setTimeout(() => setTourOpen(true), 1000);
       return () => window.clearTimeout(timer);
     }
-  }, [user_id]);
+  }, [user_id, pathname]);
 
   const openDrawerInbox = () => {
     setOpenInbox(true);
@@ -1055,77 +1078,35 @@ export default function StudentLayout({
   return (
     <>
       <Layout className={styles.root}>
-        <Header className={styles.header}>
-          <div className={styles.headerInner}>
-            <div className={styles.brandBlock}>
-              <div className={styles.brandLogo}>
+        <Layout className={styles.main}>
+          <Header className={styles.topNavbar}>
+            <div className={styles.brandWrapper}>
+              <button
+                type="button"
+                className={styles.mobileMenuBtn}
+                onClick={() => setOpenMobileNav(true)}
+                aria-label="Menu Navigasi"
+              >
+                <MenuOutlined />
+              </button>
+              <div
+                className={styles.brand}
+                onClick={() => router.push("/student/dashboard/home")}
+              >
                 <Image
                   src="/assets/images/icon.png"
-                  alt="logo"
-                  width={40}
-                  height={40}
+                  alt="OSS Bali"
+                  width={36}
+                  height={36}
+                  className={styles.brandLogoImg}
+                  priority
+                  unoptimized
                 />
-              </div>
-              <div>
-                <Typography.Title level={4} className={styles.brandTitle}>
-                  OSS Bali Student Portal
-                </Typography.Title>
-                <Typography.Text className={styles.brandSubtitle}>
-                  Student Dashboard
-                </Typography.Text>
+                <span className={styles.brandTitle}>OSS Bali Student Portal</span>
               </div>
             </div>
 
-            <div className={styles.headerTools}>
-              <button
-                className={styles.iconButton}
-                type="button"
-                onClick={() => setTourOpen(true)}
-                title="Mulai Tour"
-                aria-label="Mulai Onboarding Tour"
-              >
-                <QuestionCircleOutlined />
-              </button>
-
-              <Badge count={unreadCount} size="small">
-                <button
-                  className={styles.iconButton}
-                  type="button"
-                  onClick={openDrawerInbox}
-                >
-                  <InboxOutlined />
-                </button>
-              </Badge>
-
-              <Dropdown
-                menu={{ items: menuItems }}
-                placement="bottomRight"
-                trigger={["click"]}
-              >
-                <button className={styles.userTrigger} type="button">
-                  <Avatar
-                    size={42}
-                    src={effectiveAvatarUrl || undefined}
-                    className={styles.avatar}
-                  >
-                    {!effectiveAvatarUrl && getInitials(username)}
-                  </Avatar>
-
-                  <div className={styles.userMeta}>
-                    <Typography.Text strong className={styles.userName}>
-                      {username}
-                    </Typography.Text>
-                    <Typography.Text className={styles.userRole}>
-                      {normalizedRole(role || "")}
-                    </Typography.Text>
-                  </div>
-                </button>
-              </Dropdown>
-            </div>
-          </div>
-
-          <div className={styles.headerNav}>
-            <div className={styles.navList} id="student-tour-nav">
+            <nav className={styles.navCenter} id="student-tour-nav">
               {navigationItems.map((item) => {
                 const isActive = pathname === item.key;
 
@@ -1153,15 +1134,80 @@ export default function StudentLayout({
                   </Badge>
                 );
               })}
-            </div>
-          </div>
-        </Header>
+            </nav>
 
-        <Content className={styles.content}>
-          <div className={styles.container}>
-            <div className={styles.pageShell}>{children}</div>
-          </div>
-        </Content>
+            <div className={styles.topNavRight}>
+              {!isStudentRole && (
+                <div
+                  className={styles.searchTrigger}
+                  onClick={() => setOpenGlobalSearch(true)}
+                  role="button"
+                  tabIndex={0}
+                  title="Cari data atau pengumuman (⌘K)"
+                >
+                  <SearchOutlined style={{ color: "#94a3b8", fontSize: 13 }} />
+                  <span className={styles.searchPlaceholder}>
+                    Cari...
+                  </span>
+                  <span className={styles.searchKbd}>⌘K</span>
+                </div>
+              )}
+
+              <button
+                className={styles.navIconBtn}
+                type="button"
+                onClick={() => setTourOpen(true)}
+                title="Mulai Tour Panduan"
+                aria-label="Mulai Onboarding Tour"
+              >
+                <QuestionCircleOutlined />
+              </button>
+
+              <Badge
+                dot={unreadCount > 0}
+                count={unreadCount}
+                size="small"
+                offset={[-2, 2]}
+              >
+                <button
+                  className={styles.navIconBtn}
+                  type="button"
+                  aria-label="Notifications"
+                  title="Notifikasi & Chat"
+                  onClick={openDrawerInbox}
+                >
+                  <BellOutlined />
+                </button>
+              </Badge>
+
+              <div className={styles.verticalDivider} />
+
+              <Dropdown
+                menu={{ items: menuItems }}
+                placement="bottomRight"
+                trigger={["click"]}
+              >
+                <div className={styles.userContainer}>
+                  <Avatar
+                    size={30}
+                    src={effectiveAvatarUrl || undefined}
+                    className={styles.userAvatar}
+                  >
+                    {!effectiveAvatarUrl && getInitials(displayUserName)}
+                  </Avatar>
+                  <span className={styles.userNameLabel}>
+                    {displayUserName}
+                  </span>
+                  <DownOutlined style={{ fontSize: 9, color: "#94a3b8" }} />
+                </div>
+              </Dropdown>
+            </div>
+          </Header>
+
+          <Content style={{ background: "#f8fafc", minHeight: "calc(100vh - 64px)" }}>
+            <div className={styles.mainContent}>{children}</div>
+          </Content>
+        </Layout>
 
         <Footer className={styles.footer}>
           <div className={styles.footerPartners}>
@@ -1170,10 +1216,12 @@ export default function StudentLayout({
               {partners.map((partner) => (
                 <div key={partner.title} className={styles.footerPartnerItem}>
                   <div className={styles.footerPartnerBadge}>
-                    <Image
+                    <AntImage
                       src={partner.src}
                       alt={partner.alt}
+                      width={44}
                       height={44}
+                      style={{ objectFit: "contain" }}
                       preview
                     />
                   </div>
@@ -1193,13 +1241,15 @@ export default function StudentLayout({
         </Footer>
       </Layout>
 
-      <GlobalSearchModal
-        open={openGlobalSearch}
-        onClose={() => setOpenGlobalSearch(false)}
-        items={searchItems}
-        onOpenItem={handleOpenSearchItem}
-        title="Student Search"
-      />
+      {!isStudentRole && (
+        <GlobalSearchModal
+          open={openGlobalSearch}
+          onClose={() => setOpenGlobalSearch(false)}
+          items={searchItems}
+          onOpenItem={handleOpenSearchItem}
+          title="Student Search"
+        />
+      )}
 
       <InboxDrawer
         open={openInbox}
@@ -1209,6 +1259,126 @@ export default function StudentLayout({
         onMarkItemRead={onMarkRead}
         onOpenItem={handleOpenMention}
       />
+
+      <Drawer
+        title={
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <Image
+              src="/assets/images/icon.png"
+              alt="OSS Bali"
+              width={28}
+              height={28}
+              unoptimized
+            />
+            <div>
+              <div
+                style={{
+                  fontWeight: 700,
+                  fontSize: 14,
+                  color: "#0f172a",
+                  lineHeight: 1.2,
+                }}
+              >
+                OSS Bali Portal
+              </div>
+              <div style={{ fontSize: 11, color: "#64748b" }}>
+                Student Dashboard
+              </div>
+            </div>
+          </div>
+        }
+        placement="left"
+        open={openMobileNav}
+        onClose={() => setOpenMobileNav(false)}
+        width={300}
+        styles={{
+          body: {
+            padding: "16px 14px",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "space-between",
+            height: "100%",
+          },
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 4,
+            overflowY: "auto",
+          }}
+        >
+          {navigationItems.map((item) => {
+            const isActive = pathname === item.key;
+            return (
+              <button
+                key={item.key}
+                type="button"
+                className={`${styles.mobileDrawerItem} ${
+                  isActive ? styles.mobileDrawerItemActive : ""
+                }`}
+                onClick={() => navigateFromMobile(item.key)}
+              >
+                <Badge
+                  count={
+                    item.key === "/student/dashboard/promo"
+                      ? unseenPromoCount
+                      : 0
+                  }
+                  size="small"
+                  offset={[4, -4]}
+                >
+                  <span style={{ fontSize: 16 }}>{item.icon}</span>
+                </Badge>
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className={styles.mobileDrawerFooter}>
+          <div className={styles.mobileDrawerUser}>
+            <Avatar
+              size={36}
+              src={userProfilePic || undefined}
+              className={styles.userAvatar}
+            >
+              {!userProfilePic && getInitials(displayUserName)}
+            </Avatar>
+            <div className={styles.mobileDrawerUserText}>
+              <span className={styles.mobileDrawerUserName}>
+                {displayUserName}
+              </span>
+              <span className={styles.mobileDrawerUserRole}>
+                {role || "Student"}
+              </span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            className={styles.mobileDrawerItem}
+            onClick={() => navigateFromMobile("/student/dashboard/profile")}
+          >
+            <UserOutlined style={{ fontSize: 15 }} />
+            <span>My Profile</span>
+          </button>
+
+          <button
+            type="button"
+            className={styles.mobileDrawerLogoutBtn}
+            onClick={() => {
+              setOpenMobileNav(false);
+              logout();
+              router.push("/login");
+            }}
+          >
+            <LogoutOutlined style={{ fontSize: 14 }} />
+            <span>Logout</span>
+          </button>
+        </div>
+      </Drawer>
 
       <Modal
         title="Surat Pernyataan"

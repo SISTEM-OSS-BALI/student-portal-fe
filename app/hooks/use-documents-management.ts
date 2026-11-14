@@ -8,38 +8,75 @@ import {
   DocumentPayloadUpdateModel,
   TranslationNeededValue,
 } from "../models/documents-management";
+import {
+  normalizeDocumentLabel,
+  normalizeDocumentCode,
+  getStandardDocumentRequired,
+  getStandardDocumentInstructions,
+} from "../utils/document-standards";
 
 const normalizeTranslationNeeded = (value?: string): TranslationNeededValue =>
   value?.toLowerCase() === "yes" ? "yes" : "no";
 
-const isApiDocument = (data: DocumentDataModel): data is DocumentDataModel =>
-  "internal_code" in data || "auto_rename_pattern" in data;
+const normalizeCategory = (category?: string, standardLabel?: string): string => {
+  if (category) {
+    const cat = category.toLowerCase().trim();
+    if (cat.includes("ident") || cat.includes("pribadi")) return "identity";
+    if (cat.includes("akademik") || cat.includes("edukasi") || cat.includes("academic")) return "academic";
+    if (cat.includes("finan") || cat.includes("uang") || cat.includes("finance")) return "finance";
+    if (cat.includes("dukung") || cat.includes("lain") || cat.includes("support") || cat.includes("other")) return "other";
+  }
+  if (standardLabel) {
+    const lbl = standardLabel.toLowerCase();
+    if (lbl.includes("passport") || lbl.includes("id card") || lbl.includes("birth certificate") || lbl.includes("family card") || lbl.includes("photo") || lbl.includes("sign") || lbl.includes("npwp")) {
+      if (lbl.startsWith("sponsor")) return "finance";
+      return "identity";
+    }
+    if (lbl.includes("certificate") || lbl.includes("ielts") || lbl.includes("det") || lbl.includes("transcript")) {
+      return "academic";
+    }
+    if (lbl.includes("sponsor") || lbl.includes("business") || lbl.includes("bank") || lbl.includes("asset") || lbl.includes("siup") || lbl.includes("nib")) {
+      return "finance";
+    }
+  }
+  return "other";
+};
 
 const normalizeDocument = (data: DocumentDataModel): DocumentDataModel => {
-  if (isApiDocument(data)) {
-    return {
-      id: data.id,
-      label: data.label,
-      internal_code:
-        (data as DocumentDataModel).internal_code ?? data.internal_code,
-      file_type: (data as DocumentDataModel).file_type ?? data.file_type,
-      category: data.category,
-      example_url: (data as DocumentDataModel).example_url ?? data.example_url ?? null,
-      translation_needed: normalizeTranslationNeeded(
-        (data as DocumentDataModel).translation_needed ??
-          data.translation_needed,
-      ),
-      required: data.required,
-      auto_rename_pattern:
-        (data as DocumentDataModel).auto_rename_pattern ??
-        data.auto_rename_pattern,
-      notes: data.notes ?? null,
-      created_at: (data as DocumentDataModel).created_at ?? data.created_at,
-      updated_at: (data as DocumentDataModel).updated_at ?? data.updated_at,
-    };
-  }
+  const raw = data as unknown as Record<string, unknown>;
 
-  return data;
+  // Penamaan dan konfigurasi dokumen bersifat adjustable (bebas diatur pengguna di master data)
+  const userLabel = String(raw.label ?? data.label ?? "").trim();
+  const userCode = String(raw.internal_code ?? data.internal_code ?? "").trim();
+  const userCategory = String(raw.category ?? data.category ?? "").trim().toLowerCase();
+  const userNotes = (raw.notes as string | null) ?? data.notes ?? null;
+  const userRequired =
+    data.required !== undefined && data.required !== null
+      ? Boolean(data.required)
+      : undefined;
+
+  const fallbackLabel = userLabel || normalizeDocumentLabel(data);
+  const fallbackCode = userCode || normalizeDocumentCode(data);
+
+  return {
+    id: data.id,
+    label: userLabel || fallbackLabel,
+    internal_code: userCode || fallbackCode || ((raw.internal_code as string) ?? data.internal_code),
+    file_type: (raw.file_type as string) ?? data.file_type ?? "pdf",
+    category: userCategory || normalizeCategory(undefined, fallbackLabel),
+    example_url: (raw.example_url as string | null) ?? data.example_url ?? null,
+    translation_needed: normalizeTranslationNeeded(
+      (raw.translation_needed as string) ?? data.translation_needed,
+    ),
+    required: userRequired ?? getStandardDocumentRequired(data),
+    auto_rename_pattern:
+      (raw.auto_rename_pattern as string) ?? data.auto_rename_pattern,
+    notes: userNotes,
+    ocr_keywords: (raw.ocr_keywords as string | null) ?? data.ocr_keywords ?? null,
+    ocr_pattern: (raw.ocr_pattern as string | null) ?? data.ocr_pattern ?? null,
+    created_at: (raw.created_at as string) ?? data.created_at,
+    updated_at: (raw.updated_at as string) ?? data.updated_at,
+  };
 };
 
 const toApiTranslationNeeded = (
@@ -61,6 +98,8 @@ const toApiCreatePayload = (payload: DocumentPayloadCreateModel) =>
         required: payload.required,
         auto_rename_pattern: payload.auto_rename_pattern ?? "",
         notes: payload.notes ?? "",
+        ocr_keywords: payload.ocr_keywords ?? null,
+        ocr_pattern: payload.ocr_pattern ?? null,
       }
     : payload;
 
@@ -80,6 +119,10 @@ const toApiUpdatePayload = (payload: DocumentPayloadUpdateModel) => {
   if (payload.auto_rename_pattern !== undefined)
     out.auto_rename_pattern = payload.auto_rename_pattern;
   if (payload.notes !== undefined) out.notes = payload.notes ?? "";
+  if (payload.ocr_keywords !== undefined)
+    out.ocr_keywords = payload.ocr_keywords ?? null;
+  if (payload.ocr_pattern !== undefined)
+    out.ocr_pattern = payload.ocr_pattern ?? null;
   return out;
 };
 

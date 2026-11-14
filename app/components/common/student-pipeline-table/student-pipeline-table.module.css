@@ -1,0 +1,233 @@
+.tableWrapper {
+  width: 100%;
+  overflow-x: auto;
+  border-radius: 10px;
+}
+
+.tableWrapper:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.pipelineTable {
+  width: 100%;
+  min-width: 900px;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.headerRow {
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.thCell {
+  padding: 10px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.thCellFirst {
+  padding: 10px 12px;
+  border-top-left-radius: 8px;
+  border-bottom-left-radius: 8px;
+}
+
+.thCellLast {
+  padding: 10px 12px;
+  border-top-right-radius: 8px;
+  border-bottom-right-radius: 8px;
+}
+
+/* Explicit column width allocations to guarantee cross-role consistency */
+.colStudent {
+  width: 28%;
+  min-width: 220px;
+}
+
+.colCountry {
+  width: 8%;
+  min-width: 70px;
+}
+
+.colVisa {
+  width: 20%;
+  min-width: 160px;
+}
+
+.colConsultant {
+  width: 13%;
+  min-width: 110px;
+}
+
+.colStep {
+  width: 12%;
+  min-width: 110px;
+}
+
+.colStatus {
+  width: 10%;
+  min-width: 100px;
+}
+
+.colUpdate {
+  width: 9%;
+  min-width: 90px;
+}
+
+.tableRow {
+  border-top: 1px solid #f1f5f9;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.tableRow:hover {
+  background-color: #f8fafc;
+}
+
+.tableRow:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: -2px;
+  background-color: #f8fafc;
+}
+
+.cell {
+  padding: 11px 10px;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.cellFirst {
+  padding: 11px 12px;
+}
+
+.cellLast {
+  padding: 11px 12px;
+}
+
+/* Student Identity */
+.studentWrapper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.studentAvatar {
+  background-color: #eff6ff !important;
+  color: #1b3d6d !important;
+  border: 1px solid #bfdbfe !important;
+  border-radius: 8px !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  flex-shrink: 0;
+}
+
+.studentInfo {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.studentName {
+  color: #0f172a;
+  font-size: 13px;
+  line-height: 1.3;
+  display: block;
+}
+
+.studentContact {
+  font-size: 11px;
+  color: #64748b;
+  line-height: 1.2;
+}
+
+/* Country Display */
+.countryWrapper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.isoBadge {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  border-width: 1px;
+  border-style: solid;
+  display: inline-block;
+  line-height: 1.2;
+  flex-shrink: 0;
+}
+
+.countryName {
+  font-size: 12px;
+  color: #334155;
+  font-weight: 500;
+}
+
+/* Visa Tag */
+.visaTag {
+  margin: 0 !important;
+  border-radius: 6px !important;
+  font-size: 10.5px !important;
+  font-weight: 500 !important;
+  color: #475569 !important;
+  background: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+  white-space: nowrap;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Consultant */
+.consultantText {
+  font-size: 12px;
+  color: #334155;
+  font-weight: 600;
+}
+
+/* Step / Tahapan Tag */
+.stepTag {
+  margin: 0 !important;
+  border-radius: 999px !important;
+  padding: 2px 8px !important;
+  font-size: 10.5px !important;
+  font-weight: 600 !important;
+  border-color: transparent !important;
+  white-space: nowrap;
+}
+
+/* Status Tag */
+.statusTag {
+  margin: 0 !important;
+  border-radius: 999px !important;
+  padding: 2px 8px !important;
+  font-size: 10.5px !important;
+  font-weight: 600 !important;
+  white-space: nowrap;
+}
+
+/* Date */
+.updateText {
+  font-size: 11.5px;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+/* Empty Container */
+.emptyWrapper {
+  padding: 32px 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+}

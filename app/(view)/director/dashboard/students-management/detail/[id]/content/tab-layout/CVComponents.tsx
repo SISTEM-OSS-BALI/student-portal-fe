@@ -1,19 +1,28 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   App,
   Button,
   Card,
   Col,
   Divider,
+  Flex,
   Row,
+  Segmented,
   Space,
   Tabs,
   Tag,
   Typography,
 } from "antd";
-import { EyeOutlined } from "@ant-design/icons";
+import {
+  CheckOutlined,
+  ClockCircleOutlined,
+  CloseOutlined,
+  EyeOutlined,
+  FileTextOutlined,
+  SolutionOutlined,
+} from "@ant-design/icons";
 import { useAnswerApprovals } from "@/app/hooks/use-answer-approvals";
 import { useAnswerQuestions } from "@/app/hooks/use-answer-questions";
 import { useQuestionBases } from "@/app/hooks/use-question-bases";
@@ -26,6 +35,7 @@ import type {
 import { useGeneratedCvAiDocuments } from "@/app/hooks/use-generated-cv-ai-documents";
 import { useUser } from "@/app/hooks/use-users";
 import { buildFilePreviewUrl } from "@/app/utils/file-preview";
+import styles from "../detail.module.css";
 
 type CVComponentsProps = {
   student_id: string;
@@ -61,6 +71,7 @@ const parseDate = (value: unknown) => {
 
 export default function CVComponents({ student_id }: CVComponentsProps) {
   App.useApp();
+  const [mobileCvTab, setMobileCvTab] = useState<"data" | "cv">("data");
 
   const { data: studentData } = useUser({ id: student_id });
   const { data: questionBases } = useQuestionBases({});
@@ -279,8 +290,61 @@ export default function CVComponents({ student_id }: CVComponentsProps) {
   );
 
   return (
-    <Row gutter={[16, 16]}>
-      <Col span={16}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 16, width: "100%", maxWidth: "100%", minWidth: 0 }}>
+      {/* Standardized Section Header Card */}
+      <Card
+        className={styles.sectionHeaderCard}
+        styles={{ body: { padding: 0 } }}
+      >
+        <Flex align="center" gap={12} style={{ minWidth: 0, width: "100%" }}>
+          <div className={styles.sectionHeaderIcon}>
+            <SolutionOutlined />
+          </div>
+          <div style={{ minWidth: 0, flex: 1, overflow: "hidden" }}>
+            <div className={styles.sectionHeaderTitle}>
+              Data Diri & CV Mahasiswa
+            </div>
+            <div className={styles.sectionHeaderSubtitle}>
+              Kelengkapan profil dan validasi berkas CV
+            </div>
+          </div>
+        </Flex>
+      </Card>
+
+      {/* Mobile Segmented Toggle */}
+      <div className={styles.mobileCvSegmentedRow}>
+        <div className={styles.mobileCvSegmentedCard}>
+          <Segmented
+            block
+            size="middle"
+            value={mobileCvTab}
+            onChange={(val) => setMobileCvTab(val as "data" | "cv")}
+            options={[
+              {
+                label: "Data Kuesioner",
+                value: "data",
+                icon: <FileTextOutlined />,
+              },
+              {
+                label: "Status CV",
+                value: "cv",
+                icon: <SolutionOutlined />,
+              },
+            ]}
+          />
+        </div>
+      </div>
+
+      <Row gutter={[16, 16]}>
+        <Col
+          xs={24}
+          xl={16}
+          className={
+            mobileCvTab === "cv"
+              ? styles.cvDataColHiddenMobile
+              : styles.cvDataCol
+          }
+        >
         <Card
           bodyStyle={{ padding: 0 }}
           style={{
@@ -304,6 +368,53 @@ export default function CVComponents({ student_id }: CVComponentsProps) {
               ),
               children: (
                 <div style={{ padding: 16 }}>
+                  {/* Section Toolbar */}
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      marginBottom: 16,
+                      padding: "10px 16px",
+                      background: "#f8fafc",
+                      borderRadius: 12,
+                      border: "1px solid #e2e8f0",
+                    }}
+                  >
+                    <Space size={10} align="center">
+                      <Typography.Text
+                        strong
+                        style={{ fontSize: 14, color: "#1e293b" }}
+                      >
+                        {tab.label}
+                      </Typography.Text>
+                      <Tag
+                        color={
+                          tab.items.every(
+                            (it) =>
+                              approvalMap.get(it.id)?.status === "approved",
+                          ) && tab.items.length > 0
+                            ? "success"
+                            : "default"
+                        }
+                        style={{
+                          borderRadius: 999,
+                          fontSize: 11,
+                          fontWeight: 600,
+                          margin: 0,
+                        }}
+                      >
+                        {
+                          tab.items.filter(
+                            (it) =>
+                              approvalMap.get(it.id)?.status === "approved",
+                          ).length
+                        }{" "}
+                        / {tab.items.length} Disetujui
+                      </Tag>
+                    </Space>
+                  </div>
+
                   {tab.items.length === 0 ? (
                     <Typography.Text type="secondary">
                       Belum ada jawaban pada section ini.
@@ -317,6 +428,8 @@ export default function CVComponents({ student_id }: CVComponentsProps) {
                         const status = (
                           approvalMap.get(item.id)?.status ?? "pending"
                         ).toLowerCase();
+                        const isApproved = status === "approved";
+                        const isRejected = status === "rejected";
                         const currentNote =
                           approvalMap.get(item.id)?.note ?? "";
 
@@ -326,53 +439,170 @@ export default function CVComponents({ student_id }: CVComponentsProps) {
                             xs={24}
                             md={isLongAnswer ? 24 : 12}
                           >
-                            <Space
-                              direction="vertical"
-                              size={8}
-                              style={{ width: "100%" }}
+                            <div
+                              style={{
+                                display: "flex",
+                                flexDirection: "column",
+                                height: "100%",
+                                padding: "14px 16px",
+                                borderRadius: 12,
+                                border: `1px solid ${
+                                  isApproved
+                                    ? "#bbf7d0"
+                                    : isRejected
+                                      ? "#fecaca"
+                                      : "#e2e8f0"
+                                }`,
+                                background: isApproved
+                                  ? "#fcfdfc"
+                                  : isRejected
+                                    ? "#fffdfd"
+                                    : "#ffffff",
+                                boxShadow:
+                                  "0 1px 3px rgba(15, 23, 42, 0.04)",
+                              }}
                             >
-                              <Typography.Text
-                                strong
-                                style={{ fontSize: 16, color: "#1f2937" }}
-                              >
-                                {item.question}
-                              </Typography.Text>
-
+                              {/* Card Header: Pertanyaan & Status Tag */}
                               <div
                                 style={{
-                                  minHeight: isLongAnswer ? 92 : 48,
-                                  padding: "10px 14px",
-                                  borderRadius: 12,
-                                  border: "1px solid #d6dae2",
-                                  background: "#f8fafc",
-                                  fontSize: 17,
-                                  color: "#1f2937",
-                                  lineHeight: 1.4,
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "flex-start",
+                                  gap: 12,
+                                  marginBottom: 10,
                                 }}
                               >
-                                  {item.answer}
+                                <Typography.Text
+                                  strong
+                                  style={{
+                                    fontSize: 13,
+                                    color: "#334155",
+                                    lineHeight: 1.4,
+                                    flex: 1,
+                                  }}
+                                >
+                                  {item.question}
+                                </Typography.Text>
+
+                                {isApproved ? (
+                                  <Tag
+                                    color="success"
+                                    style={{
+                                      margin: 0,
+                                      borderRadius: 999,
+                                      fontSize: 11,
+                                      fontWeight: 600,
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: 4,
+                                      padding: "2px 8px",
+                                      flexShrink: 0,
+                                    }}
+                                  >
+                                    <CheckOutlined style={{ fontSize: 10 }} />{" "}
+                                    Disetujui
+                                  </Tag>
+                                ) : isRejected ? (
+                                  <Tag
+                                    color="error"
+                                    style={{
+                                      margin: 0,
+                                      borderRadius: 999,
+                                      fontSize: 11,
+                                      fontWeight: 600,
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: 4,
+                                      padding: "2px 8px",
+                                      flexShrink: 0,
+                                    }}
+                                  >
+                                    <CloseOutlined style={{ fontSize: 10 }} />{" "}
+                                    Perlu Revisi
+                                  </Tag>
+                                ) : (
+                                  <Tag
+                                    style={{
+                                      margin: 0,
+                                      borderRadius: 999,
+                                      fontSize: 11,
+                                      fontWeight: 500,
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: 4,
+                                      padding: "2px 8px",
+                                      color: "#64748b",
+                                      background: "#f1f5f9",
+                                      borderColor: "#e2e8f0",
+                                      flexShrink: 0,
+                                    }}
+                                  >
+                                    <ClockCircleOutlined
+                                      style={{ fontSize: 10 }}
+                                    />{" "}
+                                    Menunggu
+                                  </Tag>
+                                )}
                               </div>
 
-                              <Space align="start" size={8}>
-                                <Tag
-                                  color={
-                                    status === "approved"
-                                      ? "green"
-                                      : status === "rejected"
-                                        ? "red"
-                                        : "gold"
-                                  }
-                                  style={{ marginTop: 6 }}
+                              {/* Answer Text Content */}
+                              <div
+                                style={{
+                                  flex: 1,
+                                  minHeight: isLongAnswer ? 72 : 40,
+                                  padding: "8px 12px",
+                                  borderRadius: 8,
+                                  border: `1px solid ${
+                                    isApproved
+                                      ? "#dcfce7"
+                                      : isRejected
+                                        ? "#fee2e2"
+                                        : "#f1f5f9"
+                                  }`,
+                                  background: isApproved
+                                    ? "#f0fdf4"
+                                    : isRejected
+                                      ? "#fef2f2"
+                                      : "#f8fafc",
+                                  fontSize: 14,
+                                  color: "#0f172a",
+                                  lineHeight: 1.5,
+                                  wordBreak: "break-word",
+                                }}
+                              >
+                                {item.answer || (
+                                  <span style={{ color: "#94a3b8" }}>
+                                    -
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Note / Revision Display */}
+                              {currentNote && (
+                                <div
+                                  style={{
+                                    marginTop: 10,
+                                    padding: "6px 10px",
+                                    borderRadius: 6,
+                                    background: isRejected
+                                      ? "#fef2f2"
+                                      : "#f8fafc",
+                                    border: `1px solid ${
+                                      isRejected ? "#fecaca" : "#e2e8f0"
+                                    }`,
+                                    fontSize: 12,
+                                    color: isRejected
+                                      ? "#991b1b"
+                                      : "#475569",
+                                  }}
                                 >
-                                  {status.toUpperCase()}
-                                </Tag>
-                                {currentNote ? (
-                                  <Typography.Text type="secondary">
-                                    {currentNote}
-                                  </Typography.Text>
-                                ) : null}
-                              </Space>
-                            </Space>
+                                  <span style={{ fontWeight: 600 }}>
+                                    Catatan:
+                                  </span>{" "}
+                                  {currentNote}
+                                </div>
+                              )}
+                            </div>
                           </Col>
                         );
                       })}
@@ -385,33 +615,44 @@ export default function CVComponents({ student_id }: CVComponentsProps) {
         </Card>
       </Col>
 
-      <Col span={8}>
+      <Col
+        xs={24}
+        xl={8}
+        className={
+          mobileCvTab === "data"
+            ? styles.cvPreviewColHiddenMobile
+            : styles.cvPreviewCol
+        }
+      >
         <Card
           style={{ borderRadius: 18, borderColor: "#d8dee9" }}
-          bodyStyle={{ padding: 24 }}
+          bodyStyle={{ padding: 20 }}
         >
-          <Space direction="vertical" size={16} style={{ width: "100%" }}>
+          <Space direction="vertical" size={14} style={{ width: "100%" }}>
             <Space direction="vertical" size={2}>
-              <Typography.Title level={3} style={{ margin: 0 }}>
+              <Typography.Text strong style={{ fontSize: 14, color: "#0f172a", display: "block" }}>
                 CV Status & Preview
-              </Typography.Title>
-              <Typography.Text type="secondary">Current Status</Typography.Text>
+              </Typography.Text>
+              <Typography.Text type="secondary" style={{ fontSize: 11.5, color: "#64748b" }}>
+                Current Status
+              </Typography.Text>
             </Space>
 
             <Tag
               color={cvStatus.color}
               style={{
                 width: "fit-content",
-                padding: "4px 14px",
-                borderRadius: 999,
+                padding: "2px 10px",
+                borderRadius: 6,
                 fontWeight: 600,
+                fontSize: 11.5,
               }}
             >
               {cvStatus.label}
             </Tag>
 
             {!isReadyToGenerateCv && approvalProgress.total > 0 && (
-              <Typography.Text type="secondary">
+              <Typography.Text type="secondary" style={{ fontSize: 12, lineHeight: 1.5 }}>
                 {approvalProgress.rejectedCount > 0
                   ? "Masih ada jawaban yang ditolak. Semua jawaban harus approved sebelum CV bisa digenerate."
                   : `${approvalProgress.pendingCount} jawaban masih menunggu approval. Generate CV akan aktif setelah semua approved.`}
@@ -512,7 +753,7 @@ export default function CVComponents({ student_id }: CVComponentsProps) {
                   target={directorPreviewUrl ? "_blank" : undefined}
                   style={{ borderRadius: 999, height: 44 }}
                 >
-                  Buka CV PDF
+                  Lihat CV PDF
                 </Button>
               </Space>
             ) : (
@@ -525,7 +766,7 @@ export default function CVComponents({ student_id }: CVComponentsProps) {
                   background: "#f8fafc",
                 }}
               >
-                <Typography.Text type="secondary">
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                   CV PDF belum tersedia. File akan tampil di sini setelah proses
                   generate CV selesai.
                 </Typography.Text>
@@ -535,20 +776,20 @@ export default function CVComponents({ student_id }: CVComponentsProps) {
             <div
               style={{
                 marginTop: 4,
-                padding: "14px 14px",
-                borderRadius: 14,
+                padding: "12px 14px",
+                borderRadius: 12,
                 border: "1px solid #bfdbfe",
                 background: "#eff6ff",
               }}
             >
-              <Typography.Text style={{ color: "#1d4ed8", lineHeight: 1.5 }}>
-                Director hanya melihat hasil CV yang sudah digenerate dalam
-                bentuk PDF untuk kebutuhan review akhir.
+              <Typography.Text style={{ color: "#1d4ed8", fontSize: 12, lineHeight: 1.5 }}>
+                Hasil CV yang sudah digenerate dalam bentuk PDF untuk kebutuhan peninjauan berkas.
               </Typography.Text>
             </div>
           </Space>
         </Card>
       </Col>
     </Row>
+    </div>
   );
 }

@@ -7,7 +7,7 @@ export default function ConsultantDashboardPage() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace("/consultant/dashboard/students-management");
+    router.replace("/consultant/dashboard/home");
   }, [router]);
 
   return null;

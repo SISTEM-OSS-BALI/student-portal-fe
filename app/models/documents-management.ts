@@ -11,6 +11,8 @@ export interface DocumentDataModel {
   required: boolean;
   auto_rename_pattern: string;
   notes?: string | null;
+  ocr_keywords?: string | null;
+  ocr_pattern?: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -25,6 +27,8 @@ export interface DocumentPayloadCreateModel {
   required: boolean;
   auto_rename_pattern: string;
   notes?: string;
+  ocr_keywords?: string | null;
+  ocr_pattern?: string | null;
 }
 
 export interface DocumentPayloadUpdateModel {
@@ -37,6 +41,8 @@ export interface DocumentPayloadUpdateModel {
   required?: boolean;
   auto_rename_pattern?: string;
   notes?: string | null;
+  ocr_keywords?: string | null;
+  ocr_pattern?: string | null;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type

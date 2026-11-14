@@ -2,6 +2,7 @@ import type { StudentFormValues, UserDataModel } from "@/app/models/user";
 import { Modal } from "antd";
 import FormStudentComponent from "./FormStudentComponent";
 import { StagesManagementDataModel } from "@/app/models/stages-management";
+import styles from "./form-student.module.css";
 
 interface ModalStudentComponentProps {
   open: boolean;
@@ -34,6 +35,8 @@ export default function ModalStudentComponent({
       title={selectedStudent ? "Edit Student" : "Tambah Student"}
       destroyOnClose
       width={760}
+      className={styles.studentModal}
+      style={{ maxWidth: "calc(100vw - 24px)", top: 20 }}
     >
       <FormStudentComponent
         onSubmit={onSubmit}

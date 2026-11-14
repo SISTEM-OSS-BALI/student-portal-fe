@@ -15,12 +15,15 @@ const queryKey = "answer-approvals";
 export const useAnswerApprovals = ({
   queryString,
   enabled = true,
+  withNotification = true,
 }: {
   queryString?: string;
   enabled?: boolean;
+  withNotification?: boolean;
 } = {}) => {
   const queryClient = useQueryClient();
   const notify = useMainNotification();
+  const maybeNotify = withNotification ? notify : () => {};
 
   const { data, isLoading: fetchLoading } = useQuery({
     queryKey: [queryKey, queryString],
@@ -43,10 +46,10 @@ export const useAnswerApprovals = ({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [queryKey] });
-      notify({ type: "success", entity, action: "created" });
+      maybeNotify({ type: "success", entity, action: "created" });
     },
     onError: () => {
-      notify({ type: "error", entity, action: "created" });
+      maybeNotify({ type: "error", entity, action: "created" });
     },
   });
 
@@ -64,10 +67,10 @@ export const useAnswerApprovals = ({
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: [queryKey] });
       queryClient.invalidateQueries({ queryKey: [entity, variables.id] });
-      notify({ type: "success", entity, action: "updated" });
+      maybeNotify({ type: "success", entity, action: "updated" });
     },
     onError: () => {
-      notify({ type: "error", entity, action: "updated" });
+      maybeNotify({ type: "error", entity, action: "updated" });
     },
   });
 
@@ -76,10 +79,10 @@ export const useAnswerApprovals = ({
       api.delete(`${answerApprovalsUrl}/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [queryKey] });
-      notify({ type: "success", entity, action: "deleted" });
+      maybeNotify({ type: "success", entity, action: "deleted" });
     },
     onError: () => {
-      notify({ type: "error", entity, action: "deleted" });
+      maybeNotify({ type: "error", entity, action: "deleted" });
     },
   });
 

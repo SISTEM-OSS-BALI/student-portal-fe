@@ -7,18 +7,26 @@ import {
   Card,
   Col,
   Divider,
+  Flex,
   Input,
   Row,
+  Segmented,
   Space,
+  Spin,
   Tabs,
   Tag,
+  Tooltip,
   Typography,
 } from "antd";
 import {
   CheckOutlined,
+  ClockCircleOutlined,
   CloseOutlined,
   EyeOutlined,
   FileTextOutlined,
+  MessageOutlined,
+  SaveOutlined,
+  SolutionOutlined,
 } from "@ant-design/icons";
 import { useAnswerApprovals } from "@/app/hooks/use-answer-approvals";
 import { useAnswerQuestions } from "@/app/hooks/use-answer-questions";
@@ -36,6 +44,11 @@ import { useDocumentUpload } from "@/app/hooks/use-document-uploads";
 import { useGeneratedCvAiDocuments } from "@/app/hooks/use-generated-cv-ai-documents";
 import { useUser } from "@/app/hooks/use-users";
 import { useRouter } from "next/navigation";
+import CvPreview from "../../cv/editor/CvPreview";
+import { extractStudentCvData } from "../../cv/editor/utils";
+import { resolveOptionIdOrValueToLabel } from "@/app/utils/personal-info-submissions";
+import type { CvData, CvTemplateId } from "../../cv/editor/types";
+import styles from "../detail.module.css";
 
 type CVComponentsProps = {
   student_id: string;
@@ -110,11 +123,14 @@ const formatAnswerValue = (
   }
   if (answer.selected_option_ids?.length) {
     const labels = answer.selected_option_ids.map(
-      (id) => optionLabelMap.get(id) ?? id,
+      (id) =>
+        optionLabelMap.get(id) ||
+        resolveOptionIdOrValueToLabel(id) ||
+        id,
     );
     return labels.join(", ");
   }
-  return rawText || "-";
+  return resolveOptionIdOrValueToLabel(rawText) || "-";
 };
 
 const parseDate = (value: unknown) => {
@@ -219,14 +235,21 @@ const arrayBufferToBase64 = (buffer: ArrayBuffer) => {
 export default function CVComponents({ student_id }: CVComponentsProps) {
   const router = useRouter();
   const { notification } = App.useApp();
-  const { user_id } = useAuth();
+  const { user_id, role } = useAuth();
+  const normalizedRole = (role ?? "").toLowerCase();
+  const isConsultant = normalizedRole === "consultant";
+  const isDirector = normalizedRole === "director";
+  const canApprove = !isConsultant && !isDirector;
 
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
+  const [activeNoteFieldId, setActiveNoteFieldId] = useState<string | null>(null);
+  const [batchApprovingBaseId, setBatchApprovingBaseId] = useState<string | null>(null);
   const [savingApprovalId, setSavingApprovalId] = useState<string | null>(null);
   const [savingApprovalStatus, setSavingApprovalStatus] = useState<
     string | null
   >(null);
   const [manualCreatingCv, setManualCreatingCv] = useState(false);
+  const [mobileCvTab, setMobileCvTab] = useState<"data" | "cv">("data");
 
   const [generatedCvUrl, setGeneratedCvUrl] = useState<string | null>(null);
   const [generatedCvPath, setGeneratedCvPath] = useState<string | null>(null);
@@ -254,6 +277,7 @@ export default function CVComponents({ student_id }: CVComponentsProps) {
     useAnswerApprovals({
       queryString: student_id ? `student_id=${student_id}` : undefined,
       enabled: Boolean(student_id),
+      withNotification: false,
     });
   useEffect(() => {
     return () => {
@@ -262,6 +286,34 @@ export default function CVComponents({ student_id }: CVComponentsProps) {
       }
     };
   }, []);
+
+  const extractedCv = useMemo(() => {
+    if (!studentData) return null;
+    return extractStudentCvData(
+      studentData,
+      answerQuestions ?? [],
+      questions ?? [],
+      questionBases ?? [],
+    );
+  }, [studentData, answerQuestions, questions, questionBases]);
+
+  const [liveCvData, setLiveCvData] = useState<CvData | null>(null);
+
+  useEffect(() => {
+    if (extractedCv) {
+      setLiveCvData((prev) => {
+        if (!prev) return extractedCv;
+        return {
+          ...extractedCv,
+          template_id: prev.template_id ?? extractedCv.template_id,
+        };
+      });
+    }
+  }, [extractedCv]);
+
+  const handleTemplateChange = (templateId: CvTemplateId) => {
+    setLiveCvData((prev) => (prev ? { ...prev, template_id: templateId } : null));
+  };
 
   const questionMap = useMemo(() => {
     const map = new Map<string, QuestionDataModel>();
@@ -513,6 +565,9 @@ export default function CVComponents({ student_id }: CVComponentsProps) {
           status,
           note: noteValue ? noteValue : undefined,
         });
+        if (status === "rejected") {
+          setActiveNoteFieldId(answerId);
+        }
       } catch (error) {
         notification.error({
           message: "Gagal menyimpan approval",
@@ -522,6 +577,80 @@ export default function CVComponents({ student_id }: CVComponentsProps) {
       } finally {
         setSavingApprovalId(null);
         setSavingApprovalStatus(null);
+      }
+    },
+    [
+      approvalMap,
+      noteDrafts,
+      notification,
+      onCreateApproval,
+      student_id,
+      user_id,
+    ],
+  );
+
+  const handleApproveAllInSection = useCallback(
+    async (
+      items: Array<{
+        id: string;
+        question: string;
+        answer: string;
+        inputType?: string;
+      }>,
+      baseId: string,
+    ) => {
+      if (!user_id) {
+        notification.error({
+          message: "Reviewer tidak ditemukan",
+          description: "Silakan login ulang sebagai admission.",
+        });
+        return;
+      }
+
+      const pendingOrRejectedItems = items.filter((item) => {
+        const status = (
+          approvalMap.get(item.id)?.status ?? "pending"
+        ).toLowerCase();
+        return status !== "approved";
+      });
+
+      if (pendingOrRejectedItems.length === 0) {
+        notification.info({
+          message: "Semua data sudah disetujui",
+          description:
+            "Seluruh jawaban pada bagian ini sudah berstatus disetujui.",
+        });
+        return;
+      }
+
+      setBatchApprovingBaseId(baseId);
+      try {
+        await Promise.all(
+          pendingOrRejectedItems.map((item) =>
+            onCreateApproval({
+              answer_id: item.id,
+              student_id,
+              reviewer_id: user_id,
+              status: "approved",
+              note:
+                noteDrafts[item.id] ||
+                approvalMap.get(item.id)?.note ||
+                undefined,
+            }),
+          ),
+        );
+        notification.success({
+          message: "Persetujuan Berhasil",
+          description: `${pendingOrRejectedItems.length} jawaban pada bagian ini berhasil disetujui.`,
+        });
+      } catch (error) {
+        notification.error({
+          message: "Gagal menyetujui seluruh data",
+          description:
+            error instanceof Error ? error.message : "Coba lagi beberapa saat.",
+        });
+      } finally {
+        setBatchApprovingBaseId(null);
       }
     },
     [
@@ -755,58 +884,6 @@ export default function CVComponents({ student_id }: CVComponentsProps) {
     student_id,
     uploadDocument,
   ]);
-  const handlePreviewCv = useCallback(() => {
-    if (!previewCvUrl) {
-      notification.info(
-        generatedCvContent
-          ? {
-              message: "Dokumen Word belum tersedia",
-              description:
-                "Hasil generate teks sudah ada di panel, tetapi file Word belum tersedia.",
-            }
-          : {
-              message: "Belum ada dokumen Word",
-              description: "Silakan generate CV terlebih dahulu.",
-            },
-      );
-      return;
-    }
-
-    if (!previewCvPath && previewCvUrl.startsWith("blob:")) {
-      window.open(previewCvUrl, "_blank", "noopener,noreferrer");
-      return;
-    }
-
-    if (!onlyOfficeEnabled) {
-      notification.info({
-        message: "OnlyOffice belum dikonfigurasi",
-        description:
-          "Preview edit di browser akan aktif setelah NEXT_PUBLIC_ONLYOFFICE_URL diset.",
-      });
-      return;
-    }
-
-    if (!previewCvPath) {
-      notification.warning({
-        message: "Dokumen belum siap diedit",
-        description:
-          "File aktif belum tersimpan ke Supabase sehingga editor browser belum bisa dibuka.",
-      });
-      return;
-    }
-
-    router.push(
-      `/admission/dashboard/students-management/detail/${student_id}/cv/editor`,
-    );
-  }, [
-    generatedCvContent,
-    notification,
-    onlyOfficeEnabled,
-    previewCvPath,
-    previewCvUrl,
-    router,
-    student_id,
-  ]);
 
   const handleSubmitForReview = useCallback(() => {
     if (!hasGeneratedCv) {
@@ -831,15 +908,355 @@ export default function CVComponents({ student_id }: CVComponentsProps) {
     });
   }, [cvStatus.label, hasGeneratedCv, notification]);
 
+
+  const renderCvPreviewCard = () => (
+    liveCvData ? (
+      <Card
+        style={{
+          borderRadius: 22,
+          borderColor: "#d8dee9",
+          overflow: "hidden",
+          boxShadow: "0 1px 3px rgba(15, 23, 42, 0.04)",
+        }}
+        styles={{ body: { padding: 0 } }}
+      >
+        <div
+          style={{
+            padding: "14px 20px",
+            borderBottom: "1px solid #f1f5f9",
+            background: "#ffffff",
+          }}
+        >
+          <Typography.Title level={5} style={{ margin: 0, fontWeight: 700, color: "#0f172a" }}>
+            Pratinjau Dokumen CV
+          </Typography.Title>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            Tersusun otomatis dari data siswa
+          </Typography.Text>
+        </div>
+
+        <CvPreview
+          cv={liveCvData}
+          onChangeTemplate={handleTemplateChange}
+        />
+      </Card>
+    ) : (
+      <Card style={{ borderRadius: 22, borderColor: "#d8dee9", padding: "40px 20px", textAlign: "center" }}>
+        <Spin tip="Memuat data CV siswa..." />
+      </Card>
+    )
+  );
+
+  const renderCvStatusCard = () => (
+    <Card
+      style={{ borderRadius: 18, borderColor: "#d8dee9" }}
+      styles={{ body: { padding: "18px 20px" } }}
+    >
+      <Space direction="vertical" size={14} style={{ width: "100%" }}>
+        <Space direction="vertical" size={2}>
+          <Typography.Text
+            strong
+            style={{
+              fontSize: 15,
+              fontWeight: 700,
+              color: "#0f172a",
+              display: "block",
+            }}
+          >
+            CV Status & Preview
+          </Typography.Text>
+          <Typography.Text
+            type="secondary"
+            style={{ fontSize: 11.5, color: "#64748b" }}
+          >
+            Current Status
+          </Typography.Text>
+        </Space>
+
+        <Tag
+          color={cvStatus.color}
+          style={{
+            width: "fit-content",
+            padding: "2px 10px",
+            borderRadius: 6,
+            fontWeight: 600,
+            fontSize: 12,
+          }}
+        >
+          {cvStatus.label}
+        </Tag>
+
+        {!isReadyToGenerateCv && approvalProgress.total > 0 && (
+          <Typography.Text
+            type="secondary"
+            style={{
+              fontSize: 12,
+              lineHeight: 1.5,
+              color: "#64748b",
+              display: "block",
+            }}
+          >
+            {approvalProgress.rejectedCount > 0
+              ? "Masih ada jawaban yang ditolak. Semua jawaban harus approved sebelum CV bisa digenerate."
+              : `${approvalProgress.pendingCount} jawaban masih menunggu approval. Generate CV akan aktif setelah semua approved.`}
+          </Typography.Text>
+        )}
+
+        <Divider style={{ margin: "2px 0 6px" }} />
+
+        <Space direction="vertical" size={12} style={{ width: "100%" }}>
+          <Space align="start" size={10}>
+            <div
+              style={{
+                width: 10,
+                height: 10,
+                marginTop: 4,
+                borderRadius: "50%",
+                border: "2.5px solid #22c55e",
+              }}
+            />
+            <Space direction="vertical" size={2}>
+              <Typography.Text
+                strong
+                style={{ fontSize: 12.5, color: "#1e293b" }}
+              >
+                Student Submitted
+              </Typography.Text>
+              <Typography.Text
+                type="secondary"
+                style={{ fontSize: 11, color: "#64748b" }}
+              >
+                {String(timeline.submittedAt)}
+              </Typography.Text>
+            </Space>
+          </Space>
+
+          <Space align="start" size={10}>
+            <div
+              style={{
+                width: 10,
+                height: 10,
+                marginTop: 4,
+                borderRadius: "50%",
+                border: "2.5px solid #22c55e",
+              }}
+            />
+            <Space direction="vertical" size={2}>
+              <Typography.Text
+                strong
+                style={{ fontSize: 12.5, color: "#1e293b" }}
+              >
+                Admission Approval
+              </Typography.Text>
+              <Typography.Text
+                type="secondary"
+                style={{ fontSize: 11, color: "#64748b" }}
+              >
+                {String(timeline.admissionAt)}
+              </Typography.Text>
+            </Space>
+          </Space>
+
+          <Space align="start" size={10}>
+            <div
+              style={{
+                width: 10,
+                height: 10,
+                marginTop: 4,
+                borderRadius: "50%",
+                border: "2.5px solid #cbd5e1",
+              }}
+            />
+            <Space direction="vertical" size={2}>
+              <Typography.Text
+                strong
+                style={{ fontSize: 12.5, color: "#94a3b8" }}
+              >
+                Director Approval
+              </Typography.Text>
+              <Typography.Text
+                type="secondary"
+                style={{ fontSize: 11, color: "#94a3b8" }}
+              >
+                Pending
+              </Typography.Text>
+            </Space>
+          </Space>
+        </Space>
+
+        {previewCvUrl && (
+          <Typography.Text
+            type="secondary"
+            style={{
+              wordBreak: "break-all",
+              fontSize: 11.5,
+              color: "#64748b",
+            }}
+          >
+            Generated Word: {previewCvUrl}
+          </Typography.Text>
+        )}
+
+        {!onlyOfficeEnabled && (
+          <Typography.Text
+            type="secondary"
+            style={{
+              fontSize: 11.5,
+              color: "#64748b",
+              lineHeight: 1.5,
+              display: "block",
+            }}
+          >
+            Preview edit di browser membutuhkan konfigurasi{" "}
+            <code
+              style={{
+                fontSize: 11,
+                color: "#334155",
+                background: "#f1f5f9",
+                padding: "1px 4px",
+                borderRadius: 4,
+              }}
+            >
+              NEXT_PUBLIC_ONLYOFFICE_URL
+            </code>
+            . File Word tetap tersimpan ke Supabase setelah generate berhasil.
+          </Typography.Text>
+        )}
+
+        <Space
+          direction="vertical"
+          size={8}
+          style={{ width: "100%", marginTop: 4 }}
+        >
+          <Button
+            type="primary"
+            block
+            icon={<FileTextOutlined />}
+            loading={manualCreatingCv}
+            disabled={!isReadyToGenerateCv}
+            style={{
+              borderRadius: 8,
+              height: 38,
+              fontSize: 12.5,
+              backgroundColor: "#1b3d6d",
+              borderColor: "#1b3d6d",
+              fontWeight: 600,
+            }}
+            onClick={handleCreateManualCv}
+          >
+            Generate CV Manual
+          </Button>
+
+          <Button
+            type="primary"
+            block
+            disabled={!hasGeneratedCv}
+            style={{
+              borderRadius: 8,
+              height: 38,
+              fontSize: 12.5,
+              fontWeight: 600,
+            }}
+            onClick={handleSubmitForReview}
+          >
+            Submit for Review
+          </Button>
+        </Space>
+
+        <div
+          style={{
+            marginTop: 2,
+            padding: "10px 12px",
+            borderRadius: 10,
+            border: "1px solid #bfdbfe",
+            background: "#eff6ff",
+          }}
+        >
+          <Typography.Text
+            style={{
+              fontSize: 11.5,
+              color: "#1e40af",
+              lineHeight: 1.5,
+              display: "block",
+            }}
+          >
+            CV digenerate otomatis ke format Word dari jawaban form.
+            Pastikan data sudah lengkap dan ter-approve sebelum submit ke
+            Director.
+          </Typography.Text>
+        </div>
+      </Space>
+    </Card>
+  );
+
   return (
-    <Row gutter={[16, 16]}>
-      <Col span={16}>
+    <Space direction="vertical" size={16} style={{ width: "100%" }}>
+      {/* HEADER CARD */}
+      <Card
+        className={styles.cvHeaderCard}
+        style={{
+          borderRadius: 16,
+          borderColor: "#e2e8f0",
+          background: "#ffffff",
+          boxShadow: "0 4px 20px rgba(15, 23, 42, 0.04)",
+        }}
+        styles={{ body: { padding: "18px 20px" } }}
+      >
+        <Flex align="center" gap={12} style={{ minWidth: 0, width: "100%" }}>
+          <div className={styles.sectionHeaderIcon}>
+            <SolutionOutlined />
+          </div>
+          <div style={{ minWidth: 0, flex: 1, overflow: "hidden" }}>
+            <div className={styles.sectionHeaderTitle}>
+              Student Profile
+            </div>
+            <div className={styles.sectionHeaderSubtitle}>
+              Kelengkapan profil dan validasi berkas CV
+            </div>
+          </div>
+        </Flex>
+      </Card>
+
+      {/* Mobile Segmented Toggle */}
+      <div className={styles.mobileCvSegmentedRow}>
+        <div className={styles.mobileCvSegmentedCard}>
+          <Segmented
+            block
+            size="middle"
+            value={mobileCvTab}
+            onChange={(val) => setMobileCvTab(val as "data" | "cv")}
+            options={[
+              {
+                label: "Data Kuesioner",
+                value: "data",
+                icon: <SolutionOutlined />,
+              },
+              {
+                label: "Dokumen CV",
+                value: "cv",
+                icon: <FileTextOutlined />,
+              },
+            ]}
+          />
+        </div>
+      </div>
+
+      <Row gutter={[16, 16]} style={{ width: "100%", margin: 0 }}>
+        <Col
+          xs={24}
+          xl={16}
+          className={mobileCvTab === "cv" ? styles.hideOnMobile : undefined}
+          style={{ minWidth: 0, maxWidth: "100%", paddingLeft: 0, paddingRight: 0 }}
+        >
         <Card
           bodyStyle={{ padding: 0 }}
           style={{
             borderRadius: 22,
             borderColor: "#d8dee9",
             overflow: "hidden",
+            width: "100%",
+            maxWidth: "100%",
+            minWidth: 0,
           }}
           loading={fetchLoading}
         >
@@ -850,17 +1267,114 @@ export default function CVComponents({ student_id }: CVComponentsProps) {
               label: (
                 <Typography.Text
                   strong
-                  style={{ fontSize: 15, color: "#4b5563" }}
+                  style={{ fontSize: 13, color: "#4b5563" }}
                 >
                   {tab.label}
                 </Typography.Text>
               ),
               children: (
-                <div style={{ padding: 16 }}>
+                <div style={{ padding: "12px 16px", minWidth: 0, maxWidth: "100%" }}>
+                  {/* Section Toolbar */}
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                      gap: "10px 12px",
+                      marginBottom: 16,
+                      padding: "10px 14px",
+                      background: "#f8fafc",
+                      borderRadius: 12,
+                      border: "1px solid #e2e8f0",
+                      width: "100%",
+                      boxSizing: "border-box",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        flexWrap: "wrap",
+                        minWidth: 0,
+                      }}
+                    >
+                      <Typography.Text
+                        strong
+                        style={{
+                          fontSize: 13.5,
+                          fontWeight: 700,
+                          color: "#1e293b",
+                          wordBreak: "break-word",
+                        }}
+                      >
+                        {tab.label}
+                      </Typography.Text>
+                      <Tag
+                        color={
+                          tab.items.every(
+                            (it) =>
+                              approvalMap.get(it.id)?.status === "approved",
+                          ) && tab.items.length > 0
+                            ? "success"
+                            : "default"
+                        }
+                        style={{
+                          borderRadius: 999,
+                          fontSize: 11,
+                          fontWeight: 600,
+                          margin: 0,
+                          padding: "0 8px",
+                          height: 22,
+                          lineHeight: "20px",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {
+                          tab.items.filter(
+                            (it) =>
+                              approvalMap.get(it.id)?.status === "approved",
+                          ).length
+                        }{" "}
+                        / {tab.items.length} Disetujui
+                      </Tag>
+                    </div>
+
+                    <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap" }}>
+                      {tab.items.length > 0 && canApprove && (
+                        <Button
+                          size="small"
+                          type="dashed"
+                          icon={<CheckOutlined style={{ fontSize: 11 }} />}
+                          loading={batchApprovingBaseId === tab.key}
+                          onClick={() =>
+                            handleApproveAllInSection(tab.items, tab.key)
+                          }
+                          style={{
+                            borderRadius: 8,
+                            fontSize: 11.5,
+                            fontWeight: 500,
+                            backgroundColor: "#f0fdf4",
+                            borderColor: "#86efac",
+                            color: "#16a34a",
+                            height: 28,
+                            padding: "0 10px",
+                            whiteSpace: "normal",
+                          }}
+                        >
+                          Setujui Semua di Bagian Ini
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+
                   {tab.items.length === 0 ? (
-                    <Typography.Text type="secondary">
-                      Belum ada jawaban pada section ini.
-                    </Typography.Text>
+                    <div style={{ padding: "16px 0" }}>
+                      <Typography.Text type="secondary" style={{ display: "block" }}>
+                        Belum ada jawaban pada section ini dari student.
+                      </Typography.Text>
+                    </div>
                   ) : (
                     <Row gutter={[16, 16]}>
                       {tab.items.map((item) => {
@@ -870,9 +1384,16 @@ export default function CVComponents({ student_id }: CVComponentsProps) {
                         const status = (
                           approvalMap.get(item.id)?.status ?? "pending"
                         ).toLowerCase();
+                        const isApproved = status === "approved";
+                        const isRejected = status === "rejected";
                         const currentNote =
                           approvalMap.get(item.id)?.note ?? "";
-                        const noteValue = noteDrafts[item.id] ?? currentNote;
+                        const noteValue =
+                          noteDrafts[item.id] ?? currentNote;
+                        const isNoteOpen =
+                          activeNoteFieldId === item.id ||
+                          isRejected ||
+                          Boolean(currentNote);
 
                         return (
                           <Col
@@ -880,126 +1401,294 @@ export default function CVComponents({ student_id }: CVComponentsProps) {
                             xs={24}
                             md={isLongAnswer ? 24 : 12}
                           >
-                            <Space
-                              direction="vertical"
-                              size={8}
-                              style={{ width: "100%" }}
+                            <div
+                              style={{
+                                display: "flex",
+                                flexDirection: "column",
+                                height: "100%",
+                                padding: "14px 16px",
+                                borderRadius: 12,
+                                border: `1px solid ${
+                                  isApproved
+                                    ? "#bbf7d0"
+                                    : isRejected
+                                      ? "#fecaca"
+                                      : "#e2e8f0"
+                                }`,
+                                background: isApproved
+                                  ? "#fcfdfc"
+                                  : isRejected
+                                    ? "#fffdfd"
+                                    : "#ffffff",
+                                boxShadow:
+                                  "0 1px 3px rgba(15, 23, 42, 0.04)",
+                                transition: "all 0.2s ease",
+                              }}
                             >
-                              <Typography.Text
-                                strong
-                                style={{ fontSize: 16, color: "#1f2937" }}
-                              >
-                                {item.question}
-                              </Typography.Text>
-
+                              {/* Card Header: Pertanyaan & Status Tag */}
                               <div
                                 style={{
-                                  display: "grid",
-                                  gridTemplateColumns: "1fr auto auto",
-                                  gap: 10,
-                                  alignItems: "center",
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "flex-start",
+                                  gap: 12,
+                                  marginBottom: 10,
                                 }}
                               >
-                                <div
+                                <Typography.Text
+                                  strong
                                   style={{
-                                    minHeight: isLongAnswer ? 92 : 48,
-                                    padding: "10px 14px",
-                                    borderRadius: 12,
-                                    border: "1px solid #d6dae2",
-                                    background: "#f8fafc",
-                                    fontSize: 17,
-                                    color: "#1f2937",
+                                    fontSize: 13,
+                                    color: "#334155",
                                     lineHeight: 1.4,
+                                    flex: 1,
                                   }}
                                 >
-                                  {item.answer}
-                                </div>
+                                  {item.question}
+                                </Typography.Text>
 
-                                <Button
-                                  shape="circle"
-                                  size="middle"
-                                  icon={
-                                    <CheckOutlined
-                                      style={{ color: "#16a34a" }}
-                                    />
-                                  }
-                                  onClick={() =>
-                                    handleApprove(item.id, "approved")
-                                  }
-                                  loading={
-                                    savingApprovalId === item.id &&
-                                    savingApprovalStatus === "approved"
-                                  }
-                                  style={{
-                                    width: 42,
-                                    height: 42,
-                                    borderColor: "#9be3b7",
-                                    background:
-                                      status === "approved"
-                                        ? "#d7f7e5"
-                                        : "#ffffff",
-                                  }}
-                                />
-
-                                <Button
-                                  shape="circle"
-                                  size="middle"
-                                  icon={
-                                    <CloseOutlined
-                                      style={{ color: "#ef4444" }}
-                                    />
-                                  }
-                                  onClick={() =>
-                                    handleApprove(item.id, "rejected")
-                                  }
-                                  loading={
-                                    savingApprovalId === item.id &&
-                                    savingApprovalStatus === "rejected"
-                                  }
-                                  style={{
-                                    width: 42,
-                                    height: 42,
-                                    borderColor: "#f6b9b9",
-                                    background:
-                                      status === "rejected"
-                                        ? "#fee2e2"
-                                        : "#ffffff",
-                                  }}
-                                />
+                                {isApproved ? (
+                                  <Tag
+                                    color="success"
+                                    style={{
+                                      margin: 0,
+                                      borderRadius: 999,
+                                      fontSize: 11,
+                                      fontWeight: 600,
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: 4,
+                                      padding: "2px 8px",
+                                      flexShrink: 0,
+                                    }}
+                                  >
+                                    <CheckOutlined style={{ fontSize: 10 }} />{" "}
+                                    Disetujui
+                                  </Tag>
+                                ) : isRejected ? (
+                                  <Tag
+                                    color="error"
+                                    style={{
+                                      margin: 0,
+                                      borderRadius: 999,
+                                      fontSize: 11,
+                                      fontWeight: 600,
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: 4,
+                                      padding: "2px 8px",
+                                      flexShrink: 0,
+                                    }}
+                                  >
+                                    <CloseOutlined style={{ fontSize: 10 }} />{" "}
+                                    Perlu Revisi
+                                  </Tag>
+                                ) : (
+                                  <Tag
+                                    style={{
+                                      margin: 0,
+                                      borderRadius: 999,
+                                      fontSize: 11,
+                                      fontWeight: 500,
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: 4,
+                                      padding: "2px 8px",
+                                      color: "#64748b",
+                                      background: "#f1f5f9",
+                                      borderColor: "#e2e8f0",
+                                      flexShrink: 0,
+                                    }}
+                                  >
+                                    <ClockCircleOutlined
+                                      style={{ fontSize: 10 }}
+                                    />{" "}
+                                    Menunggu
+                                  </Tag>
+                                )}
                               </div>
 
-                              <Space
-                                align="start"
-                                size={8}
-                                style={{ width: "100%" }}
+                              {/* Answer Text Content */}
+                              <div
+                                style={{
+                                  flex: 1,
+                                  minHeight: isLongAnswer ? 72 : 40,
+                                  padding: "8px 12px",
+                                  borderRadius: 8,
+                                  border: `1px solid ${
+                                    isApproved
+                                      ? "#dcfce7"
+                                      : isRejected
+                                        ? "#fee2e2"
+                                        : "#f1f5f9"
+                                  }`,
+                                  background: isApproved
+                                    ? "#f0fdf4"
+                                    : isRejected
+                                      ? "#fef2f2"
+                                      : "#f8fafc",
+                                  fontSize: 13,
+                                  color: "#0f172a",
+                                  lineHeight: 1.5,
+                                  wordBreak: "break-word",
+                                }}
                               >
-                                <Tag
-                                  color={
-                                    status === "approved"
-                                      ? "green"
-                                      : status === "rejected"
-                                        ? "red"
-                                        : "gold"
-                                  }
-                                  style={{ marginTop: 6 }}
-                                >
-                                  {status.toUpperCase()}
-                                </Tag>
+                                {item.answer || (
+                                  <span style={{ color: "#94a3b8" }}>
+                                    -
+                                  </span>
+                                )}
+                              </div>
 
-                                <Input.TextArea
-                                  value={noteValue}
-                                  onChange={(event) =>
-                                    setNoteDrafts((prev) => ({
-                                      ...prev,
-                                      [item.id]: event.target.value,
-                                    }))
+                              {/* Expandable Note / Revision Area */}
+                              {isNoteOpen && (
+                                <div style={{ marginTop: 10 }}>
+                                  <Input.TextArea
+                                    value={noteValue}
+                                    onChange={(event) =>
+                                      setNoteDrafts((prev) => ({
+                                        ...prev,
+                                        [item.id]: event.target.value,
+                                      }))
+                                    }
+                                    autoSize={{ minRows: 1, maxRows: 3 }}
+                                    placeholder="Catatan revisi untuk mahasiswa..."
+                                    style={{
+                                      fontSize: 12,
+                                      borderRadius: 8,
+                                      borderColor: isRejected
+                                        ? "#fca5a5"
+                                        : "#cbd5e1",
+                                      background: isRejected
+                                        ? "#fff"
+                                        : "#fafafa",
+                                    }}
+                                  />
+                                </div>
+                              )}
+
+                              {/* Card Footer: Minimalist Actions Group */}
+                              <div
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "flex-end",
+                                  alignItems: "center",
+                                  gap: 6,
+                                  marginTop: 10,
+                                  paddingTop: 8,
+                                  borderTop: "1px dashed #e2e8f0",
+                                }}
+                              >
+                                <Tooltip
+                                  title={
+                                    activeNoteFieldId === item.id
+                                      ? "Tutup Catatan"
+                                      : "Tambah / Edit Catatan Revisi"
                                   }
-                                  autoSize={{ minRows: 1, maxRows: 2 }}
-                                  placeholder="Keterangan approval/reject"
-                                  style={{ maxWidth: 420 }}
-                                />
-                              </Space>
-                            </Space>
+                                >
+                                  <Button
+                                    size="small"
+                                    type="text"
+                                    icon={
+                                      <MessageOutlined
+                                        style={{ fontSize: 13 }}
+                                      />
+                                    }
+                                    onClick={() =>
+                                      setActiveNoteFieldId((prev) =>
+                                        prev === item.id ? null : item.id,
+                                      )
+                                    }
+                                    style={{
+                                      borderRadius: 6,
+                                      height: 28,
+                                      color: noteValue
+                                        ? "#2563eb"
+                                        : "#94a3b8",
+                                      backgroundColor:
+                                        activeNoteFieldId === item.id
+                                          ? "#eff6ff"
+                                          : "transparent",
+                                    }}
+                                  />
+                                </Tooltip>
+
+                              {canApprove && (
+                                <Tooltip title="Minta revisi jawaban">
+                                  <Button
+                                    size="small"
+                                    icon={
+                                      <CloseOutlined
+                                        style={{ fontSize: 11 }}
+                                      />
+                                    }
+                                    loading={
+                                      savingApprovalId === item.id &&
+                                      savingApprovalStatus === "rejected"
+                                    }
+                                    onClick={() =>
+                                      handleApprove(item.id, "rejected")
+                                    }
+                                    style={{
+                                      borderRadius: 6,
+                                      height: 28,
+                                      padding: "0 10px",
+                                      fontSize: 12,
+                                      fontWeight: 500,
+                                      borderColor: isRejected
+                                        ? "#dc2626"
+                                        : "#fca5a5",
+                                      backgroundColor: isRejected
+                                        ? "#dc2626"
+                                        : "#ffffff",
+                                      color: isRejected
+                                        ? "#ffffff"
+                                        : "#dc2626",
+                                    }}
+                                  >
+                                    Revisi
+                                  </Button>
+                                </Tooltip>
+                              )}
+
+                              {canApprove && (
+                                <Tooltip title="Setujui jawaban">
+                                  <Button
+                                    size="small"
+                                    type="primary"
+                                    icon={
+                                      <CheckOutlined
+                                        style={{ fontSize: 11 }}
+                                      />
+                                    }
+                                    loading={
+                                      savingApprovalId === item.id &&
+                                      savingApprovalStatus === "approved"
+                                    }
+                                    onClick={() =>
+                                      handleApprove(item.id, "approved")
+                                    }
+                                    style={{
+                                      borderRadius: 6,
+                                      height: 28,
+                                      padding: "0 10px",
+                                      fontSize: 12,
+                                      fontWeight: 500,
+                                      backgroundColor: isApproved
+                                        ? "#16a34a"
+                                        : "#22c55e",
+                                      borderColor: isApproved
+                                        ? "#16a34a"
+                                        : "#22c55e",
+                                      color: "#ffffff",
+                                    }}
+                                  >
+                                    Setuju
+                                  </Button>
+                                </Tooltip>
+                              )}
+                              </div>
+                            </div>
                           </Col>
                         );
                       })}
@@ -1010,204 +1699,48 @@ export default function CVComponents({ student_id }: CVComponentsProps) {
             }))}
           />
         </Card>
+
+        {/* PRATINJAU DOKUMEN CV */}
+        {liveCvData && (
+          <div
+            id="cv-live-preview-section"
+            className={styles.desktopCvPreviewOnly}
+            style={{
+              width: "100%",
+              maxWidth: "100%",
+              minWidth: 0,
+              marginTop: 16,
+              overflowX: "auto",
+            }}
+          >
+            {renderCvPreviewCard()}
+          </div>
+        )}
       </Col>
 
-      <Col span={8}>
-        <Card
-          style={{ borderRadius: 18, borderColor: "#d8dee9" }}
-          bodyStyle={{ padding: 24 }}
-        >
-          <Space direction="vertical" size={16} style={{ width: "100%" }}>
-            <Space direction="vertical" size={2}>
-              <Typography.Title level={3} style={{ margin: 0 }}>
-                CV Status & Preview
-              </Typography.Title>
-              <Typography.Text type="secondary">Current Status</Typography.Text>
-            </Space>
-
-            <Tag
-              color={cvStatus.color}
-              style={{
-                width: "fit-content",
-                padding: "4px 14px",
-                borderRadius: 999,
-                fontWeight: 600,
-              }}
-            >
-              {cvStatus.label}
-            </Tag>
-
-            {!isReadyToGenerateCv && approvalProgress.total > 0 && (
-              <Typography.Text type="secondary">
-                {approvalProgress.rejectedCount > 0
-                  ? "Masih ada jawaban yang ditolak. Semua jawaban harus approved sebelum CV bisa digenerate."
-                  : `${approvalProgress.pendingCount} jawaban masih menunggu approval. Generate CV akan aktif setelah semua approved.`}
-              </Typography.Text>
-            )}
-
-            <Divider style={{ margin: "4px 0 8px" }} />
-
-            <Space direction="vertical" size={10} style={{ width: "100%" }}>
-              <Space align="start" size={10}>
-                <div
-                  style={{
-                    width: 12,
-                    height: 12,
-                    marginTop: 6,
-                    borderRadius: "50%",
-                    border: "3px solid #22c55e",
-                  }}
-                />
-                <Space direction="vertical" size={0}>
-                  <Typography.Text strong>Student Submitted</Typography.Text>
-                  <Typography.Text type="secondary">
-                    {String(timeline.submittedAt)}
-                  </Typography.Text>
-                </Space>
-              </Space>
-
-              <Space align="start" size={10}>
-                <div
-                  style={{
-                    width: 12,
-                    height: 12,
-                    marginTop: 6,
-                    borderRadius: "50%",
-                    border: "3px solid #22c55e",
-                  }}
-                />
-                <Space direction="vertical" size={0}>
-                  <Typography.Text strong>Admission Approval</Typography.Text>
-                  <Typography.Text type="secondary">
-                    {String(timeline.admissionAt)}
-                  </Typography.Text>
-                </Space>
-              </Space>
-
-              <Space align="start" size={10}>
-                <div
-                  style={{
-                    width: 12,
-                    height: 12,
-                    marginTop: 6,
-                    borderRadius: "50%",
-                    border: "3px solid #cbd5e1",
-                  }}
-                />
-                <Space direction="vertical" size={0}>
-                  <Typography.Text strong style={{ color: "#94a3b8" }}>
-                    Director Approval
-                  </Typography.Text>
-                  <Typography.Text type="secondary">Pending</Typography.Text>
-                </Space>
-              </Space>
-            </Space>
-
-            {previewCvUrl && (
-              <Typography.Text
-                type="secondary"
-                style={{ wordBreak: "break-all" }}
-              >
-                Generated Word: {previewCvUrl}
-              </Typography.Text>
-            )}
-
-            {!onlyOfficeEnabled && (
-              <Typography.Text type="secondary">
-                Preview edit di browser membutuhkan konfigurasi
-                {" `NEXT_PUBLIC_ONLYOFFICE_URL` "}.
-                File Word tetap tersimpan ke Supabase setelah generate berhasil.
-              </Typography.Text>
-            )}
-
-            {/* {generatedCvContent && (
-              <div
-                style={{
-                  maxHeight: 220,
-                  overflow: "auto",
-                  padding: 14,
-                  borderRadius: 14,
-                  border: "1px solid #d8dee9",
-                  background: "#f8fafc",
-                  whiteSpace: "pre-wrap",
-                  color: "#1f2937",
-                  lineHeight: 1.6,
-                }}
-              >
-                {generatedCvContent}
-              </div>
-            )} */}
-
-            <Space
-              direction="vertical"
-              size={10}
-              style={{ width: "100%", marginTop: 8 }}
-            >
-              <Button
-                type="primary"
-                size="large"
-                block
-                icon={<FileTextOutlined />}
-                loading={onGenerateCvAiLoading}
-                disabled={!isReadyToGenerateCv}
-                style={{ borderRadius: 999, height: 44 }}
-                onClick={handleGenerateCv}
-              >
-                Generate CV AI
-              </Button>
-
-              <Button
-                size="large"
-                block
-                icon={<FileTextOutlined />}
-                loading={manualCreatingCv}
-                style={{ borderRadius: 999, height: 44 }}
-                onClick={handleCreateManualCv}
-              >
-                Generate CV Manual
-              </Button>
-
-              <Button
-                size="large"
-                block
-                icon={<EyeOutlined />}
-                disabled={!previewCvUrl}
-                style={{ borderRadius: 999, height: 44 }}
-                onClick={previewCvUrl ? handlePreviewCv : undefined}
-              >
-                Preview/Edit Word
-              </Button>
-
-              <Button
-                type="primary"
-                size="large"
-                block
-                disabled={!hasGeneratedCv}
-                style={{ borderRadius: 999, height: 44 }}
-                onClick={handleSubmitForReview}
-              >
-                Submit for Review
-              </Button>
-            </Space>
-
-            <div
-              style={{
-                marginTop: 4,
-                padding: "14px 14px",
-                borderRadius: 14,
-                border: "1px solid #bfdbfe",
-                background: "#eff6ff",
-              }}
-            >
-              <Typography.Text style={{ color: "#1d4ed8", lineHeight: 1.5 }}>
-                CV digenerate otomatis ke format Word dari jawaban form.
-                Pastikan data sudah lengkap dan ter-approve sebelum submit ke
-                Director.
-              </Typography.Text>
-            </div>
-          </Space>
-        </Card>
+      <Col
+        xs={24}
+        xl={8}
+        className={mobileCvTab === "data" ? styles.hideOnMobile : undefined}
+        style={{ minWidth: 0, maxWidth: "100%", paddingLeft: 0, paddingRight: 0 }}
+      >
+        {renderCvStatusCard()}
+        {liveCvData && (
+          <div
+            className={styles.mobileCvPreviewOnly}
+            style={{
+              width: "100%",
+              maxWidth: "100%",
+              minWidth: 0,
+              marginTop: 14,
+              overflowX: "auto",
+            }}
+          >
+            {renderCvPreviewCard()}
+          </div>
+        )}
       </Col>
     </Row>
+  </Space>
   );
 }

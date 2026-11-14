@@ -20,6 +20,7 @@ import {
   CloseOutlined,
   EyeOutlined,
   FileTextOutlined,
+  MailOutlined,
   RobotOutlined,
   SolutionOutlined,
 } from "@ant-design/icons";
@@ -29,6 +30,7 @@ import {
   Card,
   Col,
   Divider,
+  Flex,
   Progress,
   Row,
   Space,
@@ -37,6 +39,7 @@ import {
 } from "antd";
 import axios from "axios";
 import { useParams } from "next/navigation";
+import styles from "../detail.module.css";
 import {
   useCallback,
   useEffect,
@@ -283,11 +286,11 @@ function LetterCard({
   previewDisabled,
   submitLoading,
   submitDisabled,
-  submitLabel = "Submit To Director",
+  submitLabel = "Setujui Surat",
   cancelSubmitLoading,
   cancelSubmitDisabled,
   showCancelSubmit,
-  cancelSubmitLabel = "Cancel Submit To Director",
+  cancelSubmitLabel = "Minta Revisi",
   showGenerate = true,
 }: LetterCardProps) {
   const palette = toneStyles[tone];
@@ -306,24 +309,35 @@ function LetterCard({
         style={{
           background: palette.headerBg,
           color: "#fff",
-          padding: "14px 16px 12px",
+          padding: "12px 16px",
         }}
       >
-        <Space direction="vertical" size={8} style={{ width: "100%" }}>
-          <Space size={10} align="center">
+        <Flex justify="space-between" align="center" gap={8}>
+          <Space size={10} align="center" style={{ minWidth: 0 }}>
             <div
               style={{
                 width: 24,
                 height: 24,
-                borderRadius: 8,
+                borderRadius: 7,
                 background: palette.iconBg,
                 display: "grid",
                 placeItems: "center",
+                flexShrink: 0,
               }}
             >
               <FileTextOutlined style={{ color: "#fff", fontSize: 12 }} />
             </div>
-            <Text strong style={{ color: "#fff", fontSize: 16 }}>
+            <Text
+              strong
+              style={{
+                color: "#fff",
+                fontSize: 15,
+                lineHeight: 1.2,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
               {title}
             </Text>
           </Space>
@@ -331,16 +345,19 @@ function LetterCard({
           <Tag
             color={statusColor}
             style={{
-              width: "fit-content",
               marginInlineEnd: 0,
               borderRadius: 999,
+              fontSize: 11,
+              lineHeight: "18px",
+              padding: "1px 8px",
+              border: "none",
               fontWeight: 600,
-              paddingInline: 10,
+              flexShrink: 0,
             }}
           >
             {status}
           </Tag>
-        </Space>
+        </Flex>
       </div>
 
       <div style={{ padding: 16 }}>
@@ -388,7 +405,7 @@ function LetterCard({
                 borderColor: "#2563eb",
               }}
             >
-              Preview Full Letter
+              Lihat Surat
             </Button>
             {onSubmit ? (
               <Button
@@ -1074,72 +1091,93 @@ export default function LetterComponent() {
     persistedSponsorLetterDocument?.status === "SUBMITTED_TO_DIRECTOR";
 
   return (
-    <Row gutter={[16, 16]}>
-      <Col xs={24} xl={12}>
-        <LetterCard
-          title="Statement Letter"
-          tone="blue"
-          status={statementStatusMeta.label}
-          statusColor={statementStatusMeta.color}
-          showGenerate={false}
-          onGenerate={handleGenerateStatementLetter}
-          onPreview={handlePreviewStatementLetter}
-          onSubmit={() => handleReviewStatementLetter("APPROVED")}
-          onCancelSubmit={() => handleReviewStatementLetter("REVISION_REQUESTED")}
-          previewDisabled={!previewStatementLetterUrl}
-          generateLoading={onGenerateStatementLetterAiLoading}
-          submitLabel="Approve Letter"
-          submitLoading={reviewingLetter === "statement-APPROVED"}
-          submitDisabled={isStatementSubmitDisabled}
-          cancelSubmitLabel="Request Revision"
-          cancelSubmitLoading={reviewingLetter === "statement-REVISION_REQUESTED"}
-          cancelSubmitDisabled={!canCancelStatementSubmit}
-          showCancelSubmit={canCancelStatementSubmit}
-          activity={[
-            {
-              title: "Generated from student answers",
-              meta: "System",
-            },
-            {
-              title: "Saved as active document",
-              meta: "System",
-            },
-          ]}
-        />
-      </Col>
+    <Space direction="vertical" size={16} style={{ width: "100%" }}>
+      <Card
+        className={styles.sectionHeaderCard}
+        styles={{ body: { padding: 0 } }}
+      >
+        <Flex align="center" gap={12} style={{ minWidth: 0, width: "100%" }}>
+          <div className={styles.sectionHeaderIcon}>
+            <MailOutlined />
+          </div>
+          <div style={{ minWidth: 0, flex: 1, overflow: "hidden" }}>
+            <div className={styles.sectionHeaderTitle}>
+              Official Letters
+            </div>
+            <div className={styles.sectionHeaderSubtitle}>
+              Surat pernyataan dan surat sponsor siswa
+            </div>
+          </div>
+        </Flex>
+      </Card>
 
-      <Col xs={24} xl={12}>
-        <LetterCard
-          title="Sponsor Letter"
-          tone="green"
-          status={sponsorStatusMeta.label}
-          statusColor={sponsorStatusMeta.color}
-          showGenerate={false}
-          onGenerate={handleGenerateSponsorLetter}
-          onPreview={handlePreviewSponsorLetter}
-          onSubmit={() => handleReviewSponsorLetter("APPROVED")}
-          onCancelSubmit={() => handleReviewSponsorLetter("REVISION_REQUESTED")}
-          previewDisabled={!previewSponsorLetterUrl}
-          generateLoading={onGenerateSponsorLetterAiLoading}
-          submitLabel="Approve Letter"
-          submitLoading={reviewingLetter === "sponsor-APPROVED"}
-          submitDisabled={isSponsorSubmitDisabled}
-          cancelSubmitLabel="Request Revision"
-          cancelSubmitLoading={reviewingLetter === "sponsor-REVISION_REQUESTED"}
-          cancelSubmitDisabled={!canCancelSponsorSubmit}
-          showCancelSubmit={canCancelSponsorSubmit}
-          activity={[
-            {
-              title: "Generated from student answers",
-              meta: "System",
-            },
-            {
-              title: "Saved as active document",
-              meta: "System",
-            },
-          ]}
-        />
-      </Col>
-    </Row>
+      <Row gutter={[16, 16]}>
+        <Col xs={24} xl={12}>
+          <LetterCard
+            title="Statement Letter"
+            tone="blue"
+            status={statementStatusMeta.label}
+            statusColor={statementStatusMeta.color}
+            showGenerate={false}
+            onGenerate={handleGenerateStatementLetter}
+            onPreview={handlePreviewStatementLetter}
+            onSubmit={() => handleReviewStatementLetter("APPROVED")}
+            onCancelSubmit={() => handleReviewStatementLetter("REVISION_REQUESTED")}
+            previewDisabled={!previewStatementLetterUrl}
+            generateLoading={onGenerateStatementLetterAiLoading}
+            submitLabel="Setujui Surat"
+            submitLoading={reviewingLetter === "statement-APPROVED"}
+            submitDisabled={isStatementSubmitDisabled}
+            cancelSubmitLabel="Minta Revisi"
+            cancelSubmitLoading={reviewingLetter === "statement-REVISION_REQUESTED"}
+            cancelSubmitDisabled={!canCancelStatementSubmit}
+            showCancelSubmit={canCancelStatementSubmit}
+            activity={[
+              {
+                title: "Generated from student answers",
+                meta: "System",
+              },
+              {
+                title: "Saved as active document",
+                meta: "System",
+              },
+            ]}
+          />
+        </Col>
+
+        <Col xs={24} xl={12}>
+          <LetterCard
+            title="Sponsor Letter"
+            tone="green"
+            status={sponsorStatusMeta.label}
+            statusColor={sponsorStatusMeta.color}
+            showGenerate={false}
+            onGenerate={handleGenerateSponsorLetter}
+            onPreview={handlePreviewSponsorLetter}
+            onSubmit={() => handleReviewSponsorLetter("APPROVED")}
+            onCancelSubmit={() => handleReviewSponsorLetter("REVISION_REQUESTED")}
+            previewDisabled={!previewSponsorLetterUrl}
+            generateLoading={onGenerateSponsorLetterAiLoading}
+            submitLabel="Setujui Surat"
+            submitLoading={reviewingLetter === "sponsor-APPROVED"}
+            submitDisabled={isSponsorSubmitDisabled}
+            cancelSubmitLabel="Minta Revisi"
+            cancelSubmitLoading={reviewingLetter === "sponsor-REVISION_REQUESTED"}
+            cancelSubmitDisabled={!canCancelSponsorSubmit}
+            showCancelSubmit={canCancelSponsorSubmit}
+            activity={[
+              {
+                title: "Generated from student answers",
+                meta: "System",
+              },
+              {
+                title: "Saved as active document",
+                meta: "System",
+              },
+            ]}
+          />
+        </Col>
+      </Row>
+    </Space>
   );
 }

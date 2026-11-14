@@ -1,0 +1,88 @@
+.formStudentGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 16px;
+  row-gap: 0;
+  width: 100%;
+}
+
+.formStudentFooter {
+  width: 100%;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.studentModal :global(.ant-modal-content) {
+  border-radius: 16px !important;
+}
+
+@media (max-width: 640px) {
+  .studentModal {
+    max-width: calc(100vw - 20px) !important;
+    margin: 10px auto !important;
+    top: 10px !important;
+    padding-bottom: 20px !important;
+  }
+
+  .studentModal :global(.ant-modal-content) {
+    padding: 16px 14px !important;
+    border-radius: 14px !important;
+  }
+
+  .studentModal :global(.ant-modal-header) {
+    margin-bottom: 12px !important;
+  }
+
+  .studentModal :global(.ant-modal-title) {
+    font-size: 16px !important;
+    font-weight: 700 !important;
+  }
+
+  .formStudentGrid {
+    grid-template-columns: 1fr !important;
+    gap: 0 !important;
+    width: 100% !important;
+  }
+
+  .formStudentGrid :global(.ant-form-item) {
+    margin-bottom: 12px !important;
+    width: 100% !important;
+  }
+
+  .formStudentGrid :global(.ant-form-item-label) {
+    padding-bottom: 4px !important;
+  }
+
+  .formStudentGrid :global(.ant-form-item-label > label) {
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    color: #1e293b !important;
+    white-space: normal !important;
+    height: auto !important;
+  }
+
+  .formStudentGrid :global(.ant-input),
+  .formStudentGrid :global(.ant-input-number),
+  .formStudentGrid :global(.ant-select-selector),
+  .formStudentGrid :global(.ant-input-password) {
+    border-radius: 8px !important;
+    width: 100% !important;
+  }
+
+  .formStudentFooter {
+    gap: 8px !important;
+    margin-top: 10px !important;
+  }
+
+  .formStudentFooter button {
+    flex: 1 1 auto !important;
+    min-width: 80px !important;
+    height: 38px !important;
+    border-radius: 8px !important;
+    font-size: 13px !important;
+  }
+}

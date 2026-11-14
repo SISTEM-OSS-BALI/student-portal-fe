@@ -75,9 +75,15 @@ export const useAuth = (options: UseAuthOptions = {}) => {
     setUser(data);
   }, []);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    try {
+      await api.post("/api/auth/logout");
+    } catch {
+      // Ignore network errors on logout
+    }
     cachedUser = null;
-    cachedLoaded = true;
+    cachedLoaded = false;
+    cachedPromise = null;
     setUser(null);
   }, []);
 

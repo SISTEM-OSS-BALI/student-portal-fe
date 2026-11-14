@@ -3,6 +3,7 @@
 import { Card, Col, Empty, Row, Space, Tag, Typography } from "antd";
 import dayjs from "dayjs";
 import type { UserDataModel } from "@/app/models/user";
+import { CampusApplicationsCard } from "@/app/components/student-campus-applications/CampusApplicationsCard";
 
 type ConsultantOverviewComponentProps = {
   student: UserDataModel | null;
@@ -90,6 +91,13 @@ export default function ConsultantOverviewComponent({
           </Col>
         </Row>
       </Card>
+
+      {student?.id && (
+        <CampusApplicationsCard
+          userId={student.id}
+          defaultCountryName={student?.stage?.country?.name}
+        />
+      )}
 
       <Card title="Internal Notes" style={{ borderRadius: 18 }}>
         {notes.length === 0 ? (

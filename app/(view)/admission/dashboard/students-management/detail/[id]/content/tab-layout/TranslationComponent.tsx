@@ -16,6 +16,7 @@ import {
   Form,
   InputNumber,
   App,
+  Empty,
 } from "antd";
 import {
   CloudUploadOutlined,
@@ -39,6 +40,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { usePatchQuotaTranslation } from "@/app/hooks/use-users";
 import { buildFilePreviewUrl } from "@/app/utils/file-preview";
+import styles from "../detail.module.css";
 
 const statusColor = (value: string) => {
   const key = value.toLowerCase();
@@ -186,7 +188,11 @@ export default function TranslationComponent({
   student_has_initial_translations,
 }: TranslationComponentProps) {
   const { notification } = App.useApp();
-  const { user_id } = useAuth();
+  const { user_id, role } = useAuth();
+  const normalizedRole = (role ?? "").toLowerCase();
+  const isConsultant = normalizedRole === "consultant";
+  const isDirector = normalizedRole === "director";
+  const canManage = !isConsultant && !isDirector;
   const { uploadDocument } = useDocumentUpload();
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const queryClient = useQueryClient();
@@ -614,45 +620,52 @@ export default function TranslationComponent({
                     : undefined
                 }
                 target={fileUrl ? "_blank" : undefined}
-              />
+                style={{ borderRadius: 8 }}
+              >
+                Lihat
+              </Button>
               <Button
                 icon={<DownloadOutlined />}
                 disabled={!canDownloadMerged}
                 onClick={() => handleDownloadMerged(record)}
               />
-              <Upload
-                showUploadList={false}
-                accept={resolveAccept(record.file_type)}
-                customRequest={async ({ file, onSuccess, onError }) => {
-                  try {
-                    await handleUpload(file as File, record);
-                    onSuccess?.({}, file as File);
-                  } catch (error) {
-                    onError?.(error as Error);
-                  }
-                }}
-              >
-                <Button icon={<CloudUploadOutlined />} loading={isUploading} />
-              </Upload>
-              <Popconfirm
-                title="Hapus dokumen terjemahan?"
-                okText="Hapus"
-                cancelText="Batal"
-                onConfirm={() => handleDelete(record)}
-                disabled={!canDelete}
-              >
-                <Button
-                  danger
-                  icon={<DeleteOutlined />}
+              {canManage && (
+                <Upload
+                  showUploadList={false}
+                  accept={resolveAccept(record.file_type)}
+                  customRequest={async ({ file, onSuccess, onError }) => {
+                    try {
+                      await handleUpload(file as File, record);
+                      onSuccess?.({}, file as File);
+                    } catch (error) {
+                      onError?.(error as Error);
+                    }
+                  }}
+                >
+                  <Button icon={<CloudUploadOutlined />} loading={isUploading} />
+                </Upload>
+              )}
+              {canManage && (
+                <Popconfirm
+                  title="Hapus dokumen terjemahan?"
+                  okText="Hapus"
+                  cancelText="Batal"
+                  onConfirm={() => handleDelete(record)}
                   disabled={!canDelete}
-                />
-              </Popconfirm>
+                >
+                  <Button
+                    danger
+                    icon={<DeleteOutlined />}
+                    disabled={!canDelete}
+                  />
+                </Popconfirm>
+              )}
             </Space>
           );
         },
       },
     ],
-    [handleDelete, handleDownloadMerged, handleUpload, originalUploadMap, uploadingId],
+    [canManage, handleDelete, handleDownloadMerged, handleUpload, originalUploadMap, uploadingId],
   );
 
   const originalColumns: ColumnsType<TranslationRow> = useMemo(
@@ -690,7 +703,7 @@ export default function TranslationComponent({
                   target="_blank"
                   rel="noreferrer"
                 >
-                  Buka Dokumen
+                  Lihat Dokumen
                 </Link>
               ) : (
                 "URL Tidak Tersedia"
@@ -712,87 +725,239 @@ export default function TranslationComponent({
   }: {
     translation_quota: number;
   }) => (
-    <Card
-      bodyStyle={{ padding: 16 }}
-      style={{
-        borderRadius: 16,
-        border: "none",
-        background: "linear-gradient(135deg, #1d4ed8, #2563eb, #1e40af)",
-        color: "#fff",
-        boxShadow: "0 12px 28px rgba(30, 64, 175, 0.35)",
-      }}
-    >
-      <Flex align="center" justify="space-between" style={{ width: "100%" }}>
-        <Space align="center" size={12}>
-          <Avatar
-            size={44}
-            icon={<TranslationOutlined />}
-            style={{
-              background: "rgba(255, 255, 255, 0.2)",
-              border: "1px solid rgba(255, 255, 255, 0.35)",
-            }}
-          />
-          <Space direction="vertical" size={0}>
-            <Typography.Text style={{ color: "#dbeafe", fontSize: 12 }}>
-              Translation Quota
-            </Typography.Text>
-            <Typography.Title level={4} style={{ color: "#fff", margin: 0 }}>
-              {translation_quota}
-            </Typography.Title>
-          </Space>
-        </Space>
+    <div className={styles.translationHeaderCard} style={{ height: "auto", minHeight: "unset" }}>
+      <div className={styles.translationHeaderRow}>
+        <div className={styles.translationHeaderLeft}>
+          <div className={styles.translationHeaderIcon}>
+            <TranslationOutlined />
+          </div>
+          <div style={{ minWidth: 0, flex: 1, overflow: "hidden" }}>
+            <div className={styles.sectionHeaderTitle}>
+              Sworn Translation
+            </div>
+            <div className={styles.sectionHeaderSubtitle}>
+              Kelola dokumen terjemahan resmi
+            </div>
+          </div>
+        </div>
 
-        <Avatar
-          size={36}
-          icon={<PlusOutlined />}
-          onClick={() => handleOpenModal()}
-          style={{
-            background: "#facc15",
-            color: "#1e3a8a",
-            boxShadow: "0 6px 16px rgba(15, 23, 42, 0.25)",
-          }}
-        />
-      </Flex>
-    </Card>
+        <div className={styles.translationHeaderRight}>
+          <Tag
+            color="blue"
+            style={{
+              borderRadius: 6,
+              padding: "1px 8px",
+              fontSize: 11,
+              fontWeight: 600,
+              margin: 0,
+              border: "1px solid #bfdbfe",
+              background: "#eff6ff",
+              color: "#1d4ed8",
+              flexShrink: 0,
+            }}
+          >
+            Kuota {translation_quota}
+          </Tag>
+          {canManage && (
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => handleOpenModal()}
+              style={{
+                borderRadius: 8,
+                height: 36,
+                fontWeight: 600,
+                fontSize: 13,
+                background: "#1b3d6d",
+                borderColor: "#1b3d6d",
+                flexShrink: 0,
+              }}
+            >
+              <span className={styles.desktopBtnText}>Tambah Dokumen</span>
+              <span className={styles.mobileBtnText}>Tambah</span>
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
   );
 
   return (
-    <Space direction="vertical" size={16} style={{ width: "100%" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 16, width: "100%", maxWidth: "100%", minWidth: 0 }}>
       <TranslationHeader translation_quota={Number(translation_quota)} />
 
       <Card
         bodyStyle={{ padding: 16 }}
-        style={{
-          borderRadius: 16,
-          borderColor: "#e2e8f0",
-          boxShadow: "0 10px 26px rgba(15, 23, 42, 0.05)",
-        }}
+        className={styles.translationTableCard}
       >
         <Tabs
           defaultActiveKey="translation"
+          style={{ width: "100%", maxWidth: "100%", minWidth: 0 }}
           items={[
             {
               key: "translation",
               label: "Dokumen Terjemahan",
               children: (
-                <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                  <Table
-                    columns={translationColumns}
-                    dataSource={translationRows}
-                    rowKey={(record, index) =>
-                      String(
-                        record.id ??
-                          record.document_id ??
-                          record.file_url ??
-                          index,
-                      )
-                    }
-                    pagination={false}
-                    locale={{
-                      emptyText: "Belum ada dokumen terjemahan yang diunggah.",
-                    }}
-                    scroll={{ x: 900 }}
-                  />
+                <Space direction="vertical" size={12} style={{ width: "100%", maxWidth: "100%", minWidth: 0 }}>
+                  <div className={styles.desktopTableOnly}>
+                    <div className={styles.tableWrapper}>
+                      <Table
+                        columns={translationColumns}
+                        dataSource={translationRows}
+                        rowKey={(record, index) =>
+                          String(
+                            record.id ??
+                              record.document_id ??
+                              record.file_url ??
+                              index,
+                          )
+                        }
+                        pagination={false}
+                        locale={{
+                          emptyText: "Belum ada dokumen terjemahan yang diunggah.",
+                        }}
+                        scroll={{ x: 900 }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className={styles.mobileCardListOnly}>
+                    {translationRows.length === 0 ? (
+                      <Empty
+                        image={Empty.PRESENTED_IMAGE_SIMPLE}
+                        description="Belum ada dokumen terjemahan yang diunggah."
+                      />
+                    ) : (
+                      translationRows.map((record, index) => {
+                        const fileUrl = getDocumentUrl(record);
+                        const original = record.document_id
+                          ? originalUploadMap.get(String(record.document_id))
+                          : undefined;
+                        const originalUrl = original ? getDocumentUrl(original) : null;
+                        const canDownloadMerged = Boolean(originalUrl && fileUrl);
+                        const isUploading = uploadingId === record.document_id;
+                        const canDelete = Boolean(record.translation_id);
+
+                        return (
+                          <div
+                            key={String(
+                              record.id ??
+                                record.document_id ??
+                                record.file_url ??
+                                index,
+                            )}
+                            className={styles.mobileTransCard}
+                          >
+                            <div className={styles.mobileTransHeader}>
+                              <Space align="center" size={8} style={{ minWidth: 0, flex: 1 }}>
+                                <Avatar size={24} icon={<FileTextOutlined />} style={{ flexShrink: 0 }} />
+                                <Typography.Text strong style={{ wordBreak: "break-word", fontSize: 13 }}>
+                                  {record.label}
+                                </Typography.Text>
+                              </Space>
+                              <Tag
+                                color={statusColor(record.status ?? "not started")}
+                                style={{ margin: 0, flexShrink: 0, fontSize: 11 }}
+                              >
+                                {(record.status ?? "not started").toUpperCase()}
+                              </Tag>
+                            </div>
+
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 6 }}>
+                              <div>
+                                {typeof record.page_count === "number" ? (
+                                  <Tag color="blue" style={{ margin: 0, fontSize: 11 }}>
+                                    Pages: {record.page_count}
+                                  </Tag>
+                                ) : (
+                                  <PageCountTag url={getDocumentUrl(record)} />
+                                )}
+                              </div>
+                              <div style={{ fontSize: 11, color: "#64748b" }}>
+                                Uploaded by {record.file_url ? "Admission" : "-"}
+                                {record.updated_at ? ` (${record.updated_at})` : ""}
+                              </div>
+                            </div>
+
+                            <div className={styles.mobileTransActions}>
+                              <Button
+                                size="small"
+                                icon={<EyeOutlined />}
+                                disabled={!fileUrl}
+                                href={
+                                  fileUrl
+                                    ? buildFilePreviewUrl(
+                                        fileUrl,
+                                        record.file_name ?? `${record.label ?? "document"}.pdf`,
+                                        record.file_type,
+                                      )
+                                    : undefined
+                                }
+                                target={fileUrl ? "_blank" : undefined}
+                                className={styles.mobileTransBtn}
+                              >
+                                Lihat
+                              </Button>
+
+                              <Button
+                                size="small"
+                                icon={<DownloadOutlined />}
+                                disabled={!canDownloadMerged}
+                                onClick={() => handleDownloadMerged(record)}
+                                className={styles.mobileTransBtn}
+                              >
+                                Unduh Gabungan
+                              </Button>
+
+                              {canManage && (
+                                <Upload
+                                  showUploadList={false}
+                                  accept={resolveAccept(record.file_type)}
+                                  customRequest={async ({ file, onSuccess, onError }) => {
+                                    try {
+                                      await handleUpload(file as File, record);
+                                      onSuccess?.({}, file as File);
+                                    } catch (error) {
+                                      onError?.(error as Error);
+                                    }
+                                  }}
+                                >
+                                  <Button
+                                    size="small"
+                                    icon={<CloudUploadOutlined />}
+                                    loading={isUploading}
+                                    className={styles.mobileTransBtn}
+                                  >
+                                    Upload
+                                  </Button>
+                                </Upload>
+                              )}
+
+                              {canManage && (
+                                <Popconfirm
+                                  title="Hapus dokumen terjemahan?"
+                                  okText="Hapus"
+                                  cancelText="Batal"
+                                  onConfirm={() => handleDelete(record)}
+                                  disabled={!canDelete}
+                                >
+                                  <Button
+                                    size="small"
+                                    danger
+                                    icon={<DeleteOutlined />}
+                                    disabled={!canDelete}
+                                    className={styles.mobileTransBtn}
+                                  >
+                                    Hapus
+                                  </Button>
+                                </Popconfirm>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
                 </Space>
               ),
             },
@@ -800,24 +965,85 @@ export default function TranslationComponent({
               key: "original",
               label: "Dokumen Asli",
               children: (
-                <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                  <Table
-                    columns={originalColumns}
-                    dataSource={originalUploads as TranslationRow[]}
-                    rowKey={(record, index) =>
-                      String(
-                        record.id ??
-                          record.document_id ??
-                          record.file_url ??
-                          index,
-                      )
-                    }
-                    pagination={false}
-                    locale={{
-                      emptyText: "Belum ada dokumen yang diunggah.",
-                    }}
-                    scroll={{ x: 800 }}
-                  />
+                <Space direction="vertical" size={12} style={{ width: "100%", maxWidth: "100%", minWidth: 0 }}>
+                  <div className={styles.desktopTableOnly}>
+                    <div className={styles.tableWrapper}>
+                      <Table
+                        columns={originalColumns}
+                        dataSource={originalUploads as TranslationRow[]}
+                        rowKey={(record, index) =>
+                          String(
+                            record.id ??
+                              record.document_id ??
+                              record.file_url ??
+                              index,
+                          )
+                        }
+                        pagination={false}
+                        locale={{
+                          emptyText: "Belum ada dokumen yang diunggah.",
+                        }}
+                        scroll={{ x: 800 }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className={styles.mobileCardListOnly}>
+                    {originalUploads.length === 0 ? (
+                      <Empty
+                        image={Empty.PRESENTED_IMAGE_SIMPLE}
+                        description="Belum ada dokumen yang diunggah."
+                      />
+                    ) : (
+                      (originalUploads as TranslationRow[]).map((record, index) => {
+                        const fileUrl = getDocumentUrl(record);
+                        return (
+                          <div
+                            key={String(
+                              record.id ??
+                                record.document_id ??
+                                record.file_url ??
+                                index,
+                            )}
+                            className={styles.mobileTransCard}
+                          >
+                            <div className={styles.mobileTransHeader}>
+                              <Space align="center" size={8} style={{ minWidth: 0, flex: 1 }}>
+                                <Avatar size={24} icon={<FileTextOutlined />} style={{ flexShrink: 0 }} />
+                                <Typography.Text strong style={{ wordBreak: "break-word", fontSize: 13 }}>
+                                  {record.label}
+                                </Typography.Text>
+                              </Space>
+                              <PageCountTag url={getDocumentUrl(record)} />
+                            </div>
+
+                            <div className={styles.mobileTransActions}>
+                              {fileUrl ? (
+                                <Button
+                                  size="small"
+                                  icon={<EyeOutlined />}
+                                  href={buildFilePreviewUrl(
+                                    fileUrl,
+                                    record.file_name ?? `${record.label ?? "document"}.pdf`,
+                                    record.file_type,
+                                  )}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className={styles.mobileTransBtn}
+                                >
+                                  Lihat Dokumen
+                                </Button>
+                              ) : (
+                                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                  URL Tidak Tersedia
+                                </Typography.Text>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
                 </Space>
               ),
             },
@@ -859,6 +1085,6 @@ export default function TranslationComponent({
           </Form.Item>
         </Form>
       </Modal>
-    </Space>
+    </div>
   );
 }

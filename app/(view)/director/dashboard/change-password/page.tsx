@@ -1,12 +1,7 @@
 "use client";
 
-import ChangePasswordContent from "@/app/components/common/change-password-content";
+import ProfileContent from "@/app/components/common/profile-content";
 
 export default function DirectorChangePasswordPage() {
-  return (
-    <ChangePasswordContent
-      title="Change Password"
-      description="Ubah password akun director Anda."
-    />
-  );
+  return <ProfileContent defaultTab="security" />;
 }

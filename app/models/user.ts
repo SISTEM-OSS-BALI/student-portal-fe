@@ -22,13 +22,14 @@ export interface UserDataModel {
   source?: string | null;
   source_category?: string | null;
   code_referral?: string | null;
+  gdrive_folder_url?: string | null;
   translation_quota?: number;
   has_initial_translations?: boolean;
+  workflow_checked_ids?: string | null;
   no_phone?: string | null;
+  profile_picture_url?: string | null;
 
   visa_granted_at?: string | null;
-  // Waktu pertama visa diajukan (status Submit); dasar fee referral Overseas.
-  visa_submitted_at?: string | null;
   visa_grant_duration_days?: number | null;
   visa_grant_duration_label?: string | null;
 
@@ -72,8 +73,6 @@ export interface UserPayloadCreateModel {
   current_step_id?: string | null;
   visa_status?: string;
   visa_granted_at?: string | null;
-  // Waktu pertama visa diajukan (status Submit); dasar fee referral Overseas.
-  visa_submitted_at?: string | null;
   student_status?: string;
   name_consultant?: string | null;
   name_campus?: string;
@@ -83,6 +82,7 @@ export interface UserPayloadCreateModel {
   source?: string | null;
   source_category?: string | null;
   code_referral?: string | null;
+  gdrive_folder_url?: string | null;
   translation_quota?: number;
   has_initial_translations?: boolean;
   no_phone?: string | null;
@@ -91,13 +91,12 @@ export interface UserPayloadCreateModel {
 export interface UserPayloadUpdateModel {
   name?: string;
   email?: string;
+  password?: string;
   role?: string;
   stage_id?: string | null;
   current_step_id?: string | null;
   visa_status?: string;
   visa_granted_at?: string | null;
-  // Waktu pertama visa diajukan (status Submit); dasar fee referral Overseas.
-  visa_submitted_at?: string | null;
   student_status?: string;
   name_consultant?: string | null;
   name_campus?: string;
@@ -107,9 +106,12 @@ export interface UserPayloadUpdateModel {
   source?: string | null;
   source_category?: string | null;
   code_referral?: string | null;
+  gdrive_folder_url?: string | null;
   translation_quota?: number;
   has_initial_translations?: boolean;
+  workflow_checked_ids?: string | null;
   no_phone?: string | null;
+  profile_picture_url?: string | null;
 }
 
 // Used by create/edit student forms where password is required only on create.

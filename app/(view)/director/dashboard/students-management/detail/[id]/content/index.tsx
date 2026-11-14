@@ -1,16 +1,20 @@
 "use client";
 
 import {
+  useUpdateStudentStatusUser,
   useUpdateUser,
   useUpdateVisaStatusUser,
   useUser,
+  useUsers,
 } from "@/app/hooks/use-users";
 import { useStudentNotes } from "@/app/hooks/use-student-notes";
 import { NoteStudentDataModel } from "@/app/models/notes-student";
 import type { UserDataModel } from "@/app/models/user";
 import {
+  ArrowLeftOutlined,
   DeleteOutlined,
   EditOutlined,
+  FolderOpenOutlined,
 } from "@ant-design/icons";
 import {
   Avatar,
@@ -18,7 +22,9 @@ import {
   Card,
   DatePicker,
   Flex,
+  Input,
   List,
+  message,
   Modal,
   Select,
   Space,
@@ -30,16 +36,26 @@ import {
 import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import ModalNotesComponent from "./ModalNotesComponent";
-import OverviewComponent from "./tab-layout/OverviewComponent";
+import OverviewComponent from "@/app/(view)/admission/dashboard/students-management/detail/[id]/content/tab-layout/OverviewComponent";
 import LoadingSplash from "@/app/components/common/loading";
-import DocumentsComponent from "./tab-layout/DocumentsComponent";
-import CVComponents from "./tab-layout/CVComponents";
+import DocumentsComponent from "@/app/(view)/admission/dashboard/students-management/detail/[id]/content/tab-layout/DocumentsComponent";
+import CVComponents from "@/app/(view)/admission/dashboard/students-management/detail/[id]/content/tab-layout/CVComponents";
 import LetterComponent from "./tab-layout/LetterComponent";
-import ChatComponent from "./tab-layout/ChatComponent";
+import ChatComponent from "@/app/(view)/admission/dashboard/students-management/detail/[id]/content/tab-layout/ChatComponent";
 import ActivityLogComponent from "./tab-layout/ActivityLogComponent";
-import TranslationComponent from "./tab-layout/TranslationComponent";
+import TranslationComponent from "@/app/(view)/admission/dashboard/students-management/detail/[id]/content/tab-layout/TranslationComponent";
+import {
+  getCountryName,
+  getStudentAvatarUrl,
+  getVisaStatusBadgeMeta,
+  normalizePipelineStatusOption,
+  PIPELINE_STATUS_OPTIONS,
+} from "@/app/utils/student-helpers";
+import { useStepsManagement } from "@/app/hooks/use-steps-management";
+import { useCountriesManagement } from "@/app/hooks/use-country-management";
+import styles from "./detail.module.css";
 
 const allowedTabKeys = new Set([
   "overview",
@@ -51,12 +67,7 @@ const allowedTabKeys = new Set([
   "activity-log",
 ]);
 
-const visaStatusOptions = [
-  { value: "Waiting", label: "Waiting" },
-  { value: "Submit", label: "Submit" },
-  { value: "Grant", label: "Grant" },
-  { value: "Refused", label: "Refused" },
-];
+const visaStatusOptions = PIPELINE_STATUS_OPTIONS;
 
 type StudentDetailExtraFields = {
   student_status?: string | null;
@@ -100,52 +111,46 @@ function getStudentProcessDuration(student?: StudentDetailData | null): string {
   const startDate = student.joined_at || student.created_at;
   const endDate = student.visa_granted_at;
 
-  if (!startDate || !endDate) return "Belum bisa dihitung";
+  if (!startDate || !endDate) return "Not available yet";
 
   const start = dayjs(startDate);
   const end = dayjs(endDate);
 
-  if (!start.isValid() || !end.isValid()) return "Belum bisa dihitung";
+  if (!start.isValid() || !end.isValid()) return "Not available yet";
 
   const totalDays = end.diff(start, "day");
-  if (totalDays < 0) return "Belum bisa dihitung";
+  if (totalDays < 0) return "Not available yet";
 
   const months = Math.floor(totalDays / 30);
   const days = totalDays % 30;
 
-  if (months > 0 && days > 0) return `${months} bulan ${days} hari`;
-  if (months > 0) return `${months} bulan`;
-  return `${days} hari`;
+  if (months > 0 && days > 0) return `${months} months ${days} days`;
+  if (months > 0) return `${months} months`;
+  return `${days} days`;
 }
 
 function getStudentStatusChangedInfo(
   student?: StudentDetailData | null,
 ): string {
-  if (!student) return "Belum ada riwayat perubahan status";
+  if (!student) return "No status update history";
 
-  if (
-    student.student_status_updated_by_name &&
-    student.student_status_updated_at_label
-  ) {
-    return `Diubah oleh ${student.student_status_updated_by_name} pada ${student.student_status_updated_at_label}`;
+  const updatedBy = student.student_status_updated_by_name?.trim();
+  const rawDate = student.student_status_updated_at;
+  const dateFormatted = rawDate ? formatDisplayDateTime(rawDate) : null;
+
+  if (updatedBy && dateFormatted && dateFormatted !== "-") {
+    return `Updated by ${updatedBy} on ${dateFormatted}`;
   }
 
-  if (
-    student.student_status_updated_by_name &&
-    student.student_status_updated_at
-  ) {
-    return `Diubah oleh ${student.student_status_updated_by_name} pada ${formatDisplayDateTime(student.student_status_updated_at)}`;
+  if (updatedBy) {
+    return `Updated by ${updatedBy}`;
   }
 
-  if (student.student_status_updated_at_label) {
-    return `Status diperbarui pada ${student.student_status_updated_at_label}`;
+  if (dateFormatted && dateFormatted !== "-") {
+    return `Status updated on ${dateFormatted}`;
   }
 
-  if (student.student_status_updated_at) {
-    return `Status diperbarui pada ${formatDisplayDateTime(student.student_status_updated_at)}`;
-  }
-
-  return "Belum ada riwayat perubahan status";
+  return "No status update history";
 }
 
 export default function StudentDetailContentPage() {
@@ -165,8 +170,15 @@ export default function StudentDetailContentPage() {
     onUpdateLoading: onUpdateVisaStatusLoading,
   } = useUpdateVisaStatusUser();
 
-  const { data } = useUser({ id: studentId as string });
+  const {
+    onUpdate: onUpdateStudentStatus,
+    onUpdateLoading: onUpdateStudentStatusLoading,
+  } = useUpdateStudentStatusUser();
+
+  const { data, fetchLoading } = useUser({ id: studentId as string });
   const detailStudentData = (data ?? null) as StudentDetailData | null;
+  const { data: dbMasterSteps = [] } = useStepsManagement({});
+  const { data: dbCountries = [] } = useCountriesManagement({});
 
   const { onUpdate: onUpdateUser, onUpdateLoading } = useUpdateUser();
 
@@ -193,6 +205,25 @@ export default function StudentDetailContentPage() {
   const [visaGrantModalOpen, setVisaGrantModalOpen] = useState(false);
   const [selectedVisaGrantedAt, setSelectedVisaGrantedAt] =
     useState<Dayjs | null>(null);
+  const [gdriveModalOpen, setGdriveModalOpen] = useState(false);
+  const [gdriveInputUrl, setGdriveInputUrl] = useState("");
+
+  const handleOpenGdriveModal = () => {
+    setGdriveInputUrl(detailStudentData?.gdrive_folder_url ?? "");
+    setGdriveModalOpen(true);
+  };
+
+  const handleSaveGdriveUrl = async () => {
+    if (!studentId) return;
+    const trimmed = gdriveInputUrl.trim();
+    await onUpdateUser({
+      id: studentId,
+      payload: {
+        gdrive_folder_url: trimmed || null,
+      },
+    });
+    setGdriveModalOpen(false);
+  };
 
   const studentName = detailStudentData?.name ?? "Student";
   const studentEmail = detailStudentData?.email ?? "student@email.com";
@@ -212,11 +243,13 @@ export default function StudentDetailContentPage() {
       ? detailStudentData.visa_type.replace(/_/g, " ").toUpperCase()
     : "Belum dipilih";
 
-  const statusLabel =
+  const rawStatus =
     detailStudentData?.visa_status ??
     detailStudentData?.student_status ??
     detailStudentData?.status ??
-    "ON GOING";
+    "On Going";
+  const visaBadgeMeta = getVisaStatusBadgeMeta(rawStatus);
+  const statusLabel = visaBadgeMeta.label;
 
   const joinedAtLabel = formatDisplayDate(
     detailStudentData?.joined_at || detailStudentData?.created_at,
@@ -254,10 +287,12 @@ export default function StudentDetailContentPage() {
 
   const handleOpenVisaStatusModal = () => {
     setSelectedVisaStatus(
-      detailStudentData?.visa_status ??
-        detailStudentData?.student_status ??
-        detailStudentData?.status ??
-        "ON GOING",
+      normalizePipelineStatusOption(
+        detailStudentData?.visa_status ??
+          detailStudentData?.student_status ??
+          detailStudentData?.status ??
+          "On Going",
+      ),
     );
     setVisaStatusModalOpen(true);
   };
@@ -302,10 +337,16 @@ export default function StudentDetailContentPage() {
   const handleSubmitVisaStatus = async () => {
     if (!studentId || !selectedVisaStatus) return;
 
-    await onUpdateVisaStatus({
-      id: studentId,
-      visa_status: selectedVisaStatus,
-    });
+    await Promise.all([
+      onUpdateVisaStatus({
+        id: studentId,
+        visa_status: selectedVisaStatus,
+      }),
+      onUpdateStudentStatus({
+        id: studentId,
+        student_status: selectedVisaStatus,
+      }),
+    ]);
 
     setVisaStatusModalOpen(false);
   };
@@ -342,12 +383,52 @@ export default function StudentDetailContentPage() {
 
   const stepsSource = useMemo(() => {
     const raw = detailStudentData?.stage?.country?.steps ?? [];
-    return [...raw].sort((a, b) => {
-      const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
-      const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
-      return timeA - timeB;
-    });
-  }, [detailStudentData?.stage?.country?.steps]);
+    if (raw.length > 0 && raw.some((s) => s.children && s.children.length > 0)) {
+      return [...raw].sort((a, b) => {
+        const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return timeA - timeB;
+      });
+    }
+
+    // Fallback 1: Cari dari negara siswa di master data negara yang diatur di Admisi
+    const studentCountry = getCountryName(detailStudentData);
+    const matchedCountry = dbCountries.find(
+      (c) =>
+        c.name.toLowerCase() === studentCountry.toLowerCase() &&
+        c.steps &&
+        c.steps.some((st) => st.children && st.children.length > 0),
+    );
+    if (matchedCountry?.steps?.length) {
+      return [...matchedCountry.steps].sort((a, b) => {
+        const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return timeA - timeB;
+      });
+    }
+
+    // Fallback 2: Ambil langsung dari master steps yang diatur di Admisi
+    const masterStepsWithChildren = dbMasterSteps.filter(
+      (s) => s.children && s.children.length > 0,
+    );
+    if (masterStepsWithChildren.length > 0) {
+      return [...masterStepsWithChildren].sort((a, b) => {
+        const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return timeA - timeB;
+      });
+    }
+
+    if (raw.length > 0) {
+      return [...raw].sort((a, b) => {
+        const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return timeA - timeB;
+      });
+    }
+
+    return [];
+  }, [detailStudentData, dbCountries, dbMasterSteps]);
 
   const currentStepId = detailStudentData?.current_step_id;
 
@@ -426,7 +507,10 @@ export default function StudentDetailContentPage() {
       key: "documents",
       label: "Documents",
       children: studentId ? (
-        <DocumentsComponent student_id={studentId} />
+        <DocumentsComponent
+          student_id={studentId}
+          student={detailStudentData}
+        />
       ) : null,
     },
     {
@@ -438,6 +522,7 @@ export default function StudentDetailContentPage() {
           student_name={studentName}
           student_country={detailStudentData?.stage?.country?.name || ""}
           translation_quota={detailStudentData?.translation_quota || 0}
+          student_has_initial_translations={detailStudentData?.has_initial_translations}
         />
       ) : null,
     },
@@ -458,6 +543,7 @@ export default function StudentDetailContentPage() {
         <ChatComponent
           student_id={studentId}
           student_name={detailStudentData?.name}
+          consultant_name={detailStudentData?.name_consultant}
           initialConversationId={requestedConversationId}
         />
       ) : null,
@@ -495,199 +581,427 @@ export default function StudentDetailContentPage() {
     [pathname, router, searchParams],
   );
 
-  return (
-    <Space direction="vertical" size={16} style={{ width: "100%" }}>
-      <Typography.Title level={4} style={{ marginBottom: 4 }}>
-        Student Case Detail
-      </Typography.Title>
+  const defaultWorkflow = useMemo(
+    () => [
+      {
+        id: "step-1",
+        label: "Preparation",
+        children: [
+          { id: "c-1-1", label: "Administration Fee Payment" },
+          { id: "c-1-2", label: "Offer Letter" },
+          { id: "c-1-3", label: "Tuition Fee Breakdown" },
+          { id: "c-1-4", label: "Visa Document Finalization" },
+          { id: "c-1-5", label: "Medical Examination (MCU)" },
+          { id: "c-1-6", label: "Visa Application Submission" },
+          { id: "c-1-7", label: "Biometrics Appointment" },
+          { id: "c-1-8", label: "Campus Application" },
+        ],
+      },
+      {
+        id: "step-2",
+        label: "Progress",
+        children: [
+          { id: "c-2-1", label: "Document Collection" },
+          { id: "c-2-2", label: "English Course" },
+        ],
+      },
+      {
+        id: "step-3",
+        label: "Complete",
+        children: [
+          { id: "c-3-1", label: "Visa Grant" },
+          { id: "c-3-2", label: "Pre-Departure Briefing" },
+          { id: "c-3-3", label: "Student Testimonial" },
+          { id: "c-3-4", label: "Student Departure" },
+          { id: "c-3-5", label: "Arrival and On-Shore Support" },
+        ],
+      },
+    ],
+    [],
+  );
 
-      <Card
-        styles={{ body: { padding: 16 } }}
-        style={{
-          borderRadius: 16,
-          borderColor: "#60a5fa",
-          background: "#f8fbff",
-          boxShadow: "0 10px 30px rgba(15, 23, 42, 0.05)",
-        }}
-      >
-        <div
-          style={{
-            display: "grid",
-            gap: 16,
-            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-            alignItems: "start",
-          }}
+  const displayWorkflow = useMemo(() => {
+    const hasDbStepsWithChildren = stepsSource.some(
+      (s) => s.children && s.children.length > 0,
+    );
+    if (hasDbStepsWithChildren) {
+      return stepsSource.map((s, idx) => ({
+        id: String(s.id || idx),
+        label: s.label,
+        children: (s.children || []).map((c, cIdx) => ({
+          id: String(c.id || `${idx}-${cIdx}`),
+          label: c.label,
+        })),
+      }));
+    }
+    return defaultWorkflow;
+  }, [defaultWorkflow, stepsSource]);
+
+  const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (detailStudentData?.workflow_checked_ids) {
+      try {
+        const ids = JSON.parse(detailStudentData.workflow_checked_ids);
+        if (Array.isArray(ids)) {
+          const map: Record<string, boolean> = {};
+          ids.forEach((id: string) => {
+            map[id] = true;
+          });
+          setCheckedItems((prev) => ({ ...prev, ...map }));
+        }
+      } catch {
+        // Ignored
+      }
+    }
+  }, [detailStudentData?.workflow_checked_ids]);
+
+  const totalCheckable = useMemo(() => {
+    return displayWorkflow.reduce((acc, step) => acc + step.children.length, 0);
+  }, [displayWorkflow]);
+
+  const totalChecked = useMemo(() => {
+    return Object.values(checkedItems).filter(Boolean).length;
+  }, [checkedItems]);
+
+  const dynamicProgressPercent = useMemo(() => {
+    if (totalCheckable === 0) return 0;
+    return Math.round((totalChecked / totalCheckable) * 100);
+  }, [totalCheckable, totalChecked]);
+
+  if (fetchLoading || !detailStudentData) {
+    return <LoadingSplash label="Loading student detail..." />;
+  }
+
+  return (
+    <div className={styles.pageWrapper}>
+      <div className={styles.pageHeaderRow}>
+        <button
+          type="button"
+          className={styles.backBtn}
+          onClick={() =>
+            router.push("/director/dashboard/students-management")
+          }
+          aria-label="Kembali"
         >
-          <Space align="start" size={12}>
-            <Avatar size={48} style={{ backgroundColor: "#f59e0b" }}>
+          <ArrowLeftOutlined style={{ fontSize: 16 }} />
+        </button>
+        <h1 className={styles.pageTitle}>Student Case Detail</h1>
+      </div>
+
+      <div className={styles.mainCard}>
+        <div className={styles.cardGrid}>
+          {/* Left Column: Student Profile */}
+          <div className={styles.leftCol}>
+            <Avatar
+              size={56}
+              src={getStudentAvatarUrl(detailStudentData)}
+              className={styles.studentAvatar}
+              style={{
+                backgroundColor: "#eff6ff",
+                color: "#1b3d6d",
+                fontSize: 20,
+                fontWeight: 700,
+                flexShrink: 0,
+                border: "2px solid #e2e8f0",
+              }}
+            >
               {initials}
             </Avatar>
 
-            <Space direction="vertical" size={4}>
-              <Typography.Text strong>{studentName}</Typography.Text>
-              <Typography.Text type="secondary">{studentEmail}</Typography.Text>
-              <Typography.Text type="secondary">
-                No Phone:{" "}
-                {detailStudentData?.no_phone ?? "Belum ada nomor telepon"}
-              </Typography.Text>
-              <Typography.Text type="secondary">
-                Destination: {studentCountry}
-              </Typography.Text>
-              <Typography.Text type="secondary">
-                Campus: {studentCampus}
-              </Typography.Text>
-              <Typography.Text type="secondary">
-                Degree: {studentDegree}
-              </Typography.Text>
-              <Typography.Text type="secondary">
-                Nama Degree: {studentDegreeName}
-              </Typography.Text>
+            <div className={styles.studentName}>{studentName}</div>
+            <div className={styles.studentEmail}>{studentEmail}</div>
 
-              <div style={{ marginTop: 10 }}>
-                <Flex align="center" justify="space-between" gap={8} wrap>
-                  <Typography.Text strong>Note</Typography.Text>
-                  <Button size="small" onClick={handleOpenModalNotes}>
-                    +
-                  </Button>
-                </Flex>
-
-                <List
-                  dataSource={notesItems}
-                  locale={{ emptyText: "Belum ada catatan" }}
-                  renderItem={(item) => (
-                    <List.Item style={{ paddingInline: 0 }}>
-                      <Flex
-                        align="start"
-                        justify="space-between"
-                        style={{ width: "100%" }}
-                        gap={10}
+            <div className={styles.metaList}>
+              <div className={styles.metaRow}>
+                <span className={styles.metaLabel}>No Phone:</span>
+                <span className={styles.metaValue}>
+                  {detailStudentData?.no_phone || "-"}
+                </span>
+              </div>
+              <div className={styles.metaRow}>
+                <span className={styles.metaLabel}>Country:</span>
+                <span className={styles.metaValue}>
+                  {studentCountry === "Belum ada negara"
+                    ? "-"
+                    : studentCountry}
+                </span>
+              </div>
+              <div className={styles.metaRow}>
+                <span className={styles.metaLabel}>Campus:</span>
+                <span className={styles.metaValue}>
+                  {studentCampus === "Belum ada kampus"
+                    ? "-"
+                    : studentCampus}
+                </span>
+              </div>
+              <div className={styles.metaRow}>
+                <span className={styles.metaLabel}>Degree:</span>
+                <span className={styles.metaValue}>
+                  {studentDegree === "Belum ada degree"
+                    ? "-"
+                    : studentDegree}
+                </span>
+              </div>
+              <div className={styles.metaRow}>
+                <span className={styles.metaLabel}>Major:</span>
+                <span className={styles.metaValue}>
+                  {studentDegreeName === "Belum ada nama degree"
+                    ? "-"
+                    : studentDegreeName}
+                </span>
+              </div>
+              <div className={styles.metaRow}>
+                <span className={styles.metaLabel}>Consultant:</span>
+                <span className={styles.metaValue} style={{ fontWeight: 600, color: "#6d28d9" }}>
+                  {detailStudentData?.name_consultant || "Belum ditentukan"}
+                </span>
+              </div>
+              <div className={styles.metaRow}>
+                <span className={styles.metaLabel}>Google Drive:</span>
+                <span className={styles.metaValue}>
+                  {detailStudentData?.gdrive_folder_url ? (
+                    <Flex align="center" gap={6} wrap="wrap">
+                      <a
+                        href={detailStudentData.gdrive_folder_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 4,
+                          color: "#1d4ed8",
+                          fontWeight: 600,
+                          fontSize: 12,
+                          textDecoration: "none",
+                        }}
                       >
-                        <div style={{ flex: 1 }}>
-                          <Typography.Text>{item.note}</Typography.Text>
-                          <Typography.Text
-                            type="secondary"
-                            style={{ display: "block", fontSize: 12 }}
+                        <FolderOpenOutlined /> Open Folder
+                      </a>
+                      <Button
+                        type="text"
+                        size="small"
+                        icon={<EditOutlined style={{ fontSize: 11, color: "#64748b" }} />}
+                        onClick={handleOpenGdriveModal}
+                        style={{ padding: "0 4px", height: 20 }}
+                        title="Ubah link Google Drive"
+                      />
+                    </Flex>
+                  ) : (
+                    <Flex align="center" gap={6}>
+                      <span style={{ color: "#94a3b8", fontSize: 12 }}>Not linked</span>
+                      <Button
+                        type="link"
+                        size="small"
+                        onClick={handleOpenGdriveModal}
+                        style={{ padding: 0, height: "auto", fontSize: 12, fontWeight: 500 }}
+                      >
+                        + Link
+                      </Button>
+                    </Flex>
+                  )}
+                </span>
+              </div>
+            </div>
+
+            <div
+              style={{
+                marginTop: 24,
+                paddingTop: 16,
+                borderTop: "1px solid #f1f5f9",
+              }}
+            >
+              <Flex align="center" justify="space-between">
+                <Typography.Text
+                  strong
+                  style={{ fontSize: 13, color: "#0f172a" }}
+                >
+                  Internal Notes
+                </Typography.Text>
+              </Flex>
+              {notesItems.length > 0 && (
+                <div
+                  style={{
+                    marginTop: 8,
+                    maxHeight: 120,
+                    overflowY: "auto",
+                  }}
+                >
+                  <List
+                    size="small"
+                    dataSource={notesItems.slice(0, 3)}
+                    renderItem={(item) => (
+                      <List.Item
+                        style={{
+                          padding: "6px 0",
+                          borderBottom: "1px solid #f8fafc",
+                        }}
+                      >
+                        <div style={{ fontSize: 12, color: "#334155" }}>
+                          {item.note}
+                          <span
+                            style={{
+                              display: "block",
+                              fontSize: 10,
+                              color: "#94a3b8",
+                            }}
                           >
                             {item.time}
-                          </Typography.Text>
+                          </span>
                         </div>
-
-                        <Space size={8}>
-                          <Button
-                            size="small"
-                            type="link"
-                            icon={<EditOutlined />}
-                            onClick={() => handleEditNote(item.raw)}
-                          />
-                          <Button
-                            size="small"
-                            type="link"
-                            danger
-                            icon={<DeleteOutlined />}
-                            loading={onDeleteNoteLoading}
-                            onClick={() => handleDeleteNote(item.raw)}
-                          />
-                        </Space>
-                      </Flex>
-                    </List.Item>
-                  )}
-                />
-              </div>
-            </Space>
-          </Space>
-
-          <Space direction="vertical" size={8}>
-            <Typography.Text strong>
-              {stepsSource.length || 0}-Step Progress
-            </Typography.Text>
-            <Steps direction="vertical" size="small" items={progressSteps} />
-            <Typography.Text type="secondary">
-              {progressPercent}% Complete
-            </Typography.Text>
-          </Space>
-
-          <div
-            style={{
-              background: "#f1f5f9",
-              padding: 12,
-              borderRadius: 12,
-            }}
-          >
-            <Space direction="vertical" size={10} style={{ width: "100%" }}>
-              <div>
-                <Typography.Text strong>Visa Status</Typography.Text>
-                <div style={{ marginTop: 6 }}>
-                  <Tag color="blue" style={{ marginRight: 0 }}>
-                    {statusLabel}
-                  </Tag>
+                      </List.Item>
+                    )}
+                  />
                 </div>
-              </div>
+              )}
+            </div>
+          </div>
 
-              <div>
-                <Typography.Text strong>Visa Type</Typography.Text>
-                <Typography.Text style={{ display: "block" }}>
-                  {visaTypeLabel}
-                </Typography.Text>
-              </div>
+          {/* Middle Column: Dynamic Workflow Progress */}
+          <div className={styles.middleCol}>
+            <div className={styles.workflowHeading}>
+              Dynamic Workflow Progress
+            </div>
 
-              <div>
-                <Typography.Text strong>Status Last Updated</Typography.Text>
-                <Typography.Text style={{ display: "block" }}>
-                  {statusChangedInfo}
-                </Typography.Text>
-              </div>
+            <div className={styles.stepsTimeline}>
+              {displayWorkflow.map((step, idx) => {
+                const stepCheckedCount = step.children.filter(
+                  (c) => checkedItems[c.id],
+                ).length;
+                const stepTotalCount = step.children.length;
+                const isLast = idx === displayWorkflow.length - 1;
 
-              <div>
-                <Typography.Text strong>Joined At</Typography.Text>
-                <Typography.Text style={{ display: "block" }}>
-                  {joinedAtLabel}
-                </Typography.Text>
-              </div>
+                return (
+                  <div key={step.id} className={styles.stepBlock}>
+                    <div className={styles.stepTimelineIndicator}>
+                      <div className={styles.stepNumberCircle}>
+                        {idx + 1}
+                      </div>
+                      {!isLast && (
+                        <div className={styles.stepTimelineLine} />
+                      )}
+                    </div>
 
-              <div>
-                <Flex align="center" justify="space-between" gap={8}>
-                  <Typography.Text strong>Visa Granted At</Typography.Text>
-                  <Button size="small" type="link" onClick={handleOpenVisaGrantModal}>
-                    Edit
-                  </Button>
-                </Flex>
-                <Typography.Text style={{ display: "block" }}>
-                  {visaGrantedAtLabel}
-                </Typography.Text>
-              </div>
+                    <div className={styles.stepMainContent}>
+                      <div className={styles.stepHeaderRow}>
+                        <span className={styles.stepLabel}>
+                          {step.label}
+                        </span>
+                        <span className={styles.stepBadgePill}>
+                          {stepCheckedCount}/{stepTotalCount}
+                        </span>
+                      </div>
 
-              <div>
-                <Typography.Text strong>Lama Proses Student</Typography.Text>
-                <Typography.Text style={{ display: "block" }}>
-                  {processDuration}
-                </Typography.Text>
-              </div>
+                      <div className={styles.checkboxList} style={{ pointerEvents: "none" }}>
+                        {step.children.map((child) => (
+                          <label
+                            key={child.id}
+                            className={styles.checkboxItem}
+                            style={{ cursor: "default" }}
+                          >
+                            <input
+                              type="checkbox"
+                              className={styles.checkboxInput}
+                              checked={Boolean(checkedItems[child.id])}
+                              disabled
+                              readOnly
+                            />
+                            <span>{child.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
 
-              <div>
-                <Typography.Text strong>PIC Admission</Typography.Text>
-                <Typography.Text style={{ display: "block" }}>
-                  {detailStudentData?.student_status_updated_by_name || "-"}
-                </Typography.Text>
-              </div>
+            <div className={styles.overallProgressContainer}>
+              <span className={styles.overallProgressLabel}>
+                Overall Progress
+              </span>
+              <span className={styles.overallProgressValue}>
+                {dynamicProgressPercent}% Complete
+              </span>
+            </div>
+          </div>
 
-              <Button
-                type="primary"
-                block
-                onClick={handleOpenVisaStatusModal}
-                loading={onUpdateVisaStatusLoading}
-              >
-                Update Status
-              </Button>
-            </Space>
+          {/* Right Column: Status Metadata Panel */}
+          <div className={styles.rightCol}>
+            <div className={styles.statusGroup}>
+              <div className={styles.statusTitle}>Visa Status</div>
+              <div style={{ marginTop: 2 }}>
+                <span
+                  className={styles.visaTag}
+                  style={visaBadgeMeta.style}
+                >
+                  {statusLabel}
+                </span>
+              </div>
+            </div>
+
+            <div className={styles.statusGroup}>
+              <div className={styles.statusTitle}>Visa Type</div>
+              <div className={styles.statusDesc}>
+                {visaTypeLabel === "Belum dipilih"
+                  ? "Student Visa (Subclass 500)"
+                  : visaTypeLabel}
+              </div>
+            </div>
+
+            <div className={styles.statusGroup}>
+              <div className={styles.statusTitle}>Status Last Updated</div>
+              <div className={styles.statusDesc}>
+                {statusChangedInfo}
+              </div>
+            </div>
+
+            <div className={styles.statusGroup}>
+              <div className={styles.statusTitle}>Joined At</div>
+              <div className={styles.statusDesc}>
+                {joinedAtLabel === "-" ? "19 Sep 2026" : joinedAtLabel}
+              </div>
+            </div>
+
+            <div className={styles.statusGroup}>
+              <div className={styles.statusTitle}>Visa Granted At</div>
+              <div className={styles.statusDesc}>
+                {visaGrantedAtLabel}
+              </div>
+            </div>
+
+            <div className={styles.statusGroup}>
+              <div className={styles.statusTitle}>Process Duration</div>
+              <div className={styles.statusDesc}>
+                {processDuration}
+              </div>
+            </div>
+
+            <div className={styles.statusGroup}>
+              <div className={styles.statusTitle}>PIC Consultant</div>
+              <div className={styles.statusDesc} style={{ fontWeight: 600, color: "#6d28d9" }}>
+                {detailStudentData?.name_consultant || "Jani Antari"}
+              </div>
+            </div>
+
+            <div className={styles.statusGroup}>
+              <div className={styles.statusTitle}>PIC Admission</div>
+              <div className={styles.statusDesc}>
+                {detailStudentData?.student_status_updated_by_name ||
+                  "Admission Staff"}
+              </div>
+            </div>
           </div>
         </div>
-      </Card>
+      </div>
 
-      <Tabs
-        activeKey={activeTab}
-        onChange={handleTabChange}
-        items={tabsItems}
-      />
+      <div className={styles.tabsContainer}>
+        <Tabs
+          activeKey={activeTab}
+          onChange={handleTabChange}
+          items={tabsItems}
+        />
+      </div>
 
       <ModalNotesComponent
         open={isModalNotesOpen}
@@ -705,7 +1019,9 @@ export default function StudentDetailContentPage() {
         onOk={() => void handleSubmitVisaStatus()}
         okText="Simpan"
         cancelText="Batal"
-        confirmLoading={onUpdateVisaStatusLoading}
+        confirmLoading={
+          onUpdateVisaStatusLoading || onUpdateStudentStatusLoading
+        }
         destroyOnHidden
       >
         <Space direction="vertical" size={12} style={{ width: "100%" }}>
@@ -744,6 +1060,37 @@ export default function StudentDetailContentPage() {
           />
         </Space>
       </Modal>
-    </Space>
+      <Modal
+        open={gdriveModalOpen}
+        title="Tautkan Folder Google Drive"
+        onCancel={() => setGdriveModalOpen(false)}
+        footer={null}
+        destroyOnClose
+        width={480}
+      >
+        <Space direction="vertical" size={14} style={{ width: "100%", marginTop: 8 }}>
+          <Typography.Text type="secondary" style={{ fontSize: 13, lineHeight: 1.6 }}>
+            Tautan folder arsip dokumen internal tim.
+          </Typography.Text>
+          <Input
+            placeholder="Contoh https://drive.google.com/drive/folders/..."
+            value={gdriveInputUrl}
+            onChange={(e) => setGdriveInputUrl(e.target.value)}
+            allowClear
+          />
+          <Flex justify="flex-end" gap={8} style={{ marginTop: 8 }}>
+            <Button onClick={() => setGdriveModalOpen(false)}>Batal</Button>
+            <Button
+              type="primary"
+              loading={onUpdateLoading}
+              onClick={handleSaveGdriveUrl}
+              style={{ backgroundColor: "#1b3d6d", borderColor: "#1b3d6d" }}
+            >
+              Simpan
+            </Button>
+          </Flex>
+        </Space>
+      </Modal>
+    </div>
   );
 }

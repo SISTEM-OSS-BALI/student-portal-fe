@@ -3,30 +3,41 @@
 import {
   Avatar,
   Badge,
+  Drawer,
   Dropdown,
   Input,
   Layout,
   Typography,
 } from "antd";
+import Image from "next/image";
 import {
+  AppstoreOutlined,
   BellOutlined,
-  LockOutlined,
+  BranchesOutlined,
+  DownOutlined,
+  FileTextOutlined,
+  FlagOutlined,
+  FolderOutlined,
+  FormOutlined,
+  HomeOutlined,
+  IdcardOutlined,
   InboxOutlined,
   LogoutOutlined,
   MenuOutlined,
+  OrderedListOutlined,
   SearchOutlined,
+  TagOutlined,
+  TeamOutlined,
+  UserOutlined,
 } from "@ant-design/icons";
 import getInitials from "@/app/utils/initials-username";
 
 import { useAuth } from "@/app/utils/use-auth";
 import { useUserRoleStudents, useUsers } from "@/app/hooks/use-users";
 import { useInformationCountries } from "@/app/hooks/use-information-country-management";
-import { SiderAdmission } from "../../sider/admission";
-import { MainBreadcrumb } from "@/app/components/common/breadscrumb";
-import { normalizedRole } from "@/app/utils/normalized";
 import styles from "./layout.module.css";
-import { useCallback, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { useChatMentions, useMarkMentionRead } from "@/app/hooks/use-chat";
 import { useTicketMessages } from "@/app/hooks/use-ticket-message";
 import InboxDrawer from "@/app/components/common/inbox-drawer";
@@ -34,6 +45,13 @@ import GlobalSearchModal, {
   type GlobalSearchItem,
 } from "@/app/components/common/global-search-modal";
 import type { UserDataModel } from "@/app/models/user";
+import {
+  getCountryBadgeMeta,
+  getCountryName,
+  getStudentAvatarUrl,
+  getStudentInitials,
+  getStudentPipelineStatus,
+} from "@/app/utils/student-helpers";
 
 const { Header, Content, Footer } = Layout;
 
@@ -91,12 +109,28 @@ export default function AdmissionLayout({
   userProfilePic?: string;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const { role, logout, user_id } = useAuth();
 
   const [openInbox, setOpenInbox] = useState(false);
   const [openGlobalSearch, setOpenGlobalSearch] = useState(false);
-  const [siderCollapsed, setSiderCollapsed] = useState(false);
-  const [siderBroken, setSiderBroken] = useState(false);
+  const [openMobileNav, setOpenMobileNav] = useState(false);
+
+  const navigateFromMobile = (path: string) => {
+    setOpenMobileNav(false);
+    router.push(path);
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setOpenGlobalSearch((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   const { data: usersData } = useUsers({ enabled: Boolean(user_id) });
   const { data: studentsData = [] } = useUserRoleStudents({
@@ -136,6 +170,12 @@ export default function AdmissionLayout({
     [mentionMessages],
   );
 
+  const displayUserName = useMemo(() => {
+    if (!username) return "Admission";
+    const cleaned = username.replace(/^admin\s+/i, "").trim();
+    return cleaned || "Admission";
+  }, [username]);
+
   const openDrawerInbox = () => {
     setOpenInbox(true);
     refetchMentions();
@@ -166,16 +206,11 @@ export default function AdmissionLayout({
     }
 
     const targetPath = resolveStudentDetailPath(item.context_user_id);
-    const fromTicketStudent = Boolean(
-      item.conversation_id && ticketConversationIds.has(item.conversation_id),
-    );
     const params = new URLSearchParams();
 
-    if (fromTicketStudent) {
+    if (item.conversation_id) {
       params.set("tab", "chat");
-      if (item.conversation_id) {
-        params.set("conversation_id", item.conversation_id);
-      }
+      params.set("conversation_id", item.conversation_id);
     } else {
       params.set("tab", "overview");
     }
@@ -185,37 +220,61 @@ export default function AdmissionLayout({
   };
 
   const searchItems = useMemo<GlobalSearchItem[]>(() => {
-    const studentItems = studentsData.map((student) => ({
-      id: `student-${student.id}`,
-      type: "student" as const,
-      title: student.name,
-      subtitle: [
-        student.stage?.country?.name,
-        student.name_campus,
-        formatVisaTypeLabel(student.visa_type_name ?? student.visa_type),
-      ]
-        .filter(Boolean)
-        .join(" • "),
-      description: student.email,
-      meta: `Status: ${getStudentSearchStatus(student)}`,
-      badge: "Student",
-      badgeColor: "blue",
-      href: resolveStudentDetailPath(String(student.id)),
-      keywords: [
-        student.name,
-        student.email,
-        student.no_phone,
-        student.name_campus,
-        student.degree,
-        student.name_degree,
-        student.visa_type_name ?? student.visa_type,
-        student.stage?.country?.name,
-        student.student_status,
-        student.status,
-      ]
-        .filter(Boolean)
-        .join(" "),
-    }));
+    const studentItems = studentsData.map((student) => {
+      const country = getCountryName(student);
+      const countryMeta = getCountryBadgeMeta(country);
+      const pipelineStatus = getStudentPipelineStatus(student);
+      const avatarUrl = getStudentAvatarUrl(student);
+      const initials = getStudentInitials(student);
+
+      return {
+        id: `student-${student.id}`,
+        type: "student" as const,
+        title: student.name,
+        subtitle: [
+          country !== "-" ? country : null,
+          student.name_campus,
+          formatVisaTypeLabel(student.visa_type_name ?? student.visa_type),
+        ]
+          .filter(Boolean)
+          .join(" • "),
+        description: student.email,
+        meta: `Status: ${pipelineStatus.label}`,
+        badge: "Mahasiswa",
+        badgeColor: "blue",
+        href: resolveStudentDetailPath(String(student.id)),
+        avatarUrl,
+        initials,
+        country: country !== "-" ? country : undefined,
+        countryCode: countryMeta.code,
+        countryColor: countryMeta.color,
+        countryBg: countryMeta.bg,
+        countryBorder: countryMeta.border,
+        campus: student.name_campus,
+        degree: student.name_degree || student.degree,
+        visaType: formatVisaTypeLabel(
+          student.visa_type_name ?? student.visa_type,
+        ),
+        phone: student.no_phone,
+        email: student.email,
+        statusLabel: pipelineStatus.label,
+        statusTone: pipelineStatus.tone,
+        keywords: [
+          student.name,
+          student.email,
+          student.no_phone,
+          student.name_campus,
+          student.degree,
+          student.name_degree,
+          student.visa_type_name ?? student.visa_type,
+          country,
+          student.student_status,
+          student.status,
+        ]
+          .filter(Boolean)
+          .join(" "),
+      };
+    });
 
     const infoItems = informationData.map((item) => ({
       id: `update-${item.id}`,
@@ -280,16 +339,20 @@ export default function AdmissionLayout({
 
   const menuItems = [
     {
-      key: "change-password",
-      icon: <LockOutlined />,
-      label: "Change Password",
+      key: "profile",
+      icon: <UserOutlined />,
+      label: "My Profile",
       onClick: () => {
-        router.push("/admission/dashboard/change-password");
+        router.push("/admission/dashboard/profile");
       },
+    },
+    {
+      type: "divider" as const,
     },
     {
       key: "logout",
       icon: <LogoutOutlined />,
+      danger: true,
       label: "Logout",
       onClick: () => {
         logout();
@@ -298,89 +361,242 @@ export default function AdmissionLayout({
     },
   ];
 
+  const masterDataMenuItems = useMemo(
+    () => [
+      {
+        key: "grp-form-team",
+        type: "group" as const,
+        label: "FORMS & TEAM",
+        children: [
+          {
+            key: "questions",
+            label: "Question Forms",
+            icon: <FormOutlined style={{ fontSize: 13 }} />,
+            onClick: () =>
+              router.push(
+                "/admission/dashboard/master-data/questions-management",
+              ),
+          },
+          {
+            key: "accounts",
+            label: "Team Accounts",
+            icon: <TeamOutlined style={{ fontSize: 13 }} />,
+            onClick: () =>
+              router.push("/admission/dashboard/account-management"),
+          },
+        ],
+      },
+      {
+        type: "divider" as const,
+      },
+      {
+        key: "grp-pipeline",
+        type: "group" as const,
+        label: "FLOW & STAGES",
+        children: [
+          {
+            key: "stages",
+            label: "Stage Pipeline",
+            icon: <FlagOutlined style={{ fontSize: 13 }} />,
+            onClick: () =>
+              router.push("/admission/dashboard/stages-management"),
+          },
+          {
+            key: "child-steps",
+            label: "Step Categories",
+            icon: <BranchesOutlined style={{ fontSize: 13 }} />,
+            onClick: () =>
+              router.push(
+                "/admission/dashboard/master-data/child-steps-management",
+              ),
+          },
+          {
+            key: "steps",
+            label: "Steps Management",
+            icon: <OrderedListOutlined style={{ fontSize: 13 }} />,
+            onClick: () =>
+              router.push("/admission/dashboard/master-data/steps-management"),
+          },
+        ],
+      },
+      {
+        type: "divider" as const,
+      },
+      {
+        key: "grp-general",
+        type: "group" as const,
+        label: "SYSTEM CONFIGURATION",
+        children: [
+          {
+            key: "visa-type",
+            label: "Visa Types",
+            icon: <IdcardOutlined style={{ fontSize: 13 }} />,
+            onClick: () =>
+              router.push(
+                "/admission/dashboard/master-data/visa-type-management",
+              ),
+          },
+          {
+            key: "promo",
+            label: "Promos",
+            icon: <TagOutlined style={{ fontSize: 13 }} />,
+            onClick: () =>
+              router.push("/admission/dashboard/master-data/promo-management"),
+          },
+        ],
+      },
+    ],
+    [router],
+  );
+
   return (
     <div>
       <Layout className={styles.root}>
-        <SiderAdmission
-          collapsed={siderCollapsed}
-          onCollapsedChange={setSiderCollapsed}
-          broken={siderBroken}
-          onBrokenChange={setSiderBroken}
-        />
         <Layout className={styles.main}>
-          <Header className={styles.header}>
-            <div className={styles.headerLeft}>
-              {siderBroken && (
-                <button
-                  className={styles.menuTrigger}
-                  type="button"
-                  aria-label="Toggle menu"
-                  onClick={() => setSiderCollapsed(!siderCollapsed)}
-                >
-                  <MenuOutlined />
-                </button>
-              )}
-              <MainBreadcrumb />
+          <Header className={styles.topNavbar}>
+            <div className={styles.brandWrapper}>
+              <button
+                type="button"
+                className={styles.mobileMenuBtn}
+                onClick={() => setOpenMobileNav(true)}
+                aria-label="Menu Navigasi"
+              >
+                <MenuOutlined />
+              </button>
+              <div
+                className={styles.brand}
+                onClick={() => router.push("/admission/dashboard/home")}
+              >
+                <Image
+                  src="/assets/images/icon.png"
+                  alt="OSS Bali"
+                  width={36}
+                  height={36}
+                  className={styles.brandLogoImg}
+                  priority
+                  unoptimized
+                />
+                <span className={styles.brandTitle}>OSS Bali Student Portal</span>
+              </div>
             </div>
-            <div className={styles.headerRight}>
-              <Input
-                className={styles.search}
-                readOnly
-                placeholder="Cari mahasiswa, berkas, atau pengumuman"
-                prefix={<SearchOutlined />}
-                suffix={<span className={styles.searchHint}>Search</span>}
-                onClick={() => setOpenGlobalSearch(true)}
-                onFocus={(event) => {
-                  event.target.blur();
-                  setOpenGlobalSearch(true);
+
+            <nav className={styles.navCenter}>
+              <button
+                type="button"
+                className={`${styles.navButton} ${
+                  pathname?.includes("/students-management")
+                    ? styles.navButtonActive
+                    : ""
+                }`}
+                onClick={() =>
+                  router.push("/admission/dashboard/students-management")
+                }
+              >
+                <AppstoreOutlined style={{ fontSize: 14 }} />
+                <span>Pipeline</span>
+              </button>
+
+              <button
+                type="button"
+                className={`${styles.navButton} ${
+                  pathname?.includes("/documents-management")
+                    ? styles.navButtonActive
+                    : ""
+                }`}
+                onClick={() =>
+                  router.push(
+                    "/admission/dashboard/master-data/documents-management",
+                  )
+                }
+              >
+                <FileTextOutlined style={{ fontSize: 14 }} />
+                <span>Document</span>
+              </button>
+
+              <Dropdown
+                menu={{
+                  items: masterDataMenuItems,
+                  style: { maxHeight: 420, overflowY: "auto", minWidth: 200 },
                 }}
-              />
-              {/* <Badge count={3} size="small" className={styles.badge}>
-                <button className={styles.iconButton} type="button">
-                  <BellOutlined />
+                trigger={["click", "hover"]}
+              >
+                <button
+                  type="button"
+                  className={`${styles.navButton} ${
+                    (pathname?.includes("/master-data") &&
+                      !pathname?.includes("/documents-management")) ||
+                    pathname?.includes("/stages") ||
+                    pathname?.includes("/account-management")
+                      ? styles.navButtonActive
+                      : ""
+                  }`}
+                >
+                  <FolderOutlined style={{ fontSize: 14 }} />
+                  <span>Master Data</span>
+                  <DownOutlined style={{ fontSize: 9, opacity: 0.7 }} />
                 </button>
-              </Badge> */}
+              </Dropdown>
+            </nav>
+
+            <div className={styles.topNavRight}>
+              <div
+                className={styles.searchTrigger}
+                onClick={() => setOpenGlobalSearch(true)}
+                role="button"
+                tabIndex={0}
+                title="Cari data siswa, ID, atau dokumen (⌘K)"
+              >
+                <SearchOutlined style={{ color: "#94a3b8", fontSize: 13 }} />
+                <span className={styles.searchPlaceholder}>
+                  Cari siswa, dokumen...
+                </span>
+                <span className={styles.searchKbd}>⌘K</span>
+              </div>
+
               <Badge
+                dot={unreadCount > 0}
                 count={unreadCount}
                 size="small"
-                className={styles.badge}
-                onClick={() => openDrawerInbox()}
+                offset={[-2, 2]}
               >
-                <button className={styles.iconButton} type="button">
-                  <InboxOutlined />
+                <button
+                  className={styles.navIconBtn}
+                  type="button"
+                  aria-label="Notifications"
+                  title="Notifikasi Mention & Chat"
+                  onClick={() => openDrawerInbox()}
+                >
+                  <BellOutlined />
                 </button>
               </Badge>
+
+              <div className={styles.verticalDivider} />
+
               <Dropdown
                 menu={{ items: menuItems }}
                 placement="bottomRight"
                 trigger={["click"]}
               >
-                <button className={styles.userTrigger} type="button">
+                <div className={styles.userContainer}>
                   <Avatar
-                    size={48}
+                    size={30}
                     src={userProfilePic || undefined}
-                    className={styles.avatar}
+                    className={styles.userAvatar}
                   >
-                    {!userProfilePic && getInitials(username)}
+                    {!userProfilePic && getInitials(displayUserName)}
                   </Avatar>
-                  <div className={styles.userMeta}>
-                    <Typography.Text strong className={styles.userName}>
-                      {username}
-                    </Typography.Text>
-                    <Typography.Text className={styles.userRole}>
-                      {normalizedRole(role || "")}
-                    </Typography.Text>
-                  </div>
-                </button>
+                  <span className={styles.userNameLabel}>
+                    {displayUserName}
+                  </span>
+                  <DownOutlined style={{ fontSize: 9, color: "#94a3b8" }} />
+                </div>
               </Dropdown>
             </div>
           </Header>
-          <Content className={styles.content}>
-            <div className={styles.pageShell}>{children}</div>
+
+          <Content style={{ background: "#f8fafc", minHeight: "calc(100vh - 64px)" }}>
+            <div className={styles.mainContent}>{children}</div>
           </Content>
-          <Footer className={styles.footer}>
-            OSS Student Portal • Admission Dashboard
-          </Footer>
         </Layout>
       </Layout>
 
@@ -400,6 +616,267 @@ export default function AdmissionLayout({
         onMarkItemRead={onMarkRead}
         onOpenItem={handleOpenMention}
       />
+
+      <Drawer
+        title={
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <Image
+              src="/assets/images/icon.png"
+              alt="OSS Bali"
+              width={28}
+              height={28}
+              unoptimized
+            />
+            <div>
+              <div
+                style={{
+                  fontWeight: 700,
+                  fontSize: 14,
+                  color: "#0f172a",
+                  lineHeight: 1.2,
+                }}
+              >
+                OSS Bali Portal
+              </div>
+              <div style={{ fontSize: 11, color: "#64748b" }}>
+                Admission Workspace
+              </div>
+            </div>
+          </div>
+        }
+        placement="left"
+        open={openMobileNav}
+        onClose={() => setOpenMobileNav(false)}
+        width={300}
+        styles={{
+          body: {
+            padding: "16px 14px",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "space-between",
+            height: "100%",
+          },
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 4,
+            overflowY: "auto",
+          }}
+        >
+          <button
+            type="button"
+            className={`${styles.mobileDrawerItem} ${
+              pathname === "/admission/dashboard/home"
+                ? styles.mobileDrawerItemActive
+                : ""
+            }`}
+            onClick={() => navigateFromMobile("/admission/dashboard/home")}
+          >
+            <HomeOutlined style={{ fontSize: 16 }} />
+            <span>Beranda</span>
+          </button>
+
+          <button
+            type="button"
+            className={`${styles.mobileDrawerItem} ${
+              pathname?.includes("/students-management")
+                ? styles.mobileDrawerItemActive
+                : ""
+            }`}
+            onClick={() =>
+              navigateFromMobile("/admission/dashboard/students-management")
+            }
+          >
+            <AppstoreOutlined style={{ fontSize: 16 }} />
+            <span>Student Pipeline</span>
+          </button>
+
+          <button
+            type="button"
+            className={`${styles.mobileDrawerItem} ${
+              pathname?.includes("/documents-management")
+                ? styles.mobileDrawerItemActive
+                : ""
+            }`}
+            onClick={() =>
+              navigateFromMobile(
+                "/admission/dashboard/master-data/documents-management",
+              )
+            }
+          >
+            <FileTextOutlined style={{ fontSize: 16 }} />
+            <span>Document</span>
+          </button>
+
+          <div className={styles.mobileDrawerSectionTitle}>FORMS & TEAM</div>
+
+          <button
+            type="button"
+            className={`${styles.mobileDrawerItem} ${
+              pathname?.includes("/questions-management")
+                ? styles.mobileDrawerItemActive
+                : ""
+            }`}
+            onClick={() =>
+              navigateFromMobile(
+                "/admission/dashboard/master-data/questions-management",
+              )
+            }
+          >
+            <FormOutlined style={{ fontSize: 15 }} />
+            <span>Question Forms</span>
+          </button>
+
+          <button
+            type="button"
+            className={`${styles.mobileDrawerItem} ${
+              pathname?.includes("/account-management")
+                ? styles.mobileDrawerItemActive
+                : ""
+            }`}
+            onClick={() =>
+              navigateFromMobile("/admission/dashboard/account-management")
+            }
+          >
+            <TeamOutlined style={{ fontSize: 15 }} />
+            <span>Team Accounts</span>
+          </button>
+
+          <div className={styles.mobileDrawerSectionTitle}>FLOW & STAGES</div>
+
+          <button
+            type="button"
+            className={`${styles.mobileDrawerItem} ${
+              pathname?.includes("/stages-management")
+                ? styles.mobileDrawerItemActive
+                : ""
+            }`}
+            onClick={() =>
+              navigateFromMobile("/admission/dashboard/stages-management")
+            }
+          >
+            <FlagOutlined style={{ fontSize: 15 }} />
+            <span>Stage Pipeline</span>
+          </button>
+
+          <button
+            type="button"
+            className={`${styles.mobileDrawerItem} ${
+              pathname?.includes("/child-steps-management")
+                ? styles.mobileDrawerItemActive
+                : ""
+            }`}
+            onClick={() =>
+              navigateFromMobile(
+                "/admission/dashboard/master-data/child-steps-management",
+              )
+            }
+          >
+            <BranchesOutlined style={{ fontSize: 15 }} />
+            <span>Step Categories</span>
+          </button>
+
+          <button
+            type="button"
+            className={`${styles.mobileDrawerItem} ${
+              pathname?.includes("/steps-management")
+                ? styles.mobileDrawerItemActive
+                : ""
+            }`}
+            onClick={() =>
+              navigateFromMobile(
+                "/admission/dashboard/master-data/steps-management",
+              )
+            }
+          >
+            <OrderedListOutlined style={{ fontSize: 15 }} />
+            <span>Steps Management</span>
+          </button>
+
+          <div className={styles.mobileDrawerSectionTitle}>
+            SYSTEM CONFIGURATION
+          </div>
+
+          <button
+            type="button"
+            className={`${styles.mobileDrawerItem} ${
+              pathname?.includes("/visa-type-management")
+                ? styles.mobileDrawerItemActive
+                : ""
+            }`}
+            onClick={() =>
+              navigateFromMobile(
+                "/admission/dashboard/master-data/visa-type-management",
+              )
+            }
+          >
+            <IdcardOutlined style={{ fontSize: 15 }} />
+            <span>Visa Types</span>
+          </button>
+
+          <button
+            type="button"
+            className={`${styles.mobileDrawerItem} ${
+              pathname?.includes("/promo-management")
+                ? styles.mobileDrawerItemActive
+                : ""
+            }`}
+            onClick={() =>
+              navigateFromMobile(
+                "/admission/dashboard/master-data/promo-management",
+              )
+            }
+          >
+            <TagOutlined style={{ fontSize: 15 }} />
+            <span>Promos</span>
+          </button>
+        </div>
+
+        <div className={styles.mobileDrawerFooter}>
+          <div className={styles.mobileDrawerUser}>
+            <Avatar
+              size={36}
+              src={userProfilePic || undefined}
+              className={styles.userAvatar}
+            >
+              {!userProfilePic && getInitials(displayUserName)}
+            </Avatar>
+            <div className={styles.mobileDrawerUserText}>
+              <span className={styles.mobileDrawerUserName}>
+                {displayUserName}
+              </span>
+              <span className={styles.mobileDrawerUserRole}>
+                {role || "Admission"}
+              </span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            className={styles.mobileDrawerItem}
+            onClick={() => navigateFromMobile("/admission/dashboard/profile")}
+          >
+            <UserOutlined style={{ fontSize: 15 }} />
+            <span>My Profile</span>
+          </button>
+
+          <button
+            type="button"
+            className={styles.mobileDrawerLogoutBtn}
+            onClick={() => {
+              setOpenMobileNav(false);
+              logout();
+              router.push("/login");
+            }}
+          >
+            <LogoutOutlined style={{ fontSize: 14 }} />
+            <span>Logout</span>
+          </button>
+        </div>
+      </Drawer>
     </div>
   );
 }

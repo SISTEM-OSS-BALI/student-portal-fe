@@ -109,7 +109,7 @@ export const SiderDirector = ({
       >
       {/* Brand */}
       <div
-        onClick={() => router.push("/")}
+        onClick={() => router.push("/director/dashboard/home")}
         style={{
           height: 64,
           margin: 16,

@@ -1,11 +1,22 @@
 import axios from "axios";
 
-const baseURL =
-  process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ||
-  "http://localhost:8080";
+const getBaseURL = () => {
+  if (typeof window !== "undefined") {
+    // In browser: use relative path "" so requests go to current origin.
+    // Next.js rewrites /api/:path* to the backend API automatically.
+    // This eliminates CORS, Mixed Content (HTTPS -> HTTP), and Network Error issues.
+    return "";
+  }
+
+  return (
+    process.env.API_BASE_URL ||
+    process.env.NEXT_PUBLIC_API_BASE_URL ||
+    "http://localhost:8080"
+  ).replace(/\/$/, "");
+};
 
 const api = axios.create({
-  baseURL,
+  baseURL: getBaseURL(),
   withCredentials: true,
   headers: {
     "Content-Type": "application/json",
@@ -14,6 +25,10 @@ const api = axios.create({
 
 api.interceptors.request.use((config) => {
   config.withCredentials = true;
+
+  if (typeof FormData !== "undefined" && config.data instanceof FormData) {
+    delete config.headers["Content-Type"];
+  }
 
   if (config.url && config.url.startsWith("http")) {
     return config;
