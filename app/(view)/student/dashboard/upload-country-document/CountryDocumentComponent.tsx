@@ -59,6 +59,7 @@ import {
 import type { UploadFile, UploadProps } from "antd";
 import { useOCRClassifier } from "@/app/hooks/use-ocr-classifier";
 import type { OCRClassifyResultModel } from "@/app/models/ocr";
+import api from "@/lib/api";
 import { useAuth } from "@/app/utils/use-auth";
 import { useDocuments } from "@/app/hooks/use-documents-management";
 import { useStagesManagement } from "@/app/hooks/use-stages-management";
@@ -96,6 +97,18 @@ const sanitizeFileName = (name: string) =>
 const getFileExt = (name: string) => {
   const idx = name.lastIndexOf(".");
   return idx >= 0 ? name.slice(idx) : "";
+};
+
+const isPhotoDocument = (doc?: { label?: string; internal_code?: string; id?: string | number } | null) => {
+  if (!doc) return false;
+  const str = `${doc.label ?? ""} ${doc.internal_code ?? ""} ${doc.id ?? ""}`.toLowerCase();
+  return (
+    str.includes("photo") ||
+    str.includes("foto") ||
+    str.includes("4x6") ||
+    str.includes("pasfoto") ||
+    str.includes("pas foto")
+  );
 };
 
 const formatUploadDate = (value?: string | null) => {
@@ -1229,6 +1242,20 @@ export default function CountryDocumentComponent() {
             status: "done",
           },
         ]);
+
+        if (isPhotoDocument(doc)) {
+          try {
+            await api.put(`/api/users/${effectiveStudentId}`, {
+              profile_picture_url: result.url,
+            });
+            await queryClient.invalidateQueries({ queryKey: ["user", effectiveStudentId] });
+            await queryClient.invalidateQueries({ queryKey: ["user"] });
+            await queryClient.invalidateQueries({ queryKey: ["users"] });
+            await queryClient.invalidateQueries({ queryKey: ["user-role-students"] });
+          } catch (syncErr) {
+            console.warn("Auto-sync profile picture failed", syncErr);
+          }
+        }
       }
 
       notification.success({
@@ -2018,6 +2045,20 @@ export default function CountryDocumentComponent() {
               },
             ]);
             successCount++;
+
+            if (isPhotoDocument(targetDoc)) {
+              try {
+                await api.put(`/api/users/${effectiveStudentId}`, {
+                  profile_picture_url: uploadRes.url,
+                });
+                await queryClient.invalidateQueries({ queryKey: ["user", effectiveStudentId] });
+                await queryClient.invalidateQueries({ queryKey: ["user"] });
+                await queryClient.invalidateQueries({ queryKey: ["users"] });
+                await queryClient.invalidateQueries({ queryKey: ["user-role-students"] });
+              } catch (syncErr) {
+                console.warn("Auto-sync profile picture failed", syncErr);
+              }
+            }
           }
 
           notification.success({
@@ -2145,6 +2186,20 @@ export default function CountryDocumentComponent() {
             file_type: item.file.type,
             status: "done",
           });
+
+          if (isPhotoDocument(targetDoc)) {
+            try {
+              await api.put(`/api/users/${effectiveStudentId}`, {
+                profile_picture_url: uploadRes.url,
+              });
+              await queryClient.invalidateQueries({ queryKey: ["user", effectiveStudentId] });
+              await queryClient.invalidateQueries({ queryKey: ["user"] });
+              await queryClient.invalidateQueries({ queryKey: ["users"] });
+              await queryClient.invalidateQueries({ queryKey: ["user-role-students"] });
+            } catch (syncErr) {
+              console.warn("Auto-sync profile picture failed", syncErr);
+            }
+          }
         }
 
         setBulkProgress(Math.round(((i + 1) / bulkFiles.length) * 100));
