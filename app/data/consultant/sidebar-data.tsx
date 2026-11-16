@@ -1,6 +1,6 @@
 import { MenuProps } from "antd";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faBriefcase } from "@fortawesome/free-solid-svg-icons";
+import { faUsers } from "@fortawesome/free-solid-svg-icons";
 import menuLabel from "@/app/utils/menu-label";
 
 export const SidebarMainConsultant = (): MenuProps["items"] => {
@@ -8,7 +8,7 @@ export const SidebarMainConsultant = (): MenuProps["items"] => {
     {
       key: "/consultant/dashboard/students-management",
       label: menuLabel("Student Pipeline"),
-      icon: <FontAwesomeIcon icon={faBriefcase} style={{ fontSize: 16 }} />,
+      icon: <FontAwesomeIcon icon={faUsers} style={{ fontSize: 16 }} />,
     },
   ];
 };

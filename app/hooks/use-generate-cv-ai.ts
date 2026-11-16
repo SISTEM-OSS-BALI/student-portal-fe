@@ -15,12 +15,13 @@ export type AIGenerateAnswer = {
 };
 
 export type AIGeneratePayload = {
-  student_id: string;
+  prompt?: string;
+  student_id?: string;
   student_name?: string;
   template_path?: string;
   template_url?: string;
   template_base64?: string;
-  answers: AIGenerateAnswer[];
+  answers?: AIGenerateAnswer[];
   sections?: Array<{
     key: string;
     label: string;

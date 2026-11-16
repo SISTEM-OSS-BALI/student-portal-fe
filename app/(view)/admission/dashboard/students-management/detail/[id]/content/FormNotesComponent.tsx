@@ -54,7 +54,8 @@ export default function FormNotesComponent({
       </Form.Item>
 
       <Form.Item
-        label="Catatan Student"
+        label="Student Notes"
+        tooltip="Catatan perkembangan atau observasi penting mengenai siswa."
         name="content"
         rules={[
           { required: true, message: "Catatan wajib diisi" },

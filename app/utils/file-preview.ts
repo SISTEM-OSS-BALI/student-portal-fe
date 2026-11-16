@@ -8,12 +8,14 @@ export const buildFilePreviewUrl = (
   sourceUrl?: string | null,
   fileName?: string | null,
   contentType?: string | null,
+  mode: "page" | "raw" = "raw",
 ) => {
   if (!sourceUrl) return "";
 
   const params = new URLSearchParams({
     url: sourceUrl,
     file_name: sanitizePreviewFileName(fileName),
+    mode,
   });
 
   if (contentType) {

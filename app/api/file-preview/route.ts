@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
   const fileName = sanitizeFileName(searchParams.get("file_name"));
   const fallbackContentType =
     searchParams.get("content_type") || "application/octet-stream";
-  const responseMode = searchParams.get("mode") || "page";
+  const responseMode = searchParams.get("mode") || "raw";
 
   if (!sourceUrl) {
     return NextResponse.json(
@@ -110,8 +110,18 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const contentType =
-    upstream.headers.get("content-type") || fallbackContentType;
+  const rawContentType = upstream.headers.get("content-type");
+  let contentType = rawContentType || fallbackContentType;
+
+  const ext = fileName.split(".").pop()?.toLowerCase();
+  if (!contentType || contentType === "application/octet-stream" || contentType === "binary/octet-stream") {
+    if (ext === "jpg" || ext === "jpeg") contentType = "image/jpeg";
+    else if (ext === "png") contentType = "image/png";
+    else if (ext === "webp") contentType = "image/webp";
+    else if (ext === "gif") contentType = "image/gif";
+    else if (ext === "svg") contentType = "image/svg+xml";
+    else if (ext === "pdf") contentType = "application/pdf";
+  }
 
   return new NextResponse(upstream.body, {
     status: 200,

@@ -1,0 +1,288 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  width: 100%;
+}
+
+.dashboardCard {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
+.dashboardCard :global(.ant-card-body) {
+  padding: 18px 20px;
+}
+
+.dashboardCard :global(.ant-card-head) {
+  border-bottom: 1px solid #f1f5f9;
+  padding: 0 20px;
+  min-height: 48px;
+}
+
+.dashboardCard :global(.ant-card-head-title) {
+  padding: 12px 0;
+}
+
+.dashboardCard :global(.ant-empty) {
+  margin: 16px 0 !important;
+}
+
+.dashboardCard :global(.ant-empty-description) {
+  font-family: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  font-size: 12.5px !important;
+  font-weight: 500 !important;
+  color: #64748b !important;
+}
+
+@media (max-width: 768px) {
+  .dashboardCard :global(.ant-empty-description) {
+    font-size: 11.5px !important;
+  }
+}
+
+.stepsContainerDesktop {
+  display: block;
+  width: 100%;
+  padding-top: 6px;
+}
+
+.stepsContainerMobile {
+  display: none;
+  width: 100%;
+}
+
+.stepDetailToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #2563eb;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  margin-top: 4px;
+}
+
+.stepDetailToggle:hover {
+  color: #1d4ed8;
+}
+
+.stepChildBox {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 11.5px;
+  color: #475569;
+  line-height: 1.5;
+}
+
+.contentGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(300px, 0.75fr);
+  gap: 18px;
+  align-items: start;
+}
+
+@media (max-width: 1024px) {
+  .contentGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Workflow Timeline Preview (Consistent with Admission & Staff design) */
+.workflowTimelineDesktop {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  align-items: start;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.workflowStepCard {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.workflowStepCardActive {
+  background: #f8fafc;
+  border: 1px solid #bfdbfe;
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.08);
+}
+
+.workflowTimelineMobile {
+  display: none;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.stepBlock {
+  display: flex;
+  gap: 14px;
+}
+
+.stepTimelineIndicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+}
+
+.stepNumberCircle {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 11.5px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  flex-shrink: 0;
+}
+
+.stepNumberCircleInactive {
+  background: #94a3b8;
+}
+
+.stepTimelineLine {
+  position: absolute;
+  top: 24px;
+  bottom: 0;
+  width: 2px;
+  background: #e2e8f0;
+  z-index: 1;
+}
+
+.stepMainContent {
+  flex: 1;
+  padding-top: 1px;
+}
+
+.stepHeaderRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.stepLabel {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.stepBadgePill {
+  font-size: 11px;
+  font-weight: 700;
+  color: #2563eb;
+  background: #eff6ff;
+  border-radius: 999px;
+  padding: 1px 8px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.checkboxList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.previewItem {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 12.5px;
+  user-select: none;
+  cursor: default;
+}
+
+.previewCheckDone {
+  width: 15px;
+  height: 15px;
+  border-radius: 4px;
+  background: #2563eb;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.previewCheckPending {
+  width: 15px;
+  height: 15px;
+  border-radius: 4px;
+  border: 1.5px solid #cbd5e1;
+  background: #ffffff;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.previewTextDone {
+  color: #1e293b;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.previewTextPending {
+  color: #64748b;
+  font-weight: 400;
+  line-height: 1.35;
+}
+
+@media (max-width: 768px) {
+  .page {
+    gap: 12px;
+  }
+
+  .dashboardCard {
+    border-radius: 12px;
+  }
+
+  .dashboardCard :global(.ant-card-body) {
+    padding: 12px 14px;
+  }
+
+  .dashboardCard :global(.ant-card-head) {
+    padding: 0 14px;
+    min-height: 42px;
+  }
+
+  .dashboardCard :global(.ant-card-head-title) {
+    padding: 10px 0;
+  }
+
+  .stepsContainerDesktop {
+    display: none;
+  }
+
+  .stepsContainerMobile {
+    display: block;
+  }
+
+  .workflowTimelineDesktop {
+    display: none;
+  }
+
+  .workflowTimelineMobile {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+}

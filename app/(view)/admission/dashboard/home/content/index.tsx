@@ -5,27 +5,50 @@ import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import {
   AlertOutlined,
-  CheckCircleOutlined,
+  AuditOutlined,
   ClockCircleOutlined,
+  DashboardOutlined,
+  DownOutlined,
   FileDoneOutlined,
   FileTextOutlined,
+  FolderOpenOutlined,
   InfoCircleOutlined,
+  LeftOutlined,
+  RightOutlined,
+  TeamOutlined,
   TranslationOutlined,
-  EnvironmentOutlined,
 } from "@ant-design/icons";
-import { Card, Empty, Select, Space, Tag, Typography } from "antd";
+import {
+  Button,
+  Dropdown,
+  Empty,
+  Segmented,
+  Select,
+  Space,
+  Tag,
+  Typography,
+} from "antd";
 
-import api from "@/lib/api";
 import LoadingSplash from "@/app/components/common/loading";
+import PageHeader from "@/app/components/common/page-header";
+import AppButton from "@/app/components/common/app-button";
+import StudentPipelineTable from "@/app/components/common/student-pipeline-table";
+import api from "@/lib/api";
+import { useAuth } from "@/app/utils/use-auth";
 import { useAnswerApprovals } from "@/app/hooks/use-answer-approvals";
 import { useDocumentTranslations } from "@/app/hooks/use-document-translations";
 import { useInformationCountries } from "@/app/hooks/use-information-country-management";
 import { useVisaTypes } from "@/app/hooks/use-visa-type-management";
 import { useUserRoleStudents } from "@/app/hooks/use-users";
 import type { AnswerApprovalsDataModel } from "@/app/models/answer-approvals";
-import type { DocumentTranslationDataModel } from "@/app/models/document-translations";
 import type { InformationCountryDataModel } from "@/app/models/information-country-management";
 import type { UserDataModel } from "@/app/models/user";
+import {
+  getCountryBadgeMeta,
+  getCountryName as getCountryNameHelper,
+  getCurrentStepLabel as getCurrentStepLabelHelper,
+  getStudentPipelineStatus,
+} from "@/app/utils/student-helpers";
 import styles from "./home.module.css";
 
 const { Text } = Typography;
@@ -49,18 +72,6 @@ type ActivityItem = {
   icon: ReactNode;
 };
 
-type WorkloadCard = {
-  key: string;
-  count: number;
-  title: string;
-  caption: string;
-  tag: string;
-  tagColor: string;
-  icon: ReactNode;
-  iconBg: string;
-  iconColor: string;
-};
-
 const priorityOrder: Record<string, number> = {
   high: 0,
   medium: 1,
@@ -69,130 +80,23 @@ const priorityOrder: Record<string, number> = {
 };
 
 function normalizeText(value: unknown): string {
-  return String(value ?? "")
-    .trim()
-    .toLowerCase();
+  return String(value ?? "").trim().toLowerCase();
 }
 
 function getCountryName(student: UserDataModel): string {
-  return student.stage?.country?.name?.trim() || "Unknown";
-}
-
-function getInitials(value?: string | null): string {
-  const parts = String(value ?? "")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-
-  if (!parts.length) {
-    return "ST";
-  }
-
-  return parts
-    .slice(0, 2)
-    .map((part) => part.charAt(0).toUpperCase())
-    .join("");
+  const c = getCountryNameHelper(student);
+  return c !== "-" ? c : "Unknown";
 }
 
 function getCurrentStepLabel(student: UserDataModel): string {
-  const currentStepId = String(student.current_step_id ?? "");
-  if (!currentStepId) return "Belum ditentukan";
-
-  const steps = student.stage?.country?.steps ?? [];
-  const step = steps.find((item) => item.id === currentStepId);
-  return step?.label ?? "Belum ditentukan";
-}
-
-function getStudentPipelineStatus(student: UserDataModel): {
-  label: string;
-  tone: { background: string; color: string };
-} {
-  const raw = normalizeText(student.student_status);
-
-  if (raw.includes("cancel")) {
-    return {
-      label: "Cancel",
-      tone: { background: "#fff1f2", color: "#e11d48" },
-    };
-  }
-
-  if (
-    raw.includes("postpone") ||
-    raw.includes("post pone") ||
-    raw.includes("pending")
-  ) {
-    return {
-      label: "Pending Approval",
-      tone: { background: "#fff7ed", color: "#d97706" },
-    };
-  }
-
-  if (raw.includes("complete") || raw.includes("done")) {
-    return {
-      label: "Completed",
-      tone: { background: "#f1f5f9", color: "#64748b" },
-    };
-  }
-
-  return {
-    label: "On Progress",
-    tone: { background: "#dcfce7", color: "#16a34a" },
-  };
-}
-
-function getStepTone(stepLabel: string): { background: string; color: string } {
-  const raw = normalizeText(stepLabel);
-
-  if (raw.includes("step 1")) {
-    return { background: "#ffedd5", color: "#ea580c" };
-  }
-
-  if (raw.includes("step 2")) {
-    return { background: "#f3e8ff", color: "#9333ea" };
-  }
-
-  if (raw.includes("step 3")) {
-    return { background: "#dbeafe", color: "#2563eb" };
-  }
-
-  if (raw.includes("step 4")) {
-    return { background: "#ede9fe", color: "#4f46e5" };
-  }
-
-  if (raw.includes("step 5")) {
-    return { background: "#ecfccb", color: "#4d7c0f" };
-  }
-
-  return { background: "#f1f5f9", color: "#475569" };
-}
-
-function getVisaSummaryCategory(
-  value?: string | null,
-): "granted" | "processing" | "refused" {
-  const raw = normalizeText(value);
-
-  if (raw.includes("grant") || raw.includes("approved")) {
-    return "granted";
-  }
-
-  if (
-    raw.includes("refus") ||
-    raw.includes("reject") ||
-    raw.includes("cancel")
-  ) {
-    return "refused";
-  }
-
-  return "processing";
+  return getCurrentStepLabelHelper(student);
 }
 
 function formatDateTime(value?: string | null): string {
   if (!value) return "-";
-
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
-
-  return date.toLocaleString("en-US", {
+  return date.toLocaleString("id-ID", {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -203,13 +107,11 @@ function formatDateTime(value?: string | null): string {
 
 function formatShortDate(value?: string | null): string {
   if (!value) return "-";
-
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
-
-  return date.toLocaleDateString("en-US", {
-    month: "short",
+  return date.toLocaleDateString("id-ID", {
     day: "numeric",
+    month: "short",
     year: "numeric",
   });
 }
@@ -217,13 +119,13 @@ function formatShortDate(value?: string | null): string {
 function formatPriorityLabel(value?: string | null): string {
   switch (normalizeText(value)) {
     case "high":
-      return "High Priority";
+      return "Prioritas Tinggi";
     case "medium":
-      return "Medium Priority";
+      return "Prioritas Sedang";
     case "low":
-      return "Low Priority";
+      return "Prioritas Rendah";
     default:
-      return "Normal Priority";
+      return "Prioritas Normal";
   }
 }
 
@@ -265,146 +167,400 @@ function DashboardCard({
   subtitle,
   children,
   style,
+  extra,
 }: {
   title: string;
   subtitle: string;
   children: ReactNode;
   style?: CSSProperties;
+  extra?: ReactNode;
 }) {
-  return (
-    <Card
-      style={{
-        borderRadius: 24,
-        borderColor: "#dbe4ee",
-        boxShadow: "0 18px 38px rgba(15, 23, 42, 0.06)",
-        ...style,
-      }}
-      styles={{ body: { padding: 20 } }}
-    >
-      <Space direction="vertical" size={16} style={{ width: "100%" }}>
-        <div>
-          <Text strong style={{ fontSize: 22, color: "#1e3a8a" }}>
-            {title}
-          </Text>
-          <Text type="secondary" style={{ display: "block", marginTop: 4 }}>
-            {subtitle}
-          </Text>
-        </div>
-        {children}
-      </Space>
-    </Card>
-  );
-}
-
-function WorkloadMetricCard({ item }: { item: WorkloadCard }) {
   return (
     <div
       style={{
+        borderRadius: 14,
         border: "1px solid #e2e8f0",
-        borderRadius: 18,
-        padding: 18,
+        boxShadow: "0 1px 3px 0 rgba(0, 0, 0, 0.04)",
         background: "#ffffff",
+        padding: "22px 24px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 16,
+        ...style,
       }}
     >
-      <Space direction="vertical" size={14} style={{ width: "100%" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div
-            style={{
-              width: 38,
-              height: 38,
-              borderRadius: 12,
-              display: "grid",
-              placeItems: "center",
-              background: item.iconBg,
-              color: item.iconColor,
-              fontSize: 18,
-            }}
-          >
-            {item.icon}
-          </div>
-          <div>
-            <div
-              style={{
-                fontSize: 30,
-                fontWeight: 700,
-                color: "#0f172a",
-                lineHeight: 1,
-              }}
-            >
-              {item.count}
-            </div>
-            <Text style={{ color: "#0f172a", fontWeight: 500 }}>
-              {item.title}
-            </Text>
-          </div>
-        </div>
-
-        <Text type="secondary" style={{ minHeight: 44 }}>
-          {item.caption}
-        </Text>
-
-        <Tag
-          style={{
-            width: "fit-content",
-            margin: 0,
-            borderRadius: 999,
-            padding: "2px 10px",
-            fontSize: 11,
-            borderColor: "transparent",
-            color: item.tagColor,
-            background: `${item.tagColor}14`,
-          }}
-        >
-          {item.tag}
-        </Tag>
-      </Space>
-    </div>
-  );
-}
-
-function StudentBadge({ name, country }: { name: string; country: string }) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
       <div
         style={{
-          width: 38,
-          height: 38,
-          flexShrink: 0,
-          borderRadius: 999,
-          display: "grid",
-          placeItems: "center",
-          background: "#f8fafc",
-          color: "#2563eb",
-          border: "1px solid #e2e8f0",
-          fontSize: 12,
-          fontWeight: 700,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          flexWrap: "wrap",
+          gap: 10,
         }}
       >
-        {getInitials(name)}
+        <div>
+          <h2
+            style={{
+              fontSize: 15,
+              fontWeight: 700,
+              color: "#0f172a",
+              margin: "0 0 3px",
+              lineHeight: 1.3,
+            }}
+          >
+            {title}
+          </h2>
+          <p style={{ fontSize: 12, color: "#64748b", margin: 0 }}>
+            {subtitle}
+          </p>
+        </div>
+        {extra}
       </div>
-      <div style={{ minWidth: 0 }}>
-        <Text strong style={{ display: "block" }}>
-          {name}
-        </Text>
-        <Text type="secondary" style={{ fontSize: 12 }}>
-          {country}
-        </Text>
-      </div>
+      {children}
     </div>
   );
 }
 
-export default function AdmissionDashboardHomeContent() {
+// ---------------------------------------------------------------------------
+// Chart: Monthly Trend Line + Area (SVG)
+// ---------------------------------------------------------------------------
+function MonthlyTrendLineChart({
+  data,
+}: {
+  data: { month: string; registered: number; granted: number }[];
+}) {
+  const width = 560;
+  const height = 200;
+  const pL = 32;
+  const pR = 20;
+  const pT = 20;
+  const pB = 28;
+  const cW = width - pL - pR;
+  const cH = height - pT - pB;
+  const rawMax = Math.max(
+    ...data.map((d) => Math.max(d.registered, d.granted)),
+    4,
+  );
+  const maxVal = Math.max(Math.ceil(rawMax / 4) * 4, 8);
+  const step = maxVal / 4;
+  const yTicks = [0, step, step * 2, step * 3, maxVal];
+  const stepX = data.length > 1 ? cW / (data.length - 1) : cW;
+
+  const getXY = (index: number, value: number) => ({
+    x: pL + index * stepX,
+    y: pT + cH - (value / maxVal) * cH,
+  });
+
+  const regPts = data.map((d, i) => getXY(i, d.registered));
+  const grantPts = data.map((d, i) => getXY(i, d.granted));
+
+  const buildPath = (pts: { x: number; y: number }[]) =>
+    pts.reduce((acc, pt, i) => {
+      if (i === 0) return `M ${pt.x} ${pt.y}`;
+      const prev = pts[i - 1];
+      const cx = (prev.x + pt.x) / 2;
+      return `${acc} C ${cx} ${prev.y}, ${cx} ${pt.y}, ${pt.x} ${pt.y}`;
+    }, "");
+
+  const regPath = buildPath(regPts);
+  const grantPath = buildPath(grantPts);
+  const regArea =
+    regPts.length > 0
+      ? `${regPath} L ${regPts[regPts.length - 1].x} ${pT + cH} L ${regPts[0].x} ${pT + cH} Z`
+      : "";
+  const grantArea =
+    grantPts.length > 0
+      ? `${grantPath} L ${grantPts[grantPts.length - 1].x} ${pT + cH} L ${grantPts[0].x} ${pT + cH} Z`
+      : "";
+
+  return (
+    <div style={{ width: "100%", height: 210 }}>
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        style={{ width: "100%", height: "100%", overflow: "visible" }}
+      >
+        <defs>
+          <linearGradient id="admissionRegGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#1b3d6d" stopOpacity="0.22" />
+            <stop offset="100%" stopColor="#1b3d6d" stopOpacity="0" />
+          </linearGradient>
+          <linearGradient id="admissionGrantGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#10b981" stopOpacity="0.25" />
+            <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+
+        {yTicks.map((val) => {
+          const y = pT + cH - (val / maxVal) * cH;
+          return (
+            <g key={val}>
+              <line
+                x1={pL}
+                y1={y}
+                x2={width - pR}
+                y2={y}
+                stroke="#f1f5f9"
+                strokeWidth="1"
+                strokeDasharray="4 4"
+              />
+              <text
+                x={pL - 8}
+                y={y + 3.5}
+                textAnchor="end"
+                fontSize="10"
+                fill="#94a3b8"
+                fontWeight="500"
+              >
+                {val}
+              </text>
+            </g>
+          );
+        })}
+
+        {regArea && <path d={regArea} fill="url(#admissionRegGrad)" />}
+        {grantArea && <path d={grantArea} fill="url(#admissionGrantGrad)" />}
+        {regPath && (
+          <path
+            d={regPath}
+            fill="none"
+            stroke="#1b3d6d"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+          />
+        )}
+        {grantPath && (
+          <path
+            d={grantPath}
+            fill="none"
+            stroke="#10b981"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+          />
+        )}
+
+        {data.map((d, i) => {
+          const ptR = regPts[i];
+          const ptG = grantPts[i];
+          return (
+            <g key={d.month}>
+              <text
+                x={ptR.x}
+                y={height - 8}
+                textAnchor="middle"
+                fontSize="11"
+                fill="#64748b"
+                fontWeight="600"
+              >
+                {d.month}
+              </text>
+              <circle
+                cx={ptR.x}
+                cy={ptR.y}
+                r="4"
+                fill="#fff"
+                stroke="#1b3d6d"
+                strokeWidth="2.5"
+              />
+              <circle
+                cx={ptG.x}
+                cy={ptG.y}
+                r="4"
+                fill="#fff"
+                stroke="#10b981"
+                strokeWidth="2.5"
+              />
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Chart: Country Distribution Bar (SVG)
+// ---------------------------------------------------------------------------
+function CountryBarChart({
+  data,
+}: {
+  data: {
+    country: string;
+    code: string;
+    count: number;
+    color: string;
+    bg: string;
+    border: string;
+  }[];
+}) {
+  const width = 420;
+  const height = 200;
+  const pL = 20;
+  const pR = 12;
+  const pT = 26;
+  const pB = 34;
+  const cW = width - pL - pR;
+  const cH = height - pT - pB;
+  const maxVal = Math.max(...data.map((d) => d.count), 4);
+  const barWidth = data.length > 0 ? Math.min(36, Math.floor(cW / data.length) - 12) : 24;
+  const stepX = data.length > 0 ? cW / data.length : cW;
+
+  return (
+    <div style={{ width: "100%", height: 210 }}>
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        style={{ width: "100%", height: "100%", overflow: "visible" }}
+      >
+        {[0, Math.round(maxVal / 2), maxVal].map((val) => {
+          const y = pT + cH - (val / maxVal) * cH;
+          return (
+            <g key={val}>
+              <line
+                x1={pL}
+                y1={y}
+                x2={width - pR}
+                y2={y}
+                stroke="#f1f5f9"
+                strokeWidth="1"
+              />
+              <text
+                x={pL - 5}
+                y={y + 3.5}
+                textAnchor="end"
+                fontSize="10"
+                fill="#94a3b8"
+                fontWeight="500"
+              >
+                {val}
+              </text>
+            </g>
+          );
+        })}
+
+        {data.map((item, i) => {
+          const x = pL + i * stepX + (stepX - barWidth) / 2;
+          const barH = maxVal > 0 ? (item.count / maxVal) * cH : 0;
+          const y = pT + cH - barH;
+          return (
+            <g key={item.code}>
+              <rect
+                x={x}
+                y={pT}
+                width={barWidth}
+                height={cH}
+                rx="6"
+                fill="#f8fafc"
+              />
+              <rect
+                x={x}
+                y={y}
+                width={barWidth}
+                height={barH}
+                rx="6"
+                fill={item.color}
+              />
+              <text
+                x={x + barWidth / 2}
+                y={y - 6}
+                textAnchor="middle"
+                fontSize="11.5"
+                fill="#0f172a"
+                fontWeight="700"
+              >
+                {item.count}
+              </text>
+              <text
+                x={x + barWidth / 2}
+                y={height - 14}
+                textAnchor="middle"
+                fontSize="11"
+                fill={item.color}
+                fontWeight="700"
+              >
+                {item.code}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main Admission Intelligence Center Component
+// ---------------------------------------------------------------------------
+export interface DashboardHomeContentProps {
+  isConsultant?: boolean;
+  consultantName?: string;
+  title?: string;
+  subtitle?: string;
+  pipelinePath?: string;
+  detailBasePath?: string;
+}
+
+export default function AdmissionDashboardHomeContent({
+  isConsultant: isConsultantProp = false,
+  consultantName,
+  title,
+  subtitle,
+  pipelinePath = "/admission/dashboard/students-management",
+  detailBasePath = "/admission/dashboard/students-management/detail",
+}: DashboardHomeContentProps = {}) {
   const router = useRouter();
+  const { user_name, role: userRole } = useAuth();
+  const isConsultant =
+    isConsultantProp || userRole?.toUpperCase() === "CONSULTANT";
+  const effectiveConsultantName = (
+    consultantName ||
+    user_name ||
+    ""
+  ).trim();
+  const [timeRange, setTimeRange] = useState<string>("all");
+  const [selectedMonth, setSelectedMonth] = useState<Date>(() => new Date());
   const [countryFilter, setCountryFilter] = useState<string>("all");
   const [stepFilter, setStepFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [lastUpdateFilter, setLastUpdateFilter] = useState<string>("all");
 
+  // Generate 12 months for dropdown (current month down to 11 months ago)
+  const monthOptions = useMemo(() => {
+    const opts: { label: string; value: string }[] = [];
+    const now = new Date();
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const label = d.toLocaleDateString("id-ID", { month: "long", year: "numeric" });
+      const value = `${d.getFullYear()}-${d.getMonth()}`;
+      opts.push({ label, value });
+    }
+    return opts;
+  }, []);
+
+  const isLatestMonth = useMemo(() => {
+    const now = new Date();
+    return (
+      selectedMonth.getFullYear() === now.getFullYear() &&
+      selectedMonth.getMonth() === now.getMonth()
+    );
+  }, [selectedMonth]);
+
+  const handlePrevMonth = () => {
+    setSelectedMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+    setTimeRange("month");
+  };
+
+  const handleNextMonth = () => {
+    if (isLatestMonth) return;
+    setSelectedMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+    setTimeRange("month");
+  };
+
   const { data: students = [], fetchLoading: studentsLoading } =
-    useUserRoleStudents();
-  const { data: documentTranslations = [], fetchLoading: translationsLoading } =
-    useDocumentTranslations();
+    useUserRoleStudents({
+      consultant:
+        isConsultant && effectiveConsultantName
+          ? effectiveConsultantName
+          : undefined,
+    });
   const { data: answerApprovals = [], fetchLoading: approvalsLoading } =
     useAnswerApprovals();
   const { data: informationUpdates = [], fetchLoading: informationLoading } =
@@ -446,7 +602,6 @@ export default function AdmissionDashboardHomeContent() {
 
   const isLoading =
     studentsLoading ||
-    translationsLoading ||
     approvalsLoading ||
     informationLoading ||
     cvLoading ||
@@ -459,51 +614,146 @@ export default function AdmissionDashboardHomeContent() {
     );
   }, [visaTypes]);
 
-  const getVisaTypeLabel = (student: UserDataModel): string => {
-    const visaTypeName = String(student.visa_type_name ?? "").trim();
-    if (visaTypeName) {
-      return visaTypeName;
-    }
-
-    const visaTypeValue = String(student.visa_type ?? "").trim();
-    if (!visaTypeValue) {
-      return "Student Visa";
-    }
-
-    const mappedName = visaTypeNameById.get(visaTypeValue);
-    if (mappedName) {
-      return mappedName;
-    }
-
-    return visaTypeValue.replace(/_/g, " ");
-  };
-
   const activeStudents = useMemo(() => {
-    return students.filter(
+    const list = students.filter(
       (student) => String(student.role ?? "").toUpperCase() === "STUDENT",
     );
-  }, [students]);
+    if (isConsultant && effectiveConsultantName) {
+      const cName = normalizeText(effectiveConsultantName);
+      return list.filter((student) => {
+        const sConsultant = normalizeText(student.name_consultant);
+        if (!sConsultant) return false;
+        return (
+          sConsultant === cName ||
+          cName.split(/\s+/)[0] === sConsultant.split(/\s+/)[0] ||
+          cName.includes(sConsultant) ||
+          sConsultant.includes(cName)
+        );
+      });
+    }
+    return list;
+  }, [students, isConsultant, effectiveConsultantName]);
 
-  const translationPagesByStudent = useMemo(() => {
-    return documentTranslations.reduce<Record<string, number>>((acc, item) => {
-      const studentId = String(item.student_id ?? "");
-      if (!studentId) return acc;
-      acc[studentId] = (acc[studentId] ?? 0) + Number(item.page_count ?? 0);
-      return acc;
-    }, {});
-  }, [documentTranslations]);
+  const activeStudentIdSet = useMemo(() => {
+    return new Set(activeStudents.map((s) => String(s.id)));
+  }, [activeStudents]);
 
-  const workloadCards = useMemo<WorkloadCard[]>(() => {
-    const pendingApprovals = answerApprovals.filter(
+  const filteredAnswerApprovals = useMemo(() => {
+    if (!isConsultant) return answerApprovals;
+    return answerApprovals.filter((item: AnswerApprovalsDataModel) =>
+      item.student_id ? activeStudentIdSet.has(String(item.student_id)) : false,
+    );
+  }, [answerApprovals, isConsultant, activeStudentIdSet]);
+
+  const filteredCvDocuments = useMemo(() => {
+    if (!isConsultant) return cvDocuments;
+    return cvDocuments.filter((doc) =>
+      doc.student_id ? activeStudentIdSet.has(String(doc.student_id)) : false,
+    );
+  }, [cvDocuments, isConsultant, activeStudentIdSet]);
+
+  const filteredStatementDocuments = useMemo(() => {
+    if (!isConsultant) return statementDocuments;
+    return statementDocuments.filter((doc) =>
+      doc.student_id ? activeStudentIdSet.has(String(doc.student_id)) : false,
+    );
+  }, [statementDocuments, isConsultant, activeStudentIdSet]);
+
+  const filteredSponsorDocuments = useMemo(() => {
+    if (!isConsultant) return sponsorDocuments;
+    return sponsorDocuments.filter((doc) =>
+      doc.student_id ? activeStudentIdSet.has(String(doc.student_id)) : false,
+    );
+  }, [sponsorDocuments, isConsultant, activeStudentIdSet]);
+
+  // Filter students based on period selector
+  const displayedActiveStudents = useMemo(() => {
+    if (timeRange === "month") {
+      const targetYear = selectedMonth.getFullYear();
+      const targetMonth = selectedMonth.getMonth();
+      return activeStudents.filter((s) => {
+        const dateStr = s.joined_at || s.created_at;
+        if (!dateStr) return false;
+        const d = new Date(dateStr);
+        return (
+          !Number.isNaN(d.getTime()) &&
+          d.getFullYear() === targetYear &&
+          d.getMonth() === targetMonth
+        );
+      });
+    }
+    if (timeRange === "quarter") {
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentQuarter = Math.floor(now.getMonth() / 3);
+      return activeStudents.filter((s) => {
+        const dateStr = s.joined_at || s.created_at;
+        if (!dateStr) return false;
+        const d = new Date(dateStr);
+        return (
+          !Number.isNaN(d.getTime()) &&
+          d.getFullYear() === currentYear &&
+          Math.floor(d.getMonth() / 3) === currentQuarter
+        );
+      });
+    }
+    return activeStudents;
+  }, [activeStudents, timeRange, selectedMonth]);
+
+  // KPI 1: Pipeline statistics
+  const pipelineStats = useMemo(() => {
+    let ongoing = 0;
+    let waitingVisa = 0;
+    let completed = 0;
+    let postpone = 0;
+    let cancel = 0;
+
+    displayedActiveStudents.forEach((s) => {
+      const raw = normalizeText(s.student_status);
+      if (raw.includes("cancel")) cancel += 1;
+      else if (raw.includes("postpone") || raw.includes("pending")) postpone += 1;
+      else if (
+        raw.includes("waiting visa") ||
+        raw.includes("proses visa") ||
+        raw.includes("lodge")
+      )
+        waitingVisa += 1;
+      else if (raw.includes("complete") || raw.includes("done")) completed += 1;
+      else ongoing += 1;
+    });
+
+    return {
+      total: displayedActiveStudents.length,
+      ongoing,
+      waitingVisa,
+      completed,
+      postpone,
+      cancel,
+    };
+  }, [displayedActiveStudents]);
+
+  // KPI 2: Pending Document & Answer Verifications
+  const pendingApprovalsCount = useMemo(() => {
+    const pendingAnswers = filteredAnswerApprovals.filter(
       (item: AnswerApprovalsDataModel) =>
         normalizeText(item.status || "pending") === "pending",
     ).length;
 
-    const translationPending = activeStudents.filter(
-      (student) => Number(student.translation_quota ?? 0) > 0,
+    const approvedAnswers = filteredAnswerApprovals.filter(
+      (item: AnswerApprovalsDataModel) =>
+        normalizeText(item.status) === "approved",
     ).length;
 
-    const cvPending = cvDocuments.filter((doc) => {
+    return {
+      total: pendingAnswers,
+      pending: pendingAnswers,
+      approved: approvedAnswers,
+    };
+  }, [filteredAnswerApprovals]);
+
+  // KPI 3: AI Documents Pending Review / Submission
+  const pendingAiDocsCount = useMemo(() => {
+    const cvPending = filteredCvDocuments.filter((doc) => {
       const status = normalizeText(doc.status);
       return (
         !status ||
@@ -514,133 +764,292 @@ export default function AdmissionDashboardHomeContent() {
     }).length;
 
     const lettersWaitingDirector = [
-      ...statementDocuments,
-      ...sponsorDocuments,
+      ...filteredStatementDocuments,
+      ...filteredSponsorDocuments,
     ].filter((doc) => {
       const status = normalizeText(doc.status);
       return (
-        status === "submitted_to_director" || status === "revision_requested"
+        status === "submitted_to_director" ||
+        status === "revision_requested" ||
+        status === "draft"
       );
     }).length;
 
-    return [
-      {
-        key: "approvals",
-        count: pendingApprovals,
-        title: "Dokumen menunggu disetujui",
-        caption:
-          "Approval jawaban dan dokumen yang masih perlu ditindaklanjuti.",
-        tag: "Pending",
-        tagColor: "#2563eb",
-        icon: <FileDoneOutlined />,
-        iconBg: "#dbeafe",
-        iconColor: "#2563eb",
-      },
-      {
-        key: "translation",
-        count: translationPending,
-        title: "Quota translation tersisa",
-        caption:
-          "Student dengan sisa halaman translation yang masih perlu diunggah.",
-        tag: "Pending",
-        tagColor: "#9333ea",
-        icon: <TranslationOutlined />,
-        iconBg: "#f3e8ff",
-        iconColor: "#9333ea",
-      },
-      {
-        key: "cv",
-        count: cvPending,
-        title: "CV menunggu di review",
-        caption: "Dokumen CV aktif yang belum mencapai status final.",
-        tag: "Pending",
-        tagColor: "#ea580c",
-        icon: <FileTextOutlined />,
-        iconBg: "#ffedd5",
-        iconColor: "#ea580c",
-      },
-      {
-        key: "letters",
-        count: lettersWaitingDirector,
-        title: "Surat menunggu director",
-        caption:
-          "Statement dan sponsor letter yang sudah masuk proses director.",
-        tag: "Pending",
-        tagColor: "#16a34a",
-        icon: <AlertOutlined />,
-        iconBg: "#dcfce7",
-        iconColor: "#16a34a",
-      },
-    ];
-  }, [
-    activeStudents,
-    answerApprovals,
-    cvDocuments,
-    sponsorDocuments,
-    statementDocuments,
-  ]);
+    return {
+      total: cvPending + lettersWaitingDirector,
+      cv: cvPending,
+      letters: lettersWaitingDirector,
+    };
+  }, [filteredCvDocuments, filteredSponsorDocuments, filteredStatementDocuments]);
 
-  const translationAlerts = useMemo(() => {
-    return activeStudents
-      .filter((student) => Number(student.translation_quota ?? 0) > 0)
-      .map((student) => {
-        const remaining = Number(student.translation_quota ?? 0);
-        const uploadedPages =
-          translationPagesByStudent[String(student.id)] ?? 0;
-        const total = Math.max(remaining + uploadedPages, remaining);
-
-        return {
-          id: String(student.id),
-          name: student.name,
-          country: getCountryName(student),
-          remaining,
-          total,
-        };
-      })
-      .sort((a, b) => a.remaining - b.remaining || a.name.localeCompare(b.name))
-      .slice(0, 5);
-  }, [activeStudents, translationPagesByStudent]);
-
-  const countryOptions = useMemo(() => {
-    const names = Array.from(
-      new Set(activeStudents.map((student) => getCountryName(student))),
+  // KPI 4: Translation Quota Monitoring
+  const translationStats = useMemo(() => {
+    const studentsNeeding = displayedActiveStudents.filter(
+      (student) => Number(student.translation_quota ?? 0) > 0,
     );
 
-    return names.filter(Boolean).sort((a, b) => a.localeCompare(b));
-  }, [activeStudents]);
-
-  const stepOptions = useMemo(() => {
-    const labels = Array.from(
-      new Set(activeStudents.map((student) => getCurrentStepLabel(student))),
+    const totalRemainingPages = studentsNeeding.reduce(
+      (acc, s) => acc + Number(s.translation_quota ?? 0),
+      0,
     );
 
-    return labels.filter(Boolean).sort((a, b) => a.localeCompare(b));
-  }, [activeStudents]);
+    return {
+      studentsCount: studentsNeeding.length,
+      totalRemainingPages,
+    };
+  }, [displayedActiveStudents]);
+
+  // Subtitles with professional, consistent UX writing (fixed length to prevent layout shifts)
+  const trendSubtitle =
+    timeRange === "quarter"
+      ? "Aktivitas pendaftaran dan kelolosan visa kuartal ini"
+      : timeRange === "month"
+        ? "Aktivitas pendaftaran dan kelolosan visa bulan ini"
+        : "Aktivitas pendaftaran dan kelolosan visa";
+  const countrySubtitle = "Sebaran siswa berdasarkan destinasi studi";
+
+  // Monthly trend chart data: Pendaftaran Siswa vs Kelolosan Visa (konsisten dengan Director)
+  const monthlyTrendData = useMemo(() => {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+
+    if (timeRange === "month") {
+      const targetYear = selectedMonth.getFullYear();
+      const targetMonth = selectedMonth.getMonth();
+
+      // 4 minggu dalam bulan yang dipilih
+      const weeks = [
+        { label: "Mgg 1", start: 1, end: 7 },
+        { label: "Mgg 2", start: 8, end: 14 },
+        { label: "Mgg 3", start: 15, end: 21 },
+        { label: "Mgg 4", start: 22, end: 31 },
+      ];
+
+      const regCounts = [0, 0, 0, 0];
+      const grantCounts = [0, 0, 0, 0];
+
+      activeStudents.forEach((s) => {
+        const dateStr = s.joined_at || s.created_at;
+        if (dateStr) {
+          const d = new Date(dateStr);
+          if (
+            !Number.isNaN(d.getTime()) &&
+            d.getFullYear() === targetYear &&
+            d.getMonth() === targetMonth
+          ) {
+            const day = d.getDate();
+            if (day <= 7) regCounts[0] += 1;
+            else if (day <= 14) regCounts[1] += 1;
+            else if (day <= 21) regCounts[2] += 1;
+            else regCounts[3] += 1;
+          }
+        }
+
+        if (s.visa_granted_at) {
+          const d = new Date(s.visa_granted_at);
+          if (
+            !Number.isNaN(d.getTime()) &&
+            d.getFullYear() === targetYear &&
+            d.getMonth() === targetMonth
+          ) {
+            const day = d.getDate();
+            if (day <= 7) grantCounts[0] += 1;
+            else if (day <= 14) grantCounts[1] += 1;
+            else if (day <= 21) grantCounts[2] += 1;
+            else grantCounts[3] += 1;
+          }
+        }
+      });
+
+      return weeks.map((w, idx) => ({
+        month: w.label,
+        registered: regCounts[idx],
+        granted: grantCounts[idx],
+      }));
+    }
+
+    if (timeRange === "quarter") {
+      // 3 bulan dalam kuartal berjalan
+      const currentQuarter = Math.floor(currentMonth / 3);
+      const startQuarterMonth = currentQuarter * 3;
+      const quarterMonths: {
+        month: string;
+        year: number;
+        monthIndex: number;
+      }[] = [];
+
+      for (let i = 0; i < 3; i++) {
+        const mIdx = startQuarterMonth + i;
+        const d = new Date(currentYear, mIdx, 1);
+        quarterMonths.push({
+          month: d.toLocaleDateString("id-ID", { month: "short" }),
+          year: currentYear,
+          monthIndex: mIdx,
+        });
+      }
+
+      const regMap = new Map<number, number>();
+      const grantMap = new Map<number, number>();
+
+      activeStudents.forEach((s) => {
+        const dateStr = s.joined_at || s.created_at;
+        if (dateStr) {
+          const d = new Date(dateStr);
+          if (
+            !Number.isNaN(d.getTime()) &&
+            d.getFullYear() === currentYear &&
+            Math.floor(d.getMonth() / 3) === currentQuarter
+          ) {
+            regMap.set(d.getMonth(), (regMap.get(d.getMonth()) ?? 0) + 1);
+          }
+        }
+
+        if (s.visa_granted_at) {
+          const d = new Date(s.visa_granted_at);
+          if (
+            !Number.isNaN(d.getTime()) &&
+            d.getFullYear() === currentYear &&
+            Math.floor(d.getMonth() / 3) === currentQuarter
+          ) {
+            grantMap.set(d.getMonth(), (grantMap.get(d.getMonth()) ?? 0) + 1);
+          }
+        }
+      });
+
+      return quarterMonths.map(({ month, monthIndex }) => ({
+        month,
+        registered: regMap.get(monthIndex) ?? 0,
+        granted: grantMap.get(monthIndex) ?? 0,
+      }));
+    }
+
+    // Default: Semua Periode (6 bulan terakhir)
+    const months: { month: string; year: number; monthIndex: number }[] = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      months.push({
+        month: d.toLocaleDateString("id-ID", { month: "short" }),
+        year: d.getFullYear(),
+        monthIndex: d.getMonth(),
+      });
+    }
+
+    const regMap = new Map<string, number>();
+    const grantMap = new Map<string, number>();
+
+    activeStudents.forEach((s) => {
+      const dateStr = s.joined_at || s.created_at;
+      if (dateStr) {
+        const d = new Date(dateStr);
+        if (!Number.isNaN(d.getTime())) {
+          const key = `${d.getFullYear()}-${d.getMonth()}`;
+          regMap.set(key, (regMap.get(key) ?? 0) + 1);
+        }
+      }
+      if (s.visa_granted_at) {
+        const d = new Date(s.visa_granted_at);
+        if (!Number.isNaN(d.getTime())) {
+          const key = `${d.getFullYear()}-${d.getMonth()}`;
+          grantMap.set(key, (grantMap.get(key) ?? 0) + 1);
+        }
+      }
+    });
+
+    return months.map(({ month, year, monthIndex }) => {
+      const key = `${year}-${monthIndex}`;
+      return {
+        month,
+        registered: regMap.get(key) ?? 0,
+        granted: grantMap.get(key) ?? 0,
+      };
+    });
+  }, [activeStudents, timeRange, selectedMonth]);
+
+  // Country bar chart data
+  const countryBarData = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        country: string;
+        code: string;
+        count: number;
+        color: string;
+        bg: string;
+        border: string;
+      }
+    >();
+
+    displayedActiveStudents.forEach((s) => {
+      const country = getCountryName(s);
+      if (!country || country === "Unknown" || country === "-") return;
+      const meta = getCountryBadgeMeta(country);
+      if (!map.has(country)) {
+        map.set(country, {
+          country,
+          code: meta.code,
+          count: 0,
+          color: meta.color,
+          bg: meta.bg,
+          border: meta.border,
+        });
+      }
+      map.get(country)!.count += 1;
+    });
+
+    return Array.from(map.values()).sort((a, b) => b.count - a.count);
+  }, [displayedActiveStudents]);
+
+  // Consultant summary for inline row
+  const consultantSummary = useMemo(() => {
+    const map = new Map<string, number>();
+    displayedActiveStudents.forEach((s) => {
+      const name = String(s.name_consultant || "Tanpa Konsultan").trim();
+      map.set(name, (map.get(name) ?? 0) + 1);
+    });
+
+    return Array.from(map.entries())
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 4);
+  }, [displayedActiveStudents]);
+
+  // Filter options
+  const countryOptions = useMemo(
+    () =>
+      Array.from(new Set(displayedActiveStudents.map((s) => getCountryName(s))))
+        .filter((c) => c && c !== "Unknown" && c !== "-")
+        .sort((a, b) => a.localeCompare(b)),
+    [displayedActiveStudents],
+  );
+
+  const stepOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(displayedActiveStudents.map((s) => getCurrentStepLabel(s))),
+      )
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b)),
+    [displayedActiveStudents],
+  );
 
   const lastActivityByStudent = useMemo(() => {
     const result: Record<string, number> = {};
-
     const setLatestTime = (studentId: string, value?: string | null) => {
       if (!value) return;
-      const timestamp = new Date(value).getTime();
-      if (Number.isNaN(timestamp)) return;
-      if (!result[studentId] || timestamp > result[studentId]) {
-        result[studentId] = timestamp;
-      }
+      const ts = new Date(value).getTime();
+      if (Number.isNaN(ts)) return;
+      if (!result[studentId] || ts > result[studentId]) result[studentId] = ts;
     };
 
-    activeStudents.forEach((student) => {
-      const key = String(student.id);
-      setLatestTime(key, student.updated_at);
-      setLatestTime(key, student.student_status_updated_at);
-      setLatestTime(key, student.visa_granted_at);
+    displayedActiveStudents.forEach((s) => {
+      const key = String(s.id);
+      setLatestTime(key, s.updated_at);
+      setLatestTime(key, s.student_status_updated_at);
+      setLatestTime(key, s.visa_granted_at);
     });
 
-    documentTranslations.forEach((item) => {
-      setLatestTime(String(item.student_id), item.updated_at ?? item.created_at);
-    });
-
-    answerApprovals.forEach((item) => {
+    filteredAnswerApprovals.forEach((item) => {
       setLatestTime(
         String(item.student_id),
         item.reviewed_at ?? item.updated_at ?? item.created_at,
@@ -648,37 +1057,32 @@ export default function AdmissionDashboardHomeContent() {
     });
 
     return result;
-  }, [activeStudents, answerApprovals, documentTranslations]);
+  }, [displayedActiveStudents, filteredAnswerApprovals]);
 
   const pipelineStudents = useMemo(() => {
-    const nowTime = new Date().getTime();
-
-    return activeStudents.filter((student) => {
-      const country = getCountryName(student);
-      const step = getCurrentStepLabel(student);
-      const status = getStudentPipelineStatus(student).label;
-      const lastActivityAt = lastActivityByStudent[String(student.id)];
+    return displayedActiveStudents.filter((s) => {
+      const country = getCountryName(s);
+      const step = getCurrentStepLabel(s);
+      const status = getStudentPipelineStatus(s).label;
+      const lastActivityAt = lastActivityByStudent[String(s.id)];
 
       if (countryFilter !== "all" && country !== countryFilter) return false;
       if (stepFilter !== "all" && step !== stepFilter) return false;
       if (statusFilter !== "all" && status !== statusFilter) return false;
-      if (lastUpdateFilter !== "all" && lastActivityAt) {
-        const ageMs = nowTime - lastActivityAt;
-        if (lastUpdateFilter === "today" && ageMs > 24 * 60 * 60 * 1000) {
+      if (lastUpdateFilter !== "all") {
+        if (!lastActivityAt) return false;
+        const ageMs = Date.now() - lastActivityAt;
+        if (lastUpdateFilter === "today" && ageMs > 24 * 60 * 60 * 1000)
           return false;
-        }
-        if (lastUpdateFilter === "7d" && ageMs > 7 * 24 * 60 * 60 * 1000) {
+        if (lastUpdateFilter === "7d" && ageMs > 7 * 24 * 60 * 60 * 1000)
           return false;
-        }
-        if (lastUpdateFilter === "30d" && ageMs > 30 * 24 * 60 * 60 * 1000) {
+        if (lastUpdateFilter === "30d" && ageMs > 30 * 24 * 60 * 60 * 1000)
           return false;
-        }
       }
-
       return true;
     });
   }, [
-    activeStudents,
+    displayedActiveStudents,
     countryFilter,
     lastActivityByStudent,
     lastUpdateFilter,
@@ -686,82 +1090,30 @@ export default function AdmissionDashboardHomeContent() {
     stepFilter,
   ]);
 
-  const visaSummary = useMemo(() => {
-    const counts = { granted: 0, processing: 0, refused: 0 };
-
-    activeStudents.forEach((student) => {
-      counts[getVisaSummaryCategory(student.visa_status)] += 1;
-    });
-
-    return counts;
-  }, [activeStudents]);
-
-  const totalVisaSummary =
-    visaSummary.granted + visaSummary.processing + visaSummary.refused;
-
-  const visaDonutStyle = useMemo(() => {
-    if (!totalVisaSummary) {
-      return { background: "conic-gradient(#e2e8f0 0 360deg)" };
-    }
-
-    const grantedDeg = (visaSummary.granted / totalVisaSummary) * 360;
-    const processingDeg = (visaSummary.processing / totalVisaSummary) * 360;
-    const refusedDeg = (visaSummary.refused / totalVisaSummary) * 360;
-
-    return {
-      background: `conic-gradient(#10b981 0deg ${grantedDeg}deg, #f59e0b ${grantedDeg}deg ${
-        grantedDeg + processingDeg
-      }deg, #ef4444 ${grantedDeg + processingDeg}deg ${
-        grantedDeg + processingDeg + refusedDeg
-      }deg)`,
-    };
-  }, [totalVisaSummary, visaSummary]);
-
-  const recentVisaUpdates = useMemo(() => {
-    return activeStudents
-      .filter((student) => student.visa_status)
-      .sort((a, b) => {
-        const timeA = new Date(
-          a.visa_granted_at ?? a.updated_at ?? 0,
-        ).getTime();
-        const timeB = new Date(
-          b.visa_granted_at ?? b.updated_at ?? 0,
-        ).getTime();
-        return timeB - timeA;
-      })
-      .slice(0, 4);
-  }, [activeStudents]);
-
+  // Operational activity items
   const recentActivities = useMemo<ActivityItem[]>(() => {
     const items: ActivityItem[] = [];
+    const studentNameMap = new Map(
+      activeStudents.map((s) => [String(s.id), String(s.name ?? "Siswa")]),
+    );
 
-    documentTranslations.forEach((item: DocumentTranslationDataModel) => {
-      const student = activeStudents.find(
-        (entry) => String(entry.id) === String(item.student_id),
-      );
+    filteredAnswerApprovals.forEach((item) => {
+      const studentName = studentNameMap.get(String(item.student_id)) || "Siswa";
+      const normalizedStatus = normalizeText(item.status);
+      const isApproved = normalizedStatus === "approved";
+      const isRejected = normalizedStatus === "rejected";
 
-      if (!student) return;
+      const title = isApproved
+        ? `Berkas ${studentName} disetujui`
+        : isRejected
+          ? `Berkas ${studentName} memerlukan revisi`
+          : `Pembaruan berkas ${studentName}`;
 
-      items.push({
-        id: `translation-${item.id}`,
-        time: formatDateTime(item.updated_at ?? item.created_at),
-        sortTime: String(item.updated_at ?? item.created_at ?? ""),
-        title: "Admission mengupload dokumen terjemahan",
-        subtitle: `Case: ${student.name}`,
-        actor: "Admission",
-        actorColor: "#9333ea",
-        icon: <TranslationOutlined />,
-      });
-    });
-
-    answerApprovals.forEach((item: AnswerApprovalsDataModel) => {
-      const student = activeStudents.find(
-        (entry) => String(entry.id) === String(item.student_id),
-      );
-
-      if (!student) return;
-
-      const approved = normalizeText(item.status) === "approved";
+      const subtitle =
+        item.note ||
+        (isApproved
+          ? "Verifikasi berkas formulir disetujui"
+          : "Verifikasi berkas formulir diperbarui");
 
       items.push({
         id: `approval-${item.id}`,
@@ -771,38 +1123,39 @@ export default function AdmissionDashboardHomeContent() {
         sortTime: String(
           item.reviewed_at ?? item.updated_at ?? item.created_at ?? "",
         ),
-        title: `Dokumen ${approved ? "disetujui" : "memerlukan review"}`,
-        subtitle: `Case: ${student.name}`,
-        actor: approved ? "Director" : "System",
-        actorColor: approved ? "#16a34a" : "#ea580c",
-        icon: approved ? <CheckCircleOutlined /> : <ClockCircleOutlined />,
+        title,
+        subtitle,
+        actor: isConsultant ? "Konsultan" : "Admission",
+        actorColor: isApproved ? "#16a34a" : isRejected ? "#ef4444" : "#2563eb",
+        icon: <FileDoneOutlined />,
       });
     });
 
     activeStudents.forEach((student) => {
-      if (student.student_status_updated_at) {
+      if (student.student_status) {
+        const rawStatus = String(student.student_status)
+          .replace(/_/g, " ")
+          .trim()
+          .toLowerCase();
+        const formattedStatus = rawStatus.replace(/\b\w/g, (char) =>
+          char.toUpperCase(),
+        );
+
         items.push({
-          id: `student-status-${student.id}`,
-          time: formatDateTime(student.student_status_updated_at),
-          sortTime: String(student.student_status_updated_at ?? ""),
-          title: `Status student diubah menjadi ${getStudentPipelineStatus(student).label}`,
-          subtitle: `Case: ${student.name}`,
-          actor: student.student_status_updated_by_name || "Admission",
+          id: `status-${student.id}`,
+          time: formatDateTime(
+            student.student_status_updated_at ?? student.updated_at,
+          ),
+          sortTime: String(
+            student.student_status_updated_at ?? student.updated_at ?? "",
+          ),
+          title: `Tahapan ${student.name} diperbarui menjadi ${formattedStatus}`,
+          subtitle: student.name_consultant
+            ? `Konsultan ${student.name_consultant}`
+            : "Konsultan belum ditentukan",
+          actor: student.student_status_updated_by_name || (isConsultant ? "Konsultan" : "Admission"),
           actorColor: "#2563eb",
           icon: <AlertOutlined />,
-        });
-      }
-
-      if (student.visa_status) {
-        items.push({
-          id: `visa-${student.id}`,
-          time: formatDateTime(student.visa_granted_at ?? student.updated_at),
-          sortTime: String(student.visa_granted_at ?? student.updated_at ?? ""),
-          title: `Status visa diperbarui menjadi ${student.visa_status}`,
-          subtitle: `Case: ${student.name}`,
-          actor: "System",
-          actorColor: "#ea580c",
-          icon: <FileDoneOutlined />,
         });
       }
     });
@@ -813,7 +1166,7 @@ export default function AdmissionDashboardHomeContent() {
           new Date(b.sortTime).getTime() - new Date(a.sortTime).getTime(),
       )
       .slice(0, 6);
-  }, [activeStudents, answerApprovals, documentTranslations]);
+  }, [activeStudents, filteredAnswerApprovals, isConsultant]);
 
   const importantUpdates = useMemo(() => {
     return [...informationUpdates]
@@ -834,423 +1187,489 @@ export default function AdmissionDashboardHomeContent() {
   }, [informationUpdates]);
 
   if (isLoading) {
-    return <LoadingSplash label="Loading admission dashboard" />;
+    return (
+      <LoadingSplash
+        label={
+          isConsultant
+            ? "Memuat Consultant Operations Center..."
+            : "Memuat Admission Operations Center..."
+        }
+      />
+    );
   }
 
   return (
-    <div
-      className={styles.page}
-      style={{
-        background: "linear-gradient(180deg, #f8fbff 0%, #ffffff 100%)",
-        minHeight: "100%",
-      }}
-    >
-      <div
-        className={styles.gridWorkload}
-        style={{
-          display: "grid",
-          gap: 20,
-          alignItems: "start",
-        }}
+    <div className={styles.page}>
+      {/* Executive Header Banner with Period Switcher */}
+      <PageHeader
+        title={
+          title ??
+          (isConsultant ? "Consultant Operations" : "Admission Operations")
+        }
+        subtitle={
+          subtitle ??
+          (isConsultant
+            ? "Pantau pipeline siswa dan progres berkas dampingan"
+            : "Pantau pipeline siswa dan progres berkas")
+        }
+        icon={<DashboardOutlined />}
       >
-        <DashboardCard
-          title="Today's Workload"
-          subtitle="Tasks requiring your attention"
-        >
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-              gap: 16,
-            }}
-          >
-            {workloadCards.map((item) => (
-              <WorkloadMetricCard key={item.key} item={item} />
-            ))}
-          </div>
-        </DashboardCard>
+        <Segmented
+          size="small"
+          value={timeRange}
+          onChange={(val) => setTimeRange(String(val))}
+          options={[
+            { label: "All", value: "all" },
+            { label: "Monthly", value: "month" },
+            { label: "Quartal", value: "quarter" },
+          ]}
+          className={styles.periodSegmented}
+        />
+      </PageHeader>
 
-        <DashboardCard
-          title="Translation Quota Alerts"
-          subtitle="Students with low remaining pages"
-        >
-          <Space direction="vertical" size={12} style={{ width: "100%" }}>
-            {translationAlerts.length ? (
-              translationAlerts.map((item) => (
-                <div
-                  key={item.id}
-                  style={{
-                    border: "1px solid #e2e8f0",
-                    borderRadius: 16,
-                    padding: "12px 14px",
-                    display: "flex",
-                    flexWrap: "wrap",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 12,
-                    background: "#ffffff",
-                  }}
-                >
-                  <StudentBadge name={item.name} country={item.country} />
-
-                  <div style={{ textAlign: "right" }}>
-                    <Text
-                      className={styles.alertPrice}
-                      style={{
-                        color: "#ef4444",
-                        fontWeight: 700,
-                      }}
-                    >
-                      {item.remaining}/{item.total} pages
-                    </Text>
-                    <div>
-                      <Text type="secondary">remaining</Text>
-                    </div>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <Empty description="Tidak ada alert translation quota." />
-            )}
-          </Space>
-        </DashboardCard>
-      </div>
-
+      {/* ── SECTION 1: Connected 4-Column KPI Strip (Director-Style) ── */}
       <div
-        className={styles.gridPipeline}
-        style={{
-          display: "grid",
-          gap: 20,
-          marginTop: 20,
-          alignItems: "start",
-        }}
+        className={`${styles.kpiStrip} ${isConsultant ? styles.kpiStripConsultant : ""}`}
       >
-        <DashboardCard
-          title="Student Pipeline"
-          subtitle="Active students and their process status"
-        >
-          <div
-            style={{
-              display: "flex",
-              gap: 12,
-              flexWrap: "wrap",
-              marginBottom: 8,
-            }}
-          >
-            <Select
-              value={countryFilter}
-              onChange={setCountryFilter}
-              style={{ minWidth: 180 }}
-              options={[
-                { value: "all", label: "All Countries" },
-                ...countryOptions.map((item) => ({ value: item, label: item })),
-              ]}
-            />
-
-            <Select
-              value={stepFilter}
-              onChange={setStepFilter}
-              style={{ minWidth: 160 }}
-              options={[
-                { value: "all", label: "All Steps" },
-                ...stepOptions.map((item) => ({ value: item, label: item })),
-              ]}
-            />
-
-            <Select
-              value={statusFilter}
-              onChange={setStatusFilter}
-              style={{ minWidth: 160 }}
-              options={[
-                { value: "all", label: "All Status" },
-                { value: "On Progress", label: "On Progress" },
-                { value: "Pending Approval", label: "Pending Approval" },
-                { value: "Completed", label: "Completed" },
-                { value: "Cancel", label: "Cancel" },
-              ]}
-            />
-
-            <Select
-              value={lastUpdateFilter}
-              onChange={setLastUpdateFilter}
-              style={{ minWidth: 180 }}
-              options={[
-                { value: "all", label: "All Last Updates" },
-                { value: "today", label: "Updated Today" },
-                { value: "7d", label: "Updated Last 7 Days" },
-                { value: "30d", label: "Updated Last 30 Days" },
-              ]}
-            />
+        {/* KPI 1: Pipeline Siswa */}
+        <div className={styles.kpiItem}>
+          <div className={styles.kpiLabel}>
+            <span>{isConsultant ? "My Students" : "Total Students"}</span>
+            <TeamOutlined style={{ color: "#1d4ed8", fontSize: 15 }} />
           </div>
-
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr style={{ textAlign: "left", color: "#64748b" }}>
-                  <th style={{ padding: "12px 10px" }}>Name</th>
-                  <th style={{ padding: "12px 10px" }}>Destination</th>
-                  <th style={{ padding: "12px 10px" }}>Visa Type</th>
-                  <th style={{ padding: "12px 10px" }}>Step</th>
-                  <th style={{ padding: "12px 10px" }}>Status</th>
-                  <th style={{ padding: "12px 10px" }}>Last Update</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {pipelineStudents.slice(0, 8).map((student) => {
-                  const stepLabel = getCurrentStepLabel(student);
-                  const stepTone = getStepTone(stepLabel);
-                  const status = getStudentPipelineStatus(student);
-                  const lastActivityAt = lastActivityByStudent[String(student.id)];
-
-                  return (
-                    <tr
-                      key={String(student.id)}
-                      onClick={() =>
-                        router.push(
-                          `/admission/dashboard/students-management/detail/${student.id}`,
-                        )
-                      }
-                      style={{
-                        borderTop: "1px solid #e2e8f0",
-                        cursor: "pointer",
-                      }}
-                    >
-                      <td style={{ padding: "14px 10px" }}>
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 12,
-                          }}
-                        >
-                          <div
-                            style={{
-                              width: 34,
-                              height: 34,
-                              borderRadius: 999,
-                              background: "#0f4c8a",
-                              color: "#fff",
-                              display: "grid",
-                              placeItems: "center",
-                              fontSize: 12,
-                              fontWeight: 700,
-                            }}
-                          >
-                            {getInitials(student.name)}
-                          </div>
-                          <Text strong>{student.name}</Text>
-                        </div>
-                      </td>
-
-                      <td style={{ padding: "14px 10px" }}>
-                        <Space>
-                          <EnvironmentOutlined style={{ color: "#2563eb" }} />
-                          <Text>{getCountryName(student)}</Text>
-                        </Space>
-                      </td>
-
-                      <td style={{ padding: "14px 10px" }}>
-                        <Text>{getVisaTypeLabel(student)}</Text>
-                      </td>
-
-                      <td style={{ padding: "14px 10px" }}>
-                        <Tag
-                          style={{
-                            margin: 0,
-                            borderRadius: 999,
-                            padding: "6px 10px",
-                            background: stepTone.background,
-                            color: stepTone.color,
-                            borderColor: "transparent",
-                            whiteSpace: "normal",
-                          }}
-                        >
-                          {stepLabel}
-                        </Tag>
-                      </td>
-
-                      <td style={{ padding: "14px 10px" }}>
-                        <Tag
-                          style={{
-                            margin: 0,
-                            borderRadius: 999,
-                            padding: "6px 10px",
-                            background: status.tone.background,
-                            color: status.tone.color,
-                            borderColor: "transparent",
-                          }}
-                        >
-                          {status.label}
-                        </Tag>
-                      </td>
-
-                      <td style={{ padding: "14px 10px" }}>
-                        <Text type="secondary">
-                          {lastActivityAt
-                            ? formatDateTime(new Date(lastActivityAt).toISOString())
-                            : "-"}
-                        </Text>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-
-            {!pipelineStudents.length && (
-              <Empty description="Tidak ada student yang cocok dengan filter." />
-            )}
+          <div className={styles.kpiValue}>{pipelineStats.total}</div>
+          <div className={styles.kpiSub}>
+            <span style={{ color: "#16a34a", fontWeight: 600 }}>
+              {pipelineStats.ongoing} Ongoing
+            </span>
+            <span className={styles.kpiDot}>·</span>
+            <span style={{ color: "#0284c7", fontWeight: 600 }}>
+              {pipelineStats.waitingVisa} Waiting Visa
+            </span>
           </div>
-        </DashboardCard>
+        </div>
 
-        <DashboardCard
-          title="Visa Status Summary"
-          subtitle="Overall visa application results"
-        >
-          <div style={{ display: "grid", placeItems: "center", gap: 18 }}>
-            <div
-              style={{
-                width: 156,
-                height: 156,
-                borderRadius: "50%",
-                position: "relative",
-                ...visaDonutStyle,
-              }}
-            >
-              <div
-                style={{
-                  position: "absolute",
-                  inset: 16,
-                  borderRadius: "50%",
-                  background: "#fff",
-                  display: "grid",
-                  placeItems: "center",
-                  textAlign: "center",
-                }}
-              >
-                <div>
-                  <div
-                    style={{ fontSize: 28, fontWeight: 700, color: "#0f172a" }}
-                  >
-                    {totalVisaSummary}
-                  </div>
-                  <Text type="secondary">cases</Text>
-                </div>
+        {!isConsultant && (
+          <>
+            {/* KPI 2: Antrean Verifikasi Berkas */}
+            <div className={styles.kpiItem}>
+              <div className={styles.kpiLabel}>
+                <span>Document Verification</span>
+                <FileDoneOutlined style={{ color: "#2563eb", fontSize: 15 }} />
+              </div>
+              <div className={styles.kpiValue}>{pendingApprovalsCount.total}</div>
+              <div className={styles.kpiSub}>
+                <span style={{ color: "#ea580c", fontWeight: 600 }}>
+                  {pendingApprovalsCount.pending} Pending
+                </span>
+                <span className={styles.kpiDot}>·</span>
+                <span style={{ color: "#16a34a", fontWeight: 600 }}>
+                  {pendingApprovalsCount.approved} Approved
+                </span>
               </div>
             </div>
 
+            {/* KPI 3: Draf Dokumen AI & Direktur */}
+            <div className={styles.kpiItem}>
+              <div className={styles.kpiLabel}>
+                <span>Document Review</span>
+                <FileTextOutlined style={{ color: "#d97706", fontSize: 15 }} />
+              </div>
+              <div className={styles.kpiValue}>{pendingAiDocsCount.total}</div>
+              <div className={styles.kpiSub}>
+                <span>{pendingAiDocsCount.letters} AI Letters</span>
+                <span className={styles.kpiDot}>·</span>
+                <span>{pendingAiDocsCount.cv} AI CVs</span>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* KPI 4: Monitoring Kuota Translasi */}
+        <div className={styles.kpiItem}>
+          <div className={styles.kpiLabel}>
+            <span>Translation Quota</span>
+            <TranslationOutlined style={{ color: "#9333ea", fontSize: 15 }} />
+          </div>
+          <div className={styles.kpiValue}>
+            {translationStats.studentsCount}
+            <span
+              style={{ fontSize: 13, fontWeight: 600, color: "#64748b" }}
+            >
+              {" "}
+              students
+            </span>
+          </div>
+          <div
+            className={styles.kpiSub}
+            style={{ color: "#9333ea", fontWeight: 600 }}
+          >
+            {translationStats.totalRemainingPages} pages pending
+          </div>
+        </div>
+      </div>
+
+      {/* ── SECTION 2: Side-by-Side SVG Charts ── */}
+      <div className={styles.chartsGrid}>
+        {/* Chart Left: Trend Line & Area */}
+        <div className={styles.chartCard}>
+          <div className={styles.chartHeader}>
+            <div style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
+              <h3 className={styles.chartTitle}>
+                Registration Trends
+              </h3>
+              <p className={styles.chartSubtitle}>{trendSubtitle}</p>
+            </div>
             <div
               style={{
                 display: "flex",
                 gap: 12,
-                flexWrap: "wrap",
-                justifyContent: "center",
+                alignItems: "center",
+                flexWrap: "nowrap",
+                flexShrink: 0,
+                marginLeft: "auto",
               }}
             >
-              <Tag color="green">Granted ({visaSummary.granted})</Tag>
-              <Tag color="orange">In Process ({visaSummary.processing})</Tag>
-              <Tag color="red">Refused ({visaSummary.refused})</Tag>
-            </div>
+              {/* Permanent Aesthetic Month Stepper on Chart Card */}
+              <div
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  background: "#ffffff",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: 8,
+                  padding: "2px",
+                  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+                  height: 30,
+                  flexShrink: 0,
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={handlePrevMonth}
+                  title="Bulan sebelumnya"
+                  style={{
+                    width: 24,
+                    height: 24,
+                    border: "none",
+                    background: "transparent",
+                    borderRadius: 5,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer",
+                    color: "#64748b",
+                    transition: "all 0.15s ease",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "#f1f5f9";
+                    e.currentTarget.style.color = "#0f172a";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "transparent";
+                    e.currentTarget.style.color = "#64748b";
+                  }}
+                >
+                  <LeftOutlined style={{ fontSize: 10 }} />
+                </button>
 
-            <div style={{ width: "100%" }}>
-              <Text strong style={{ display: "block", marginBottom: 12 }}>
-                Recent Visa Updates
-              </Text>
+                <Dropdown
+                  menu={{
+                    items: monthOptions.map((opt) => ({
+                      key: opt.value,
+                      label: opt.label,
+                      onClick: () => {
+                        const [y, m] = opt.value.split("-").map(Number);
+                        setSelectedMonth(new Date(y, m, 1));
+                        setTimeRange("month");
+                      },
+                    })),
+                    selectedKeys: [
+                      `${selectedMonth.getFullYear()}-${selectedMonth.getMonth()}`,
+                    ],
+                  }}
+                  trigger={["click"]}
+                  placement="bottomCenter"
+                >
+                  <button
+                    type="button"
+                    style={{
+                      border: "none",
+                      background: "transparent",
+                      padding: "0 8px",
+                      height: 24,
+                      borderRadius: 5,
+                      fontSize: 12,
+                      fontWeight: 600,
+                      color: "#1e293b",
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4,
+                      transition: "all 0.15s ease",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = "#f1f5f9";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = "transparent";
+                    }}
+                  >
+                    <span>
+                      {selectedMonth.toLocaleDateString("id-ID", {
+                        month: "short",
+                        year: "numeric",
+                      })}
+                    </span>
+                    <DownOutlined style={{ fontSize: 8, color: "#94a3b8" }} />
+                  </button>
+                </Dropdown>
 
-              <Space direction="vertical" size={10} style={{ width: "100%" }}>
-                {recentVisaUpdates.length ? (
-                  recentVisaUpdates.map((student) => {
-                    const category = getVisaSummaryCategory(
-                      student.visa_status,
-                    );
-
-                    const tone =
-                      category === "granted"
-                        ? {
-                            background: "#dcfce7",
-                            color: "#16a34a",
-                            label: "Granted",
-                          }
-                        : category === "refused"
-                          ? {
-                              background: "#fff1f2",
-                              color: "#ef4444",
-                              label: "Refused",
-                            }
-                          : {
-                              background: "#fff7ed",
-                              color: "#f97316",
-                              label: "In Process",
-                            };
-
-                    return (
-                      <div
-                        key={String(student.id)}
-                        style={{
-                          border: "1px solid #e2e8f0",
-                          borderRadius: 16,
-                          padding: "12px 14px",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          gap: 12,
-                        }}
-                      >
-                        <div>
-                          <Text strong style={{ display: "block" }}>
-                            {student.name}
-                          </Text>
-                          <Text type="secondary">
-                            {getCountryName(student)}
-                          </Text>
-                        </div>
-
-                        <Tag
-                          style={{
-                            margin: 0,
-                            borderRadius: 999,
-                            padding: "4px 10px",
-                            background: tone.background,
-                            color: tone.color,
-                            borderColor: "transparent",
-                          }}
-                        >
-                          {tone.label}
-                        </Tag>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <Empty description="Belum ada update visa." />
-                )}
-              </Space>
+                <button
+                  type="button"
+                  onClick={handleNextMonth}
+                  disabled={isLatestMonth}
+                  title="Bulan berikutnya"
+                  style={{
+                    width: 24,
+                    height: 24,
+                    border: "none",
+                    background: "transparent",
+                    borderRadius: 5,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: isLatestMonth ? "not-allowed" : "pointer",
+                    color: isLatestMonth ? "#cbd5e1" : "#64748b",
+                    transition: "all 0.15s ease",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isLatestMonth) {
+                      e.currentTarget.style.background = "#f1f5f9";
+                      e.currentTarget.style.color = "#0f172a";
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "transparent";
+                    e.currentTarget.style.color = isLatestMonth
+                      ? "#cbd5e1"
+                      : "#64748b";
+                  }}
+                >
+                  <RightOutlined style={{ fontSize: 10 }} />
+                </button>
+              </div>
             </div>
           </div>
-        </DashboardCard>
+          <MonthlyTrendLineChart data={monthlyTrendData} />
+
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              gap: 20,
+              paddingTop: 10,
+              borderTop: "1px solid #f1f5f9",
+              marginTop: 6,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span
+                style={{
+                  width: 9,
+                  height: 9,
+                  borderRadius: "50%",
+                  background: "#1b3d6d",
+                  display: "inline-block",
+                }}
+              />
+              <span style={{ color: "#334155", fontWeight: 600, fontSize: 12 }}>
+                Registration
+              </span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span
+                style={{
+                  width: 9,
+                  height: 9,
+                  borderRadius: "50%",
+                  background: "#10b981",
+                  display: "inline-block",
+                }}
+              />
+              <span style={{ color: "#334155", fontWeight: 600, fontSize: 12 }}>
+                Visa Granted
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Chart Right: Country Distribution Bar */}
+        <div className={styles.chartCard}>
+          <div className={styles.chartHeader}>
+            <div style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
+              <h3 className={styles.chartTitle}>Destination Countries</h3>
+              <p className={styles.chartSubtitle}>{countrySubtitle}</p>
+            </div>
+            <Tag
+              style={{
+                margin: 0,
+                borderRadius: 6,
+                fontWeight: 600,
+                fontSize: 11,
+                marginLeft: "auto",
+                flexShrink: 0,
+              }}
+            >
+              {countryBarData.length} Negara
+            </Tag>
+          </div>
+          <CountryBarChart data={countryBarData} />
+        </div>
       </div>
 
-      <div
-        className={styles.gridActivities}
-        style={{
-          display: "grid",
-          gap: 20,
-          marginTop: 20,
-          alignItems: "start",
-        }}
-      >
+      {/* ── SECTION 3: Standard Pipeline Table & Operational Controls ── */}
+      <div className={styles.tableCard}>
+        <div className={styles.tableHeaderRow}>
+          <div>
+            <h3 className={styles.tableTitle}>Student Pipeline</h3>
+            <p className={styles.tableSub}>
+              {pipelineStudents.length} siswa ditampilkan
+            </p>
+          </div>
+          <AppButton
+            variant="primary"
+            icon={<FolderOpenOutlined />}
+            onClick={() => router.push(pipelinePath)}
+          >
+            Buka
+          </AppButton>
+        </div>
+
+        {/* Inline Summary Row: Konsultan Aktif + Beban Kerja */}
+        <div className={styles.inlineSummaryRow}>
+          <div className={styles.inlineSummaryBlock}>
+            <span className={styles.inlineSummaryLabel}>
+              {isConsultant ? "Konsultan Dampingan" : "Konsultan Aktif"}
+            </span>
+            {isConsultant ? (
+              <span className={styles.summaryPill}>
+                {effectiveConsultantName || "Konsultan"}{" "}
+                <strong>{pipelineStudents.length} Siswa</strong>
+              </span>
+            ) : consultantSummary.length ? (
+              consultantSummary.map((c) => (
+                <span key={c.name} className={styles.summaryPill}>
+                  {c.name} <strong>{c.count}</strong>
+                </span>
+              ))
+            ) : (
+              <span className={styles.summaryPill}>Belum ada data</span>
+            )}
+          </div>
+
+          <div className={styles.inlineSummaryDivider} />
+
+          <div className={styles.inlineSummaryBlock}>
+            <span className={styles.inlineSummaryLabel}>Beban Verifikasi</span>
+            <span className={styles.summaryPill}>
+              Berkas Pending{" "}
+              <strong style={{ color: "#ea580c" }}>
+                {pendingApprovalsCount.pending}
+              </strong>
+            </span>
+            <span className={styles.summaryPill}>
+              Perlu Translasi{" "}
+              <strong style={{ color: "#9333ea" }}>
+                {translationStats.studentsCount} Siswa
+              </strong>
+            </span>
+            <span className={styles.summaryPill}>
+              Surat AI{" "}
+              <strong style={{ color: "#2563eb" }}>
+                {pendingAiDocsCount.letters}
+              </strong>
+            </span>
+          </div>
+        </div>
+
+        {/* Filter Bar */}
+        <div className={styles.filterBar}>
+          <Select
+            value={countryFilter}
+            onChange={setCountryFilter}
+            style={{ minWidth: 150 }}
+            options={[
+              { value: "all", label: "Semua Negara" },
+              ...countryOptions.map((item) => ({
+                value: item,
+                label: item,
+              })),
+            ]}
+          />
+
+          <Select
+            value={stepFilter}
+            onChange={setStepFilter}
+            style={{ minWidth: 140 }}
+            options={[
+              { value: "all", label: "Semua Step" },
+              ...stepOptions.map((item) => ({ value: item, label: item })),
+            ]}
+          />
+
+          <Select
+            value={statusFilter}
+            onChange={setStatusFilter}
+            style={{ minWidth: 150 }}
+            options={[
+              { value: "all", label: "Semua Status" },
+              { value: "On Progress", label: "On Progress" },
+              { value: "Waiting Visa", label: "Waiting Visa" },
+              { value: "On Hold", label: "On Hold" },
+              { value: "Completed", label: "Completed" },
+              { value: "Cancel", label: "Cancel" },
+            ]}
+          />
+
+          <Select
+            value={lastUpdateFilter}
+            onChange={setLastUpdateFilter}
+            style={{ minWidth: 150 }}
+            options={[
+              { value: "all", label: "Semua Pembaruan" },
+              { value: "today", label: "Diperbarui Hari Ini" },
+              { value: "7d", label: "7 Hari Terakhir" },
+              { value: "30d", label: "30 Hari Terakhir" },
+            ]}
+          />
+        </div>
+
+        {/* Shared Standard Student Pipeline Table */}
+        <StudentPipelineTable
+          students={pipelineStudents}
+          role={isConsultant ? "consultant" : "admission"}
+          lastActivityMap={lastActivityByStudent}
+          visaTypeNameById={visaTypeNameById}
+        />
+      </div>
+
+      {/* ── SECTION 4: Operational Log & Important Notes ── */}
+      <div className={styles.gridActivities}>
+        {/* Left: Recent Activity Log */}
         <DashboardCard
           title="Recent Activities"
-          subtitle="Latest updates and actions"
+          subtitle="Catatan riwayat pendaftaran dan pembaruan berkas terbaru"
         >
-          <Space direction="vertical" size={18} style={{ width: "100%" }}>
+          <Space direction="vertical" size={16} style={{ width: "100%" }}>
             {recentActivities.length ? (
               recentActivities.map((activity, index) => (
                 <div
                   key={activity.id}
                   style={{
                     display: "flex",
-                    gap: 16,
+                    gap: 14,
                     alignItems: "flex-start",
                   }}
                 >
@@ -1263,15 +1682,15 @@ export default function AdmissionDashboardHomeContent() {
                   >
                     <div
                       style={{
-                        width: 42,
-                        height: 42,
-                        borderRadius: 999,
+                        width: 38,
+                        height: 38,
+                        borderRadius: "50%",
                         background: "#fff",
                         border: "2px solid #dbeafe",
                         color: activity.actorColor,
                         display: "grid",
                         placeItems: "center",
-                        fontSize: 18,
+                        fontSize: 16,
                       }}
                     >
                       {activity.icon}
@@ -1281,23 +1700,23 @@ export default function AdmissionDashboardHomeContent() {
                       <div
                         style={{
                           width: 2,
-                          height: 46,
+                          height: 42,
                           background: "#e2e8f0",
                         }}
                       />
                     )}
                   </div>
 
-                  <div style={{ flex: 1, paddingTop: 4 }}>
+                  <div style={{ flex: 1, paddingTop: 2 }}>
                     <div
                       style={{
                         display: "flex",
-                        gap: 10,
+                        gap: 8,
                         alignItems: "center",
                         flexWrap: "wrap",
                       }}
                     >
-                      <Text type="secondary" style={{ fontSize: 12 }}>
+                      <Text type="secondary" style={{ fontSize: 11.5 }}>
                         {activity.time}
                       </Text>
 
@@ -1308,6 +1727,8 @@ export default function AdmissionDashboardHomeContent() {
                           background: `${activity.actorColor}14`,
                           color: activity.actorColor,
                           borderColor: "transparent",
+                          fontSize: 10.5,
+                          fontWeight: 600,
                         }}
                       >
                         {activity.actor}
@@ -1319,13 +1740,19 @@ export default function AdmissionDashboardHomeContent() {
                       style={{
                         display: "block",
                         marginTop: 4,
-                        fontSize: 18,
+                        fontSize: 14,
+                        color: "#0f172a",
                       }}
                     >
                       {activity.title}
                     </Text>
 
-                    <Text type="secondary">{activity.subtitle}</Text>
+                    <Text
+                      type="secondary"
+                      style={{ fontSize: 12, color: "#64748b" }}
+                    >
+                      {activity.subtitle}
+                    </Text>
                   </div>
                 </div>
               ))
@@ -1335,9 +1762,10 @@ export default function AdmissionDashboardHomeContent() {
           </Space>
         </DashboardCard>
 
+        {/* Right: Important Notes & Country Updates */}
         <DashboardCard
-          title="Important Notes & Updates"
-          subtitle="System alerts and announcements"
+          title="Country Regulations"
+          subtitle="Pengumuman penting dan regulasi visa per negara"
         >
           <Space direction="vertical" size={12} style={{ width: "100%" }}>
             {importantUpdates.length ? (
@@ -1349,44 +1777,51 @@ export default function AdmissionDashboardHomeContent() {
                     key={item.id}
                     style={{
                       border: "1px solid #e2e8f0",
-                      borderRadius: 18,
-                      padding: 16,
+                      borderRadius: 12,
+                      padding: 14,
                       background: "#ffffff",
                     }}
                   >
                     <div
                       style={{
                         display: "flex",
-                        gap: 14,
+                        gap: 12,
                         alignItems: "flex-start",
                       }}
                     >
                       <div
                         style={{
-                          width: 42,
-                          height: 42,
-                          borderRadius: 14,
+                          width: 36,
+                          height: 36,
+                          borderRadius: 10,
                           background: "#eff6ff",
                           color: "#2563eb",
                           display: "grid",
                           placeItems: "center",
-                          fontSize: 20,
+                          fontSize: 17,
                           flexShrink: 0,
                         }}
                       >
                         <InfoCircleOutlined />
                       </div>
 
-                      <div style={{ flex: 1 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
                         <div
                           style={{
                             display: "flex",
                             justifyContent: "space-between",
-                            gap: 12,
+                            gap: 10,
                             alignItems: "flex-start",
                           }}
                         >
-                          <Text strong style={{ fontSize: 18 }}>
+                          <Text
+                            strong
+                            style={{
+                              fontSize: 13.5,
+                              color: "#0f172a",
+                              lineHeight: 1.3,
+                            }}
+                          >
                             {item.title}
                           </Text>
 
@@ -1394,11 +1829,13 @@ export default function AdmissionDashboardHomeContent() {
                             style={{
                               margin: 0,
                               borderRadius: 999,
-                              padding: "5px 10px",
+                              padding: "2px 8px",
                               background: tone.background,
                               color: tone.color,
                               borderColor: tone.border,
                               whiteSpace: "nowrap",
+                              fontSize: 10.5,
+                              fontWeight: 600,
                             }}
                           >
                             {formatPriorityLabel(item.priority)}
@@ -1407,26 +1844,39 @@ export default function AdmissionDashboardHomeContent() {
 
                         <Text
                           type="secondary"
-                          style={{ display: "block", marginTop: 4 }}
+                          style={{
+                            display: "block",
+                            marginTop: 2,
+                            fontSize: 11.5,
+                          }}
                         >
-                          {item.country?.name || "All Countries"}
+                          {item.country?.name || "Semua Negara"}
                         </Text>
 
                         <Text
                           style={{
                             display: "block",
-                            marginTop: 10,
+                            marginTop: 6,
                             color: "#475569",
+                            fontSize: 12,
+                            lineHeight: 1.45,
                           }}
                         >
-                          {item.description || "Tidak ada deskripsi tambahan."}
+                          {item.description ||
+                            "Tidak ada deskripsi tambahan."}
                         </Text>
 
                         <Text
                           type="secondary"
-                          style={{ display: "block", marginTop: 12 }}
+                          style={{
+                            display: "block",
+                            marginTop: 8,
+                            fontSize: 11,
+                          }}
                         >
-                          {formatShortDate(item.updated_at || item.created_at)}
+                          {formatShortDate(
+                            item.updated_at || item.created_at,
+                          )}
                         </Text>
                       </div>
                     </div>

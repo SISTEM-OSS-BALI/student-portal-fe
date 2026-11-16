@@ -14,16 +14,19 @@ import {
 import { useChatSocket } from "@/app/hooks/use-chat-socket";
 import type { ChatMessage } from "@/app/models/chat";
 import type { UserDataModel } from "@/app/models/user";
+import { CampusApplicationsCard } from "@/app/components/student-campus-applications/CampusApplicationsCard";
 import {
   App,
   Avatar,
   Button,
   Card,
+  Col,
   Flex,
   Image,
   List,
   Mentions,
   Progress,
+  Row,
   Space,
   Tag,
   Tooltip,
@@ -33,13 +36,16 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  BankOutlined,
   CheckOutlined,
   CloseOutlined,
   EditOutlined,
   PaperClipOutlined,
+  UserOutlined,
 } from "@ant-design/icons";
 import api from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
+import { formatChatMessageTime } from "@/app/utils/student-helpers";
 import type { UploadedChatAttachment } from "@/app/vendor/chat-upload";
 import { uploadChatFiles } from "@/app/vendor/chat-upload";
 
@@ -862,6 +868,18 @@ export default function OverviewComponent({
 
   return (
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
+      {studentId && (
+        <CampusApplicationsCard
+          userId={studentId}
+          defaultCountryName={detailStudentData?.stage?.country?.name}
+          consultantName={detailStudentData?.name_consultant}
+          fallbackCampusName={detailStudentData?.name_campus}
+          fallbackDegree={detailStudentData?.degree}
+          fallbackNameDegree={detailStudentData?.name_degree}
+          readOnly={true}
+        />
+      )}
+
       <div
         style={{
           display: "grid",
@@ -880,33 +898,87 @@ export default function OverviewComponent({
         >
           <Space direction="vertical" size={12} style={{ width: "100%" }}>
             <div>
-              <Typography.Text strong>Progress Ringkasan</Typography.Text>
-              <Typography.Text type="secondary" style={{ display: "block" }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <Typography.Text strong style={{ fontSize: 13.5, color: "#0f172a" }}>
+                  Progress Ringkasan
+                </Typography.Text>
+                <Typography.Text strong style={{ fontSize: 11.5, color: "#2563eb" }}>
+                  {progressSummary.percent}% Selesai
+                </Typography.Text>
+              </div>
+              <Typography.Text
+                type="secondary"
+                style={{ fontSize: 11.5, color: "#64748b", display: "block", marginTop: 2 }}
+              >
                 {`${progressSummary.completedSteps} dari ${progressSummary.totalSteps || 0} tugas selesai`}
               </Typography.Text>
-              <Progress percent={progressSummary.percent} showInfo={false} />
-              <Typography.Text type="secondary">
-                {progressSummary.percent}% Complete
-              </Typography.Text>
+              <Progress
+                percent={progressSummary.percent}
+                showInfo={false}
+                size="small"
+                strokeColor="#2563eb"
+                trailColor="#f1f5f9"
+                style={{ margin: "6px 0 0 0" }}
+              />
             </div>
 
             <Space direction="vertical" size={10} style={{ width: "100%" }}>
               {stepsSource.length ? (
                 stepsSource.map((step) => (
-                  <div key={step.id}>
-                    <Typography.Text strong>{step.label}</Typography.Text>
-                    <Typography.Text
-                      type="secondary"
-                      style={{ display: "block" }}
+                  <div key={step.id} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                      }}
                     >
-                      {step.children?.length
-                        ? step.children.map((child) => child.label).join(", ")
-                        : "Belum ada detail"}
-                    </Typography.Text>
+                      <Typography.Text strong style={{ fontSize: 12.5, color: "#1e293b" }}>
+                        {step.label}
+                      </Typography.Text>
+                      {step.children?.length ? (
+                        <Typography.Text type="secondary" style={{ fontSize: 11, color: "#94a3b8" }}>
+                          {step.children.length} item
+                        </Typography.Text>
+                      ) : null}
+                    </div>
+                    {step.children?.length ? (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                        {step.children.map((child) => (
+                          <span
+                            key={child.id}
+                            style={{
+                              fontSize: 11,
+                              color: "#475569",
+                              background: "#f8fafc",
+                              border: "1px solid #e2e8f0",
+                              borderRadius: 5,
+                              padding: "2px 7px",
+                              lineHeight: 1.35,
+                            }}
+                          >
+                            {child.label}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <Typography.Text
+                        type="secondary"
+                        style={{ fontSize: 11.5, color: "#94a3b8" }}
+                      >
+                        Belum ada detail
+                      </Typography.Text>
+                    )}
                   </div>
                 ))
               ) : (
-                <Typography.Text type="secondary">
+                <Typography.Text type="secondary" style={{ fontSize: 11.5, color: "#94a3b8" }}>
                   Belum ada langkah untuk negara ini.
                 </Typography.Text>
               )}
@@ -931,15 +1003,18 @@ export default function OverviewComponent({
                 alignItems: "center",
               }}
             >
-              <Typography.Text strong>Recent Activity Summary</Typography.Text>
+              <Typography.Text strong style={{ fontSize: 13.5, color: "#0f172a" }}>
+                Recent Activities
+              </Typography.Text>
               <Typography.Link
+                style={{ fontSize: 11.5 }}
                 onClick={() =>
                   router.push(
                     `${detailBasePath}/${studentId}?tab=activity-log`,
                   )
                 }
               >
-                View all
+                Lihat semua
               </Typography.Link>
             </div>
 
@@ -947,7 +1022,7 @@ export default function OverviewComponent({
               dataSource={activityItems}
               locale={{ emptyText: "Belum ada aktivitas" }}
               renderItem={(item) => (
-                <List.Item style={{ paddingInline: 0 }}>
+                <List.Item style={{ paddingInline: 0, paddingBlock: 6 }}>
                   <Space
                     direction="vertical"
                     size={0}
@@ -960,17 +1035,19 @@ export default function OverviewComponent({
                         rel="noreferrer"
                         style={{ color: "#2563eb" }}
                       >
-                        <Typography.Text strong style={{ color: "#2563eb" }}>
+                        <Typography.Text strong style={{ fontSize: 12.5, color: "#2563eb" }}>
                           {item.title}
                         </Typography.Text>
                       </a>
                     ) : (
-                      <Typography.Text strong>{item.title}</Typography.Text>
+                      <Typography.Text strong style={{ fontSize: 12.5, color: "#0f172a" }}>
+                        {item.title}
+                      </Typography.Text>
                     )}
-                    <Typography.Text type="secondary">
+                    <Typography.Text type="secondary" style={{ fontSize: 11, color: "#64748b" }}>
                       {item.meta}
                     </Typography.Text>
-                    <Typography.Text type="secondary">
+                    <Typography.Text type="secondary" style={{ fontSize: 10.5, color: "#94a3b8" }}>
                       {item.time}
                     </Typography.Text>
                   </Space>
@@ -992,12 +1069,12 @@ export default function OverviewComponent({
         }}
       >
         <Space direction="vertical" size={14} style={{ width: "100%" }}>
-          <div style={{ display: "grid", gap: 4 }}>
-            <Typography.Text strong style={{ fontSize: 20, color: "#0f172a" }}>
-              Notes for This Student
+          <div style={{ display: "grid", gap: 2 }}>
+            <Typography.Text strong style={{ fontSize: 15, color: "#0f172a" }}>
+              Internal Notes
             </Typography.Text>
-            <Typography.Text type="secondary" style={{ display: "block", fontSize: 14 }}>
-              Internal notes and communication log
+            <Typography.Text type="secondary" style={{ display: "block", fontSize: 11.5 }}>
+              Komunikasi dan catatan internal
             </Typography.Text>
           </div>
 
@@ -1025,9 +1102,7 @@ export default function OverviewComponent({
               locale={{ emptyText: "Belum ada pesan" }}
               renderItem={(message) => {
                 const isMine = message.sender_id === currentUserId;
-                const timeLabel = message.created_at
-                  ? new Date(message.created_at).toLocaleString()
-                  : "-";
+                const timeLabel = formatChatMessageTime(message.created_at);
                 const mentionIds = message.mention_user_ids ?? [];
                 const isMentioned =
                   (currentUserId && mentionIds.includes(currentUserId)) ||
@@ -1095,15 +1170,23 @@ export default function OverviewComponent({
                             )}
                           </Space>
 
-                          {isMine && message.text && (
-                            <Button
-                              type="text"
-                              size="small"
-                              icon={<EditOutlined />}
-                              onClick={() => handleStartEditMessage(message)}
-                              style={{ height: 22, padding: "0 4px" }}
-                            />
-                          )}
+                          <Space size={6} align="center">
+                            <Typography.Text
+                              type="secondary"
+                              style={{ fontSize: 11, whiteSpace: "nowrap" }}
+                            >
+                              {timeLabel}
+                            </Typography.Text>
+                            {isMine && message.text && (
+                              <Button
+                                type="text"
+                                size="small"
+                                icon={<EditOutlined />}
+                                onClick={() => handleStartEditMessage(message)}
+                                style={{ height: 22, padding: "0 4px" }}
+                              />
+                            )}
+                          </Space>
                         </Flex>
 
                         {message.text && (
@@ -1164,12 +1247,6 @@ export default function OverviewComponent({
                           </Space>
                         )}
 
-                        <Typography.Text
-                          type="secondary"
-                          style={{ fontSize: 11 }}
-                        >
-                          {timeLabel}
-                        </Typography.Text>
                         </Space>
                         <div
                           style={{
@@ -1279,21 +1356,21 @@ export default function OverviewComponent({
                 showUploadList={false}
               >
                 <Button
-                  icon={<PaperClipOutlined />}
+                  icon={<PaperClipOutlined style={{ fontSize: 13 }} />}
                   loading={uploadingAttachments}
                   disabled={Boolean(editingMessageId)}
                   style={{
                     border: "none",
                     borderRight: "1px solid #e2e8f0",
-                    height: 48,
-                    width: 52,
+                    height: 36,
+                    width: 40,
                     borderRadius: 0,
                   }}
                 />
               </Upload>
 
               <Mentions
-                placeholder="Tulis catatan atau pesan... (gunakan @ untuk tag)"
+                placeholder="Tulis catatan atau pesan... (@ untuk tag)"
                 value={editingMessageId ? editingText : chatText}
                 onChange={editingMessageId ? setEditingText : handleChatTextChange}
                 onPressEnter={(event) => {
@@ -1307,13 +1384,15 @@ export default function OverviewComponent({
                   }
                 }}
                 disabled={!currentUserId}
-                style={{ width: "100%" }}
+                style={{ width: "100%", fontSize: 12 }}
                 styles={{
                   textarea: {
                     borderRadius: 0,
-                    minHeight: 48,
-                    paddingTop: 12,
-                    paddingBottom: 12,
+                    minHeight: 36,
+                    height: 36,
+                    paddingTop: 7,
+                    paddingBottom: 7,
+                    fontSize: 12,
                   },
                 }}
               >
@@ -1331,8 +1410,8 @@ export default function OverviewComponent({
                   style={{
                     border: "none",
                     background: "#22c55e",
-                    height: 48,
-                    width: 52,
+                    height: 36,
+                    width: 40,
                     borderRadius: 0,
                   }}
                 />
@@ -1347,12 +1426,15 @@ export default function OverviewComponent({
                   style={{
                     border: "none",
                     borderLeft: "1px solid #e2e8f0",
-                    height: 48,
-                    minWidth: 88,
+                    background: "#1b3d6d",
+                    height: 36,
+                    minWidth: 68,
                     borderRadius: 0,
+                    fontSize: 12,
+                    fontWeight: 600,
                   }}
                 >
-                  Send
+                  Kirim
                 </Button>
               )}
             </Space.Compact>

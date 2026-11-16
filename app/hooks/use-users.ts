@@ -23,19 +23,24 @@ export const useUsers = ({
 }: {
   queryString?: string;
   enabled?: boolean;
-}) => {
-  const { data, isLoading: fetchLoading } = useQuery({
-    queryKey: [queryKey, queryString],
+} = {}) => {
+  const { data, isLoading: fetchLoading, refetch, isError, error } = useQuery({
+    queryKey: queryString ? [queryKey, queryString] : [queryKey],
     queryFn: async () => {
-      const url = queryString ? `${usersUrl}?${queryString}` : usersUrl;
-      const result = await api.get(url);
-      const payload = (result.data?.result ?? result.data) as UserDataModel[];
-      return Array.isArray(payload) ? payload : [];
+      try {
+        const url = queryString ? `${usersUrl}?${queryString}` : usersUrl;
+        const result = await api.get(url);
+        const payload = (result.data?.result ?? result.data) as UserDataModel[];
+        return Array.isArray(payload) ? payload : [];
+      } catch (err) {
+        console.error("Gagal mengambil data users:", err);
+        throw err;
+      }
     },
     enabled,
   });
 
-  return { data, fetchLoading };
+  return { data, fetchLoading, refetch, isError, error };
 };
 
 export const useUser = ({ id }: { id?: string | number }) => {
@@ -53,17 +58,22 @@ export const useUser = ({ id }: { id?: string | number }) => {
 
 export const useUserRoleStudents = ({
   enabled = true,
+  consultant,
 }: {
   enabled?: boolean;
+  consultant?: string;
 } = {}) => {
   const {
     data,
     isLoading: fetchLoading,
     refetch,
   } = useQuery({
-    queryKey: ["user-role-students"],
+    queryKey: ["user-role-students", consultant],
     queryFn: async () => {
-      const result = await api.get(`${usersUrl}/role-students`);
+      const url = consultant
+        ? `${usersUrl}/role-students?consultant=${encodeURIComponent(consultant)}`
+        : `${usersUrl}/role-students`;
+      const result = await api.get(url);
       const payload = (result.data?.result ?? result.data) as UserDataModel[];
       return Array.isArray(payload) ? payload : [];
     },
@@ -74,6 +84,30 @@ export const useUserRoleStudents = ({
 };
 
 export const useUserRoleStudent = useUserRoleStudents;
+
+function extractUserErrorMessage(error: any, defaultFallback: string): string {
+  const serverMsg =
+    error?.response?.data?.error?.message ||
+    error?.response?.data?.message ||
+    (typeof error?.response?.data?.error === "string"
+      ? error.response.data.error
+      : null) ||
+    error?.message;
+
+  const lower = String(serverMsg ?? "").toLowerCase();
+  if (
+    lower.includes("email") &&
+    (lower.includes("already") ||
+      lower.includes("unique") ||
+      lower.includes("duplicate") ||
+      lower.includes("exists") ||
+      lower.includes("terdaftar"))
+  ) {
+    return "Email sudah terdaftar. Silakan gunakan alamat email lain yang belum digunakan.";
+  }
+
+  return serverMsg || defaultFallback;
+}
 
 export const useCreateUser = () => {
   const queryClient = useQueryClient();
@@ -87,8 +121,12 @@ export const useCreateUser = () => {
       queryClient.invalidateQueries({ queryKey: ["user-role-students"] });
       notify({ type: "success", entity, action: "created" });
     },
-    onError: () => {
-      notify({ type: "error", entity, action: "created" });
+    onError: (error: any) => {
+      const description = extractUserErrorMessage(
+        error,
+        `Oops! Something went wrong with ${entity.toLowerCase()}. Unable to created at this time. Please try again later or contact support if the issue persists`,
+      );
+      notify({ type: "error", entity, action: "created", description });
     },
   });
 
@@ -113,8 +151,12 @@ export const useUpdateUser = () => {
       queryClient.invalidateQueries({ queryKey: [entity, variables.id] });
       notify({ type: "success", entity, action: "updated" });
     },
-    onError: () => {
-      notify({ type: "error", entity, action: "updated" });
+    onError: (error: any) => {
+      const description = extractUserErrorMessage(
+        error,
+        `Oops! Something went wrong with ${entity.toLowerCase()}. Unable to updated at this time. Please try again later or contact support if the issue persists`,
+      );
+      notify({ type: "error", entity, action: "updated", description });
     },
   });
 

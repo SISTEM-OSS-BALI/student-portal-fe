@@ -6,59 +6,80 @@ const sehatiRedLight = "#F7D7D7"; // Merah sangat muda, untuk hover
 const antdTheme: ThemeConfig = {
   cssVar: true,
   token: {
-    fontSize: 16,
+    fontSize: 13.5,
     colorPrimary: sehatiRed,
     colorLink: sehatiRed,
     colorLinkHover: "#ba2424",
-    colorText: "#222", // Hitam lebih soft
-    colorTextSecondary: "#777", // Abu-abu lembut
-    colorBgLayout: "#fff", // Background sidebar dan layout
-    colorBgContainer: "#fff", // Container tetap putih
-    borderRadius: 10, // Lebih membulat seperti card di gambar
-    padding: 16,
+    colorText: "#1e293b",
+    colorTextSecondary: "#64748b",
+    colorBgLayout: "#f8fafc",
+    colorBgContainer: "#fff",
+    borderRadius: 8,
+    padding: 14,
   },
   components: {
     Layout: {
-      headerHeight: 64,
-      bodyBg: "#fff",
+      headerHeight: 60,
+      bodyBg: "#f8fafc",
       siderBg: "#fff",
       footerBg: "#fff",
     },
-    Menu: {
-      itemBorderRadius: 12,
-      itemSelectedBg: sehatiRed, // Aktif = merah
-      itemSelectedColor: "#fff", // Teks menu aktif = putih
-      itemColor: sehatiRed, // Teks menu biasa = merah
-      itemHoverBg: sehatiRedLight, // Hover = merah muda
-      itemHoverColor: sehatiRed, // Hover text = merah utama
-      itemActiveBg: sehatiRed, // Aktif = merah
-      // itemActiveColor: "#fff",
-      iconSize: 28,
-      // Custom shadow pada selected (bisa pakai CSS langsung untuk efek shadow)
+    Dropdown: {
+      fontSize: 12.5,
+      paddingBlock: 4,
+      controlItemBgHover: "#f1f5f9",
+      borderRadiusSM: 8,
     },
-    // Sider: {
-    //   footerBg: sehatiRed,
-    //   backgroundColor: "#fff", // Sider background putih
-    // },
+    Menu: {
+      itemBorderRadius: 7,
+      itemSelectedBg: "#eff6ff",
+      itemSelectedColor: "#1b3d6d",
+      itemColor: "#334155",
+      itemHoverBg: "#f1f5f9",
+      itemHoverColor: "#0f172a",
+      itemActiveBg: "#eff6ff",
+      fontSize: 12.5,
+      groupTitleFontSize: 11,
+      iconSize: 13,
+      itemHeight: 32,
+    },
+    Select: {
+      fontSize: 13,
+      optionFontSize: 12.5,
+      optionPadding: "5px 10px",
+      borderRadius: 8,
+    },
     Button: {
       borderRadius: 8,
       colorPrimary: sehatiRed,
       colorPrimaryHover: "#ba2424",
+      contentFontSize: 13,
+      contentFontSizeSM: 12,
+      contentFontSizeLG: 14,
     },
     Table: {
-      headerBg: "#fff",
-      headerColor: "black",
-      rowHoverBg: "#fbe9e7", // soft red hover
-      borderColor: "#eee",
+      headerBg: "#f8fafc",
+      headerColor: "#475569",
+      rowHoverBg: "transparent",
+      borderColor: "#f1f5f9",
+      fontSize: 12.5,
     },
     Input: {
       borderRadius: 8,
       colorPrimary: sehatiRed,
+      fontSize: 13,
     },
     Card: {
-      borderRadius: 14,
-      padding: 24,
+      borderRadius: 12,
+      padding: 20,
       colorBgContainer: "#fff",
+    },
+    Modal: {
+      titleFontSize: 15,
+      borderRadiusLG: 12,
+    },
+    Tabs: {
+      titleFontSize: 13,
     },
   },
 };

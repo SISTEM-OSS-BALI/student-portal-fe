@@ -73,7 +73,7 @@ export const SiderStudent = () => {
     >
       {/* Brand */}
       <div
-        onClick={() => router.push("/")}
+        onClick={() => router.push("/student/dashboard/home")}
         style={{
           height: 64,
           margin: 16,

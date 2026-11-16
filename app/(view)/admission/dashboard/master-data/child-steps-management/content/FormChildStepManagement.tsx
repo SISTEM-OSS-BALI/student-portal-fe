@@ -2,7 +2,7 @@ import type {
   ChildStepsManagementDataModel,
   ChildStepsManagementPayloadCreateModel,
 } from "@/app/models/child-steps-management";
-import { Button, Form, Input, Space } from "antd";
+import { Button, Form, Input, Popconfirm, Space } from "antd";
 import { useEffect } from "react";
 
 interface FormChildStepManagementProps {
@@ -48,27 +48,71 @@ export default function FormChildStepManagement({
       <Form form={form} layout="vertical" onFinish={handleFinish}>
         <Form.Item
           name="label"
-          label="Nama Kategori Step"
-          rules={[{ required: true, message: "Nama kategori wajib diisi" }]}
+          label="Step Category Name"
+          tooltip="Category name used to group registration steps."
+          rules={[{ required: true, message: "Category name is required" }]}
         >
-          <Input placeholder="Contoh: Translation" />
+          <Input
+            placeholder="Example: Preparation, Progress, Complete"
+            style={{ height: 40, borderRadius: 10 }}
+          />
         </Form.Item>
 
-        <Space style={{ width: "100%", justifyContent: "flex-end" }}>
-          <Button onClick={onCancel}>Batal</Button>
+        <Space
+          style={{
+            width: "100%",
+            justifyContent: "flex-end",
+            marginTop: 16,
+            paddingTop: 16,
+            borderTop: "1px solid #f1f5f9",
+          }}
+        >
+          {selectedChild && (
+            <Button
+              onClick={onCancel}
+              style={{ borderRadius: 10, height: 38 }}
+            >
+              Cancel
+            </Button>
+          )}
+
+          {selectedChild && (
+            <Popconfirm
+              title="Delete Step Category"
+              description={`Are you sure you want to delete category "${selectedChild?.label}"?`}
+              onConfirm={onDelete}
+              okText="Delete"
+              cancelText="Cancel"
+              okButtonProps={{ danger: true }}
+            >
+              <Button
+                danger
+                loading={deleteLoading}
+                style={{ borderRadius: 10, height: 38 }}
+              >
+                Delete
+              </Button>
+            </Popconfirm>
+          )}
+
           <Button
-            danger
-            onClick={onDelete}
-            disabled={!selectedChild}
-            loading={deleteLoading}
+            type="primary"
+            htmlType="submit"
+            loading={loading}
+            style={{
+              background: "#1b3d6d",
+              borderColor: "#1b3d6d",
+              borderRadius: 10,
+              height: 38,
+              fontWeight: 600,
+              boxShadow: "0 2px 6px rgba(27, 61, 109, 0.2)",
+            }}
           >
-            Hapus
-          </Button>
-          <Button type="primary" htmlType="submit" loading={loading}>
-            {selectedChild ? "Simpan Perubahan" : "Simpan"}
+            {selectedChild ? "Save Changes" : "Save Category"}
           </Button>
         </Space>
       </Form>
     </div>
   );
 }
+

@@ -3,41 +3,42 @@
 import {
   Avatar,
   Badge,
+  Drawer,
   Dropdown,
-  Input,
   Layout,
-  Typography,
 } from "antd";
+import Image from "next/image";
 import {
-  InboxOutlined,
-  LockOutlined,
+  AppstoreOutlined,
+  BellOutlined,
+  DownOutlined,
   LogoutOutlined,
   MenuOutlined,
   SearchOutlined,
+  UserOutlined,
 } from "@ant-design/icons";
-import { useCallback, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import getInitials from "@/app/utils/initials-username";
+
 import { useAuth } from "@/app/utils/use-auth";
 import { useUserRoleStudents } from "@/app/hooks/use-users";
+import styles from "../admission/layout.module.css";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { useChatMentions, useMarkMentionRead } from "@/app/hooks/use-chat";
 import InboxDrawer from "@/app/components/common/inbox-drawer";
 import GlobalSearchModal, {
   type GlobalSearchItem,
 } from "@/app/components/common/global-search-modal";
-import { MainBreadcrumb } from "@/app/components/common/breadscrumb";
-import { normalizedRole } from "@/app/utils/normalized";
 import type { UserDataModel } from "@/app/models/user";
-import { SiderConsultant } from "../../sider/consultant";
-import styles from "../director/layout.module.css";
+import {
+  getCountryBadgeMeta,
+  getCountryName,
+  getStudentAvatarUrl,
+  getStudentInitials,
+  getStudentPipelineStatus,
+} from "@/app/utils/student-helpers";
 
-const { Header, Content, Footer } = Layout;
-
-function getStudentSearchStatus(student: UserDataModel): string {
-  return String(
-    student.student_status ?? student.status ?? student.visa_status ?? "On Going",
-  );
-}
+const { Header, Content } = Layout;
 
 function formatVisaTypeLabel(value?: string | null): string | undefined {
   const trimmed = String(value ?? "").trim();
@@ -50,27 +51,64 @@ function formatVisaTypeLabel(value?: string | null): string | undefined {
   return trimmed.replace(/_/g, " ").toUpperCase();
 }
 
+function formatSearchDate(value?: string | null): string {
+  if (!value) return "Tanpa tanggal";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Tanpa tanggal";
+  return new Intl.DateTimeFormat("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function getStudentSearchStatus(student: UserDataModel): string {
+  return String(
+    student.student_status ?? student.status ?? student.visa_status ?? "On Going",
+  );
+}
+
 export default function ConsultantLayout({
   children,
   username,
+  userProfilePic,
 }: {
   children: React.ReactNode;
   username: string;
+  userProfilePic?: string;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const { role, logout, user_id } = useAuth();
 
   const [openInbox, setOpenInbox] = useState(false);
   const [openGlobalSearch, setOpenGlobalSearch] = useState(false);
-  const [siderCollapsed, setSiderCollapsed] = useState(false);
-  const [siderBroken, setSiderBroken] = useState(false);
+  const [openMobileNav, setOpenMobileNav] = useState(false);
+
+  const navigateFromMobile = (path: string) => {
+    setOpenMobileNav(false);
+    router.push(path);
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setOpenGlobalSearch((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   const { data: studentsData = [] } = useUserRoleStudents({
     enabled: Boolean(user_id),
   });
   const { data: mentionMessages, refetch: refetchMentions } = useChatMentions({
     enabled: Boolean(user_id),
-    user_id,
+    user_id: user_id,
   });
   const { onMarkRead } = useMarkMentionRead();
 
@@ -79,76 +117,156 @@ export default function ConsultantLayout({
     [mentionMessages],
   );
 
-  const resolveStudentDetailPath = useCallback((studentId: string) => {
-    return `/consultant/dashboard/students-management/detail/${studentId}`;
-  }, []);
+  const displayUserName = useMemo(() => {
+    if (!username) return "Consultant";
+    const cleaned = username.replace(/^(admin|consultant)\s+/i, "").trim();
+    return cleaned || "Consultant";
+  }, [username]);
+
+  const openDrawerInbox = () => {
+    setOpenInbox(true);
+    refetchMentions();
+  };
+
+  const closeDrawerInbox = () => {
+    setOpenInbox(false);
+  };
+
+  const resolveStudentDetailPath = useCallback(
+    (studentId: string) => {
+      return `/consultant/dashboard/students-management/detail/${studentId}`;
+    },
+    [],
+  );
 
   const handleOpenMention = async (item: {
     id: string;
     context_user_id?: string | null;
+    conversation_id?: string | null;
   }) => {
     await onMarkRead(item.id);
     if (!item.context_user_id) return;
-    router.push(`${resolveStudentDetailPath(item.context_user_id)}?tab=overview`);
-    setOpenInbox(false);
+    const params = new URLSearchParams();
+    params.set("tab", "chat");
+    if (item.conversation_id) {
+      params.set("conversation_id", item.conversation_id);
+    }
+    router.push(`${resolveStudentDetailPath(item.context_user_id)}?${params.toString()}`);
+    closeDrawerInbox();
   };
 
   const searchItems = useMemo<GlobalSearchItem[]>(() => {
-    return studentsData.map((student) => ({
-      id: `student-${student.id}`,
-      type: "student" as const,
-      title: student.name,
-      subtitle: [
-        student.stage?.country?.name,
-        student.name_campus,
-        formatVisaTypeLabel(student.visa_type_name ?? student.visa_type),
-      ]
-        .filter(Boolean)
-        .join(" • "),
-      description: student.email,
-      meta: `Status: ${getStudentSearchStatus(student)}`,
-      badge: "Student",
-      badgeColor: "blue",
-      href: resolveStudentDetailPath(String(student.id)),
+    const studentItems = studentsData.map((student) => {
+      const country = getCountryName(student);
+      const countryMeta = getCountryBadgeMeta(country);
+      const pipelineStatus = getStudentPipelineStatus(student);
+      const avatarUrl = getStudentAvatarUrl(student);
+      const initials = getStudentInitials(student);
+
+      return {
+        id: `student-${student.id}`,
+        type: "student" as const,
+        title: student.name,
+        subtitle: [
+          country !== "-" ? country : null,
+          student.name_campus,
+          formatVisaTypeLabel(student.visa_type_name ?? student.visa_type),
+        ]
+          .filter(Boolean)
+          .join(" • "),
+        description: student.email,
+        meta: `Status: ${pipelineStatus.label}`,
+        badge: "Mahasiswa",
+        badgeColor: "blue",
+        href: resolveStudentDetailPath(String(student.id)),
+        avatarUrl,
+        initials,
+        country: country !== "-" ? country : undefined,
+        countryCode: countryMeta.code,
+        countryColor: countryMeta.color,
+        countryBg: countryMeta.bg,
+        countryBorder: countryMeta.border,
+        campus: student.name_campus,
+        degree: student.name_degree || student.degree,
+        visaType: formatVisaTypeLabel(
+          student.visa_type_name ?? student.visa_type,
+        ),
+        phone: student.no_phone,
+        email: student.email,
+        statusLabel: pipelineStatus.label,
+        statusTone: pipelineStatus.tone,
+        keywords: [
+          student.name,
+          student.email,
+          student.no_phone,
+          student.name_campus,
+          student.degree,
+          student.name_degree,
+          student.visa_type_name ?? student.visa_type,
+          country,
+          student.student_status,
+          student.status,
+        ]
+          .filter(Boolean)
+          .join(" "),
+      };
+    });
+
+    const mentionItems = (mentionMessages ?? []).map((item) => ({
+      id: `mention-${item.id}`,
+      type: "mention" as const,
+      title: item.sender_name ? `Mention from ${item.sender_name}` : "Mention inbox",
+      subtitle: item.context_user_name ? `Student case • ${item.context_user_name}` : "Inbox notification",
+      description: item.text ?? "Tidak ada preview pesan",
+      meta: formatSearchDate(item.created_at),
+      badge: item.is_read ? "Read" : "Unread",
+      badgeColor: item.is_read ? "default" : "gold",
       keywords: [
-        student.name,
-        student.email,
-        student.no_phone,
-        student.name_campus,
-        student.degree,
-        student.name_degree,
-        student.visa_type_name ?? student.visa_type,
-        student.stage?.country?.name,
-        student.student_status,
-        student.status,
+        item.sender_name,
+        item.context_user_name,
+        item.text,
       ]
         .filter(Boolean)
         .join(" "),
     }));
-  }, [resolveStudentDetailPath, studentsData]);
 
-  const handleOpenSearchItem = useCallback(
-    (item: GlobalSearchItem) => {
-      if (item.href) {
-        router.push(item.href);
+    return [...studentItems, ...mentionItems];
+  }, [mentionMessages, resolveStudentDetailPath, studentsData]);
+
+  const handleOpenSearchItem = async (item: GlobalSearchItem) => {
+    setOpenGlobalSearch(false);
+
+    if (item.type === "mention") {
+      const source = (mentionMessages ?? []).find(
+        (mention) => `mention-${mention.id}` === item.id,
+      );
+      if (source) {
+        await handleOpenMention(source);
+        return;
       }
-      setOpenGlobalSearch(false);
-    },
-    [router],
-  );
+    }
 
-  const profileMenuItems = [
+    if (item.href) {
+      router.push(item.href);
+    }
+  };
+
+  const menuItems = [
     {
-      key: "change-password",
-      icon: <LockOutlined />,
-      label: "Change Password",
+      key: "profile",
+      icon: <UserOutlined />,
+      label: "My Profile",
       onClick: () => {
-        router.push("/consultant/dashboard/change-password");
+        router.push("/consultant/dashboard/profile");
       },
+    },
+    {
+      type: "divider" as const,
     },
     {
       key: "logout",
       icon: <LogoutOutlined />,
+      danger: true,
       label: "Logout",
       onClick: () => {
         logout();
@@ -160,97 +278,114 @@ export default function ConsultantLayout({
   return (
     <div>
       <Layout className={styles.root}>
-        <SiderConsultant
-          collapsed={siderCollapsed}
-          onCollapsedChange={setSiderCollapsed}
-          broken={siderBroken}
-          onBrokenChange={setSiderBroken}
-        />
         <Layout className={styles.main}>
-          <Header className={styles.header}>
-            <div className={styles.headerLeft}>
-              {siderBroken && (
-                <button
-                  className={styles.menuTrigger}
-                  type="button"
-                  aria-label="Toggle menu"
-                  onClick={() => setSiderCollapsed(!siderCollapsed)}
-                >
-                  <MenuOutlined />
-                </button>
-              )}
-              <MainBreadcrumb />
+          <Header className={styles.topNavbar}>
+            <div className={styles.brandWrapper}>
+              <button
+                type="button"
+                className={styles.mobileMenuBtn}
+                onClick={() => setOpenMobileNav(true)}
+                aria-label="Menu Navigasi"
+              >
+                <MenuOutlined />
+              </button>
+              <div
+                className={styles.brand}
+                onClick={() =>
+                  router.push("/consultant/dashboard/home")
+                }
+              >
+                <Image
+                  src="/assets/images/icon.png"
+                  alt="OSS Bali"
+                  width={36}
+                  height={36}
+                  className={styles.brandLogoImg}
+                  priority
+                  unoptimized
+                />
+                <span className={styles.brandTitle}>OSS Bali Student Portal</span>
+              </div>
             </div>
-            <div className={styles.headerRight}>
-              <Input
-                className={styles.search}
-                readOnly
-                placeholder="Cari mahasiswa, berkas, atau pipeline..."
-                prefix={<SearchOutlined />}
-                suffix={<span className={styles.searchHint}>Search</span>}
+
+            <nav className={styles.navCenter}>
+              <button
+                type="button"
+                className={`${styles.navButton} ${
+                  pathname?.includes("/students-management")
+                    ? styles.navButtonActive
+                    : ""
+                }`}
+                onClick={() =>
+                  router.push("/consultant/dashboard/students-management")
+                }
+              >
+                <AppstoreOutlined style={{ fontSize: 14 }} />
+                <span>Pipeline</span>
+              </button>
+            </nav>
+
+            <div className={styles.topNavRight}>
+              <div
+                className={styles.searchTrigger}
                 onClick={() => setOpenGlobalSearch(true)}
-                onFocus={(event) => {
-                  event.target.blur();
-                  setOpenGlobalSearch(true);
-                }}
-              />
+                role="button"
+                tabIndex={0}
+                title="Cari data siswa, ID, atau dokumen (⌘K)"
+              >
+                <SearchOutlined style={{ color: "#94a3b8", fontSize: 13 }} />
+                <span className={styles.searchPlaceholder}>
+                  Cari siswa...
+                </span>
+                <span className={styles.searchKbd}>⌘K</span>
+              </div>
 
               <Badge
+                dot={unreadCount > 0}
                 count={unreadCount}
                 size="small"
-                className={styles.badge}
-                onClick={() => {
-                  setOpenInbox(true);
-                  refetchMentions();
-                }}
+                offset={[-2, 2]}
               >
                 <button
+                  className={styles.navIconBtn}
                   type="button"
-                  className={styles.iconButton}
+                  aria-label="Notifications"
+                  title="Notifikasi Mention & Chat"
+                  onClick={() => openDrawerInbox()}
                 >
-                  <InboxOutlined />
+                  <BellOutlined />
                 </button>
               </Badge>
 
+              <div className={styles.verticalDivider} />
+
               <Dropdown
-                menu={{ items: profileMenuItems }}
+                menu={{ items: menuItems }}
                 placement="bottomRight"
                 trigger={["click"]}
               >
-                <button type="button" className={styles.userTrigger}>
-                  <Avatar size={48} className={styles.avatar}>
-                    {getInitials(username || "Consultant")}
+                <div className={styles.userContainer}>
+                  <Avatar
+                    size={30}
+                    src={userProfilePic || undefined}
+                    className={styles.userAvatar}
+                  >
+                    {!userProfilePic && getInitials(displayUserName)}
                   </Avatar>
-                  <div className={styles.userMeta}>
-                    <Typography.Text strong className={styles.userName}>
-                      {username}
-                    </Typography.Text>
-                    <Typography.Text className={styles.userRole}>
-                      {normalizedRole(role || "")}
-                    </Typography.Text>
-                  </div>
-                </button>
+                  <span className={styles.userNameLabel}>
+                    {displayUserName}
+                  </span>
+                  <DownOutlined style={{ fontSize: 9, color: "#94a3b8" }} />
+                </div>
               </Dropdown>
             </div>
           </Header>
 
-          <Content className={styles.content}>
-            <div className={styles.pageShell}>{children}</div>
+          <Content style={{ background: "#f8fafc", minHeight: "calc(100vh - 64px)" }}>
+            <div className={styles.mainContent}>{children}</div>
           </Content>
-
-          <Footer className={styles.footer}>
-            OSS Student Portal • Consultant Dashboard
-          </Footer>
         </Layout>
       </Layout>
-
-      <InboxDrawer
-        open={openInbox}
-        onClose={() => setOpenInbox(false)}
-        items={mentionMessages ?? []}
-        onOpenItem={handleOpenMention}
-        onMarkItemRead={onMarkRead}
-      />
 
       <GlobalSearchModal
         open={openGlobalSearch}
@@ -259,6 +394,122 @@ export default function ConsultantLayout({
         onOpenItem={handleOpenSearchItem}
         title="Consultant Search"
       />
+
+      <InboxDrawer
+        open={openInbox}
+        onClose={() => closeDrawerInbox()}
+        items={mentionMessages ?? []}
+        onMarkItemRead={onMarkRead}
+        onOpenItem={handleOpenMention}
+      />
+
+      <Drawer
+        title={
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <Image
+              src="/assets/images/icon.png"
+              alt="OSS Bali"
+              width={28}
+              height={28}
+              unoptimized
+            />
+            <div>
+              <div
+                style={{
+                  fontWeight: 700,
+                  fontSize: 14,
+                  color: "#0f172a",
+                  lineHeight: 1.2,
+                }}
+              >
+                OSS Bali Portal
+              </div>
+              <div style={{ fontSize: 11, color: "#64748b" }}>
+                Consultant Workspace
+              </div>
+            </div>
+          </div>
+        }
+        placement="left"
+        open={openMobileNav}
+        onClose={() => setOpenMobileNav(false)}
+        width={300}
+        styles={{
+          body: {
+            padding: "16px 14px",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "space-between",
+            height: "100%",
+          },
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 4,
+            overflowY: "auto",
+          }}
+        >
+          <button
+            type="button"
+            className={`${styles.mobileDrawerItem} ${
+              pathname?.includes("/students-management")
+                ? styles.mobileDrawerItemActive
+                : ""
+            }`}
+            onClick={() =>
+              navigateFromMobile("/consultant/dashboard/students-management")
+            }
+          >
+            <AppstoreOutlined style={{ fontSize: 16 }} />
+            <span>Student Pipeline</span>
+          </button>
+        </div>
+
+        <div className={styles.mobileDrawerFooter}>
+          <div className={styles.mobileDrawerUser}>
+            <Avatar
+              size={36}
+              src={userProfilePic || undefined}
+              className={styles.userAvatar}
+            >
+              {!userProfilePic && getInitials(displayUserName)}
+            </Avatar>
+            <div className={styles.mobileDrawerUserText}>
+              <span className={styles.mobileDrawerUserName}>
+                {displayUserName}
+              </span>
+              <span className={styles.mobileDrawerUserRole}>
+                {role || "Consultant"}
+              </span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            className={styles.mobileDrawerItem}
+            onClick={() => navigateFromMobile("/consultant/dashboard/profile")}
+          >
+            <UserOutlined style={{ fontSize: 15 }} />
+            <span>My Profile</span>
+          </button>
+
+          <button
+            type="button"
+            className={styles.mobileDrawerLogoutBtn}
+            onClick={() => {
+              setOpenMobileNav(false);
+              logout();
+              router.push("/login");
+            }}
+          >
+            <LogoutOutlined style={{ fontSize: 14 }} />
+            <span>Logout</span>
+          </button>
+        </div>
+      </Drawer>
     </div>
   );
 }

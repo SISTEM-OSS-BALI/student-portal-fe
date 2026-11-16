@@ -3,23 +3,32 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/app/utils/use-auth";
+import { useUser } from "@/app/hooks/use-users";
 import ConsultantLayout from "@/app/components/container/layout/consultant";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, loading, user_name, role } = useAuth();
+  const { isAuthenticated, loading: authLoading, user_name, role, user_id } = useAuth();
+  const { data: user } = useUser({ id: user_id });
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading && !isAuthenticated) {
+    if (!authLoading && !isAuthenticated) {
       router.replace("/login");
       return;
     }
 
-    if (!loading && isAuthenticated && role !== "CONSULTANT") {
+    if (!authLoading && isAuthenticated && role !== "CONSULTANT") {
       router.replace("/login");
     }
-  }, [isAuthenticated, loading, role, router]);
+  }, [isAuthenticated, authLoading, role, router]);
 
-  if (loading) return null;
-  return <ConsultantLayout username={user_name!}>{children}</ConsultantLayout>;
+  if (authLoading) return null;
+  return (
+    <ConsultantLayout 
+      username={user_name!}
+      userProfilePic={user?.profile_picture_url || undefined}
+    >
+      {children}
+    </ConsultantLayout>
+  );
 }

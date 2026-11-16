@@ -32,6 +32,7 @@ export type ChatMessageApiModel = {
   sender_id: string;
   sender_name?: string | null;
   sender_role?: string | null;
+  sender_profile_picture?: string | null;
   type: string;
   text?: string | null;
   reply_to_id?: string | null;

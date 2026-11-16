@@ -20,6 +20,7 @@ import {
   EditOutlined,
   EyeOutlined,
   FileTextOutlined,
+  MailOutlined,
   RobotOutlined,
   SolutionOutlined,
 } from "@ant-design/icons";
@@ -29,6 +30,7 @@ import {
   Card,
   Col,
   Divider,
+  Flex,
   Progress,
   Row,
   Space,
@@ -37,6 +39,7 @@ import {
 } from "antd";
 import axios from "axios";
 import { useParams, useRouter } from "next/navigation";
+import styles from "../detail.module.css";
 import {
   useCallback,
   useEffect,
@@ -352,11 +355,11 @@ function LetterCard({
   downloadDisabled,
   submitLoading,
   submitDisabled,
-  submitLabel = "Submit To Director",
+  submitLabel = "Ajukan ke Direktur",
   cancelSubmitLoading,
   cancelSubmitDisabled,
   showCancelSubmit,
-  cancelSubmitLabel = "Cancel Submit To Director",
+  cancelSubmitLabel = "Batalkan Pengajuan",
   showGenerate = true,
   showManualCreate = true,
   showTemplate = true,
@@ -378,24 +381,35 @@ function LetterCard({
         style={{
           background: palette.headerBg,
           color: "#fff",
-          padding: "14px 16px 12px",
+          padding: "12px 16px",
         }}
       >
-        <Space direction="vertical" size={8} style={{ width: "100%" }}>
-          <Space size={10} align="center">
+        <Flex justify="space-between" align="center" gap={8}>
+          <Space size={10} align="center" style={{ minWidth: 0 }}>
             <div
               style={{
                 width: 24,
                 height: 24,
-                borderRadius: 8,
+                borderRadius: 7,
                 background: palette.iconBg,
                 display: "grid",
                 placeItems: "center",
+                flexShrink: 0,
               }}
             >
               <FileTextOutlined style={{ color: "#fff", fontSize: 12 }} />
             </div>
-            <Text strong style={{ color: "#fff", fontSize: 16 }}>
+            <Text
+              strong
+              style={{
+                color: "#fff",
+                fontSize: 15,
+                lineHeight: 1.2,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
               {title}
             </Text>
           </Space>
@@ -403,16 +417,19 @@ function LetterCard({
           <Tag
             color={statusColor}
             style={{
-              width: "fit-content",
               marginInlineEnd: 0,
               borderRadius: 999,
+              fontSize: 11,
+              lineHeight: "18px",
+              padding: "1px 8px",
+              border: "none",
               fontWeight: 600,
-              paddingInline: 10,
+              flexShrink: 0,
             }}
           >
             {status}
           </Tag>
-        </Space>
+        </Flex>
       </div>
 
       <div style={{ padding: 16 }}>
@@ -493,7 +510,7 @@ function LetterCard({
                 borderColor: "#2563eb",
               }}
             >
-              Preview Full Letter
+              Lihat Surat
             </Button>
             {showDownload && onDownload ? (
               <Button
@@ -509,7 +526,7 @@ function LetterCard({
                 }}
                 onClick={onDownload}
               >
-                Download PDF
+                Unduh PDF
               </Button>
             ) : null}
             {showCancelSubmit && onCancelSubmit ? (
@@ -1512,7 +1529,32 @@ export default function LetterComponent() {
     persistedSponsorLetterDocument?.status === "SUBMITTED_TO_DIRECTOR";
 
   return (
-    <Row gutter={[16, 16]}>
+    <Space direction="vertical" size={16} style={{ width: "100%" }}>
+      <Card
+        style={{
+          borderRadius: 16,
+          borderColor: "#e2e8f0",
+          background: "#ffffff",
+          boxShadow: "0 4px 20px rgba(15, 23, 42, 0.04)",
+        }}
+        styles={{ body: { padding: "18px 20px" } }}
+      >
+        <Flex align="center" gap={12} style={{ minWidth: 0, width: "100%" }}>
+          <div className={styles.sectionHeaderIcon}>
+            <MailOutlined />
+          </div>
+          <div style={{ minWidth: 0, flex: 1, overflow: "hidden" }}>
+            <div className={styles.sectionHeaderTitle}>
+              Official Letters
+            </div>
+            <div className={styles.sectionHeaderSubtitle}>
+              Surat pernyataan dan surat sponsor siswa
+            </div>
+          </div>
+        </Flex>
+      </Card>
+
+      <Row gutter={[16, 16]}>
         <Col xs={24} xl={12}>
           <LetterCard
             title="Statement Letter"
@@ -1573,5 +1615,6 @@ export default function LetterComponent() {
           />
         </Col>
       </Row>
+    </Space>
   );
 }

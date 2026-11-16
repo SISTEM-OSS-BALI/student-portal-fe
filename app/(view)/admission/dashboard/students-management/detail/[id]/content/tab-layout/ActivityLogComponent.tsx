@@ -3,6 +3,7 @@
 import {
   ArrowUpOutlined,
   FileTextOutlined,
+  HistoryOutlined,
   MailOutlined,
   PushpinOutlined,
 } from "@ant-design/icons";
@@ -13,10 +14,11 @@ import { useGeneratedSponsorLetterAiDocuments } from "@/app/hooks/use-generated-
 import { useGeneratedStatementLetterAiDocuments } from "@/app/hooks/use-generated-statement-letter-ai-documents";
 import { useStudentNotes } from "@/app/hooks/use-student-notes";
 import { useUser } from "@/app/hooks/use-users";
-import { Card, Space, Tag, Typography } from "antd";
+import { Card, Flex, Space, Tag, Typography } from "antd";
 import { useParams } from "next/navigation";
 import { useCallback, useMemo } from "react";
 import type { ReactNode } from "react";
+import styles from "../detail.module.css";
 
 const { Text, Title } = Typography;
 
@@ -107,6 +109,10 @@ export default function ActivityLogComponent() {
 
   const activityItems = useMemo(() => {
     const items: ActivityItem[] = [];
+    const defaultAdmissionStaff =
+      detailStudentData?.student_status_updated_by_name?.trim() ||
+      (detailStudentData as any)?.name_admission?.trim() ||
+      "Admission Kim";
 
     translationItems.forEach((item) => {
       const rawTime = item.updated_at ?? item.created_at;
@@ -119,7 +125,7 @@ export default function ActivityLogComponent() {
         title: item.file_name
           ? `Admission uploaded translated ${item.file_name}`
           : "Admission uploaded translated document",
-        by: "Admission",
+        by: defaultAdmissionStaff,
         byColor: "#2563eb",
         timeAgo: formatRelativeTime(rawTime),
         icon: <FileTextOutlined />,
@@ -133,6 +139,10 @@ export default function ActivityLogComponent() {
       if (!rawTime) return;
 
       const status = String(item.status ?? "").toLowerCase();
+      const reviewerName =
+        (item as any)?.reviewer?.name ||
+        (item as any)?.reviewer_name ||
+        defaultAdmissionStaff;
 
       items.push({
         id: `approval-${item.id}`,
@@ -142,7 +152,7 @@ export default function ActivityLogComponent() {
           status === "approved"
             ? "Document approved by Director"
             : "Document waiting director review",
-        by: "Director",
+        by: status === "approved" ? "Director" : reviewerName,
         byColor: "#2563eb",
         timeAgo: formatRelativeTime(rawTime),
         icon: <MailOutlined />,
@@ -156,6 +166,10 @@ export default function ActivityLogComponent() {
       if (!rawTime) return;
 
       const status = String(item.status ?? "").toLowerCase();
+      const reviewerName =
+        (item as any)?.reviewer?.name ||
+        (item as any)?.reviewer_name ||
+        defaultAdmissionStaff;
 
       items.push({
         id: `cv-${item.id}`,
@@ -165,7 +179,7 @@ export default function ActivityLogComponent() {
           status === "submitted_to_director"
             ? "CV sent to Director for approval"
             : "CV updated",
-        by: "Admission",
+        by: reviewerName,
         byColor: "#2563eb",
         timeAgo: formatRelativeTime(rawTime),
         icon: status === "submitted_to_director" ? <MailOutlined /> : <FileTextOutlined />,
@@ -179,6 +193,10 @@ export default function ActivityLogComponent() {
       if (!rawTime) return;
 
       const status = String(item.status ?? "").toLowerCase();
+      const reviewerName =
+        item.current_approval?.reviewer?.name ||
+        (item as any)?.reviewer_name ||
+        defaultAdmissionStaff;
 
       items.push({
         id: `statement-${item.id}`,
@@ -188,7 +206,7 @@ export default function ActivityLogComponent() {
           status === "submitted_to_director"
             ? "Statement letter sent to Director for approval"
             : "Statement letter updated",
-        by: "Admission",
+        by: reviewerName,
         byColor: "#2563eb",
         timeAgo: formatRelativeTime(rawTime),
         icon: status === "submitted_to_director" ? <MailOutlined /> : <FileTextOutlined />,
@@ -202,6 +220,10 @@ export default function ActivityLogComponent() {
       if (!rawTime) return;
 
       const status = String(item.status ?? "").toLowerCase();
+      const reviewerName =
+        item.current_approval?.reviewer?.name ||
+        (item as any)?.reviewer_name ||
+        defaultAdmissionStaff;
 
       items.push({
         id: `sponsor-${item.id}`,
@@ -211,7 +233,7 @@ export default function ActivityLogComponent() {
           status === "submitted_to_director"
             ? "Sponsor letter sent to Director for approval"
             : "Sponsor letter updated",
-        by: "Admission",
+        by: reviewerName,
         byColor: "#2563eb",
         timeAgo: formatRelativeTime(rawTime),
         icon: status === "submitted_to_director" ? <MailOutlined /> : <FileTextOutlined />,
@@ -288,31 +310,43 @@ export default function ActivityLogComponent() {
 
   return (
     <Card
-      bodyStyle={{ padding: 20 }}
+      styles={{ body: { padding: "18px 20px" } }}
       style={{
-        borderRadius: 20,
-        borderColor: "#dbe4ee",
-        boxShadow: "0 12px 34px rgba(15, 23, 42, 0.05)",
+        borderRadius: 16,
+        borderColor: "#e2e8f0",
+        background: "#ffffff",
+        boxShadow: "0 4px 20px rgba(15, 23, 42, 0.04)",
       }}
     >
       <Space direction="vertical" size={18} style={{ width: "100%" }}>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "flex-start",
-            gap: 16,
-          }}
-        >
-          <div>
-            <Title level={4} style={{ margin: 0, color: "#0f172a" }}>
-              Activity Log
-            </Title>
-            <Text type="secondary">
-              Timeline semua aktivitas terbaru untuk case student ini
-            </Text>
-          </div>
-        </div>
+        <Flex justify="space-between" align="center" wrap="wrap" gap={12}>
+          <Flex align="center" gap={12} style={{ minWidth: 0, flex: "1 1 auto" }}>
+            <div className={styles.sectionHeaderIcon}>
+              <HistoryOutlined />
+            </div>
+            <div style={{ minWidth: 0, flex: 1, overflow: "hidden" }}>
+              <div className={styles.sectionHeaderTitle}>
+                Activity History
+              </div>
+              <div className={styles.sectionHeaderSubtitle}>
+                Rekam jejak tahapan dan pembaruan pendaftaran siswa
+              </div>
+            </div>
+          </Flex>
+
+          <Tag
+            color="blue"
+            style={{
+              borderRadius: 6,
+              fontWeight: 600,
+              padding: "2px 10px",
+              fontSize: 12,
+              margin: 0,
+            }}
+          >
+            {activityItems.length} Aktivitas Tercatat
+          </Tag>
+        </Flex>
 
         <Space direction="vertical" size={18} style={{ width: "100%" }}>
           {activityItems.length ? (

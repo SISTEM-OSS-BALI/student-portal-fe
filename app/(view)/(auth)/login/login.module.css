@@ -184,21 +184,34 @@
 }
 
 .partnerBadge {
+  width: 68px;
   height: 68px;
-  min-width: 68px;
-  padding: 8px 12px;
+  padding: 8px;
   border-radius: 14px;
   background: #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
   box-shadow: 0 12px 24px rgba(0, 0, 0, 0.18);
+  flex-shrink: 0;
+  overflow: hidden;
 }
 
-.partnerBadge img {
+.partnerBadge :global(.ant-image) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
   height: 100%;
-  width: auto;
-  object-fit: contain;
+}
+
+.partnerBadge :global(.ant-image-img) {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain !important;
+  display: block;
 }
 
 .partnerTitle {

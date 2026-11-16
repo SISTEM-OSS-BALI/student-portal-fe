@@ -6,6 +6,7 @@ import {
   Button,
   Card,
   Col,
+  Flex,
   Row,
   Space,
   Switch,
@@ -14,14 +15,19 @@ import {
   Typography,
 } from "antd";
 import {
+  CheckOutlined,
+  ClockCircleOutlined,
+  CloseOutlined,
   EyeOutlined,
   FileTextOutlined,
+  FolderOpenOutlined,
 } from "@ant-design/icons";
 import { useAnswerDocuments } from "@/app/hooks/use-answer-documents";
 import { useDocuments } from "@/app/hooks/use-documents-management";
 import { useAnswerDocumentApprovals } from "@/app/hooks/use-answer-document-approvals";
 import type { AnswerDocumentApprovalsDataModel } from "@/app/models/answer-document-approvals";
 import { buildFilePreviewUrl } from "@/app/utils/file-preview";
+import styles from "../detail.module.css";
 
 type DocumentsComponentProps = {
   student_id: string;
@@ -148,11 +154,66 @@ export default function DocumentsComponent({
         title: "Status",
         dataIndex: "approval_status",
         key: "status",
-        render: (value: string) => (
-          <Tag color={getApprovalColor(value)}>
-            {(value ?? "pending").toUpperCase()}
-          </Tag>
-        ),
+        render: (value: string) => {
+          const raw = (value ?? "pending").toLowerCase();
+          if (raw === "approved") {
+            return (
+              <Tag
+                color="success"
+                style={{
+                  margin: 0,
+                  borderRadius: 999,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  padding: "2px 10px",
+                }}
+              >
+                <CheckOutlined style={{ fontSize: 10 }} /> Disetujui
+              </Tag>
+            );
+          }
+          if (raw === "rejected") {
+            return (
+              <Tag
+                color="error"
+                style={{
+                  margin: 0,
+                  borderRadius: 999,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  padding: "2px 10px",
+                }}
+              >
+                <CloseOutlined style={{ fontSize: 10 }} /> Perlu Revisi
+              </Tag>
+            );
+          }
+          return (
+            <Tag
+              style={{
+                margin: 0,
+                borderRadius: 999,
+                fontSize: 12,
+                fontWeight: 500,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                padding: "2px 10px",
+                color: "#64748b",
+                background: "#f1f5f9",
+                borderColor: "#e2e8f0",
+              }}
+            >
+              <ClockCircleOutlined style={{ fontSize: 10 }} /> Menunggu
+            </Tag>
+          );
+        },
       },
       {
         title: "Upload Date",
@@ -161,14 +222,13 @@ export default function DocumentsComponent({
         render: (value: string | null | undefined) => formatDate(value),
       },
       {
-        title: "Preview",
+        title: "Lihat",
         key: "preview",
         render: (record: DocumentRow) => {
           const hasUrl = Boolean(record.file_url);
           return (
             <Space size={8}>
               <Button
-                shape="circle"
                 icon={<EyeOutlined />}
                 disabled={!hasUrl}
                 href={
@@ -180,7 +240,10 @@ export default function DocumentsComponent({
                     : undefined
                 }
                 target={hasUrl ? "_blank" : undefined}
-              />
+                style={{ borderRadius: 8, fontSize: 13 }}
+              >
+                Lihat
+              </Button>
             </Space>
           );
         },
@@ -190,8 +253,29 @@ export default function DocumentsComponent({
   );
 
   return (
-    <Row gutter={{ xs: 8, sm: 16, md: 24, lg: 32 }}>
-      <Col span={16}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 16, width: "100%", maxWidth: "100%", minWidth: 0 }}>
+      {/* Standardized Section Header Card */}
+      <Card
+        className={styles.sectionHeaderCard}
+        styles={{ body: { padding: 0 } }}
+      >
+        <Flex align="center" gap={12} style={{ minWidth: 0, width: "100%" }}>
+          <div className={styles.sectionHeaderIcon}>
+            <FolderOpenOutlined />
+          </div>
+          <div style={{ minWidth: 0, flex: 1, overflow: "hidden" }}>
+            <div className={styles.sectionHeaderTitle}>
+              Dokumen Persyaratan
+            </div>
+            <div className={styles.sectionHeaderSubtitle}>
+              Daftar kelayakan berkas mahasiswa
+            </div>
+          </div>
+        </Flex>
+      </Card>
+
+      <Row gutter={{ xs: 8, sm: 16, md: 24, lg: 32 }}>
+      <Col xs={24} xl={16}>
         <Card
           styles={{ body: { padding: 16 } }}
           style={{
@@ -231,6 +315,7 @@ export default function DocumentsComponent({
                 dataSource={documentRows}
                 rowKey={(record) => String(record.id ?? record.label ?? "")}
                 pagination={false}
+                scroll={{ x: 600 }}
                 expandable={{
                   expandedRowRender: (record: DocumentRow) => (
                     <Space direction="vertical" size={8} style={{ width: "100%" }}>
@@ -254,7 +339,7 @@ export default function DocumentsComponent({
           </Space>
         </Card>
       </Col>
-      <Col span={8}>
+      <Col xs={24} xl={8}>
         <Card styles={{ body: { padding: 24 } }}>
           <Space direction="vertical" size={12}>
             <Typography.Title level={5} style={{ marginBottom: 0 }}>
@@ -268,5 +353,6 @@ export default function DocumentsComponent({
         </Card>
       </Col>
     </Row>
+    </div>
   );
 }

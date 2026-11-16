@@ -9,14 +9,17 @@ import {
   Col,
   Divider,
   Empty,
+  Flex,
   Form,
   Image,
   Input,
+  Mentions,
   Modal,
   Popconfirm,
   Row,
   Space,
   Tag,
+  Tooltip,
   Typography,
   Upload,
   notification,
@@ -25,8 +28,10 @@ import {
   ClockCircleOutlined,
   CloseOutlined,
   DeleteOutlined,
+  MessageOutlined,
   PaperClipOutlined,
   PlusOutlined,
+  SendOutlined,
   TagOutlined,
 } from "@ant-design/icons";
 
@@ -36,12 +41,14 @@ import {
   useTicketMessages,
   useUpdateStatusTicketMessage,
 } from "@/app/hooks/use-ticket-message";
+import styles from "../detail.module.css";
 import {
   useChatMessages,
   useCreateChatConversation,
 } from "@/app/hooks/use-chat";
 import { useChatSocket } from "@/app/hooks/use-chat-socket";
 import { useUser, useUsers } from "@/app/hooks/use-users";
+import type { UserDataModel } from "@/app/models/user";
 import type { ChatMessage } from "@/app/models/chat";
 import type {
   TicketMessageDataModel,
@@ -50,6 +57,13 @@ import type {
 import type { UploadedChatAttachment } from "@/app/vendor/chat-upload";
 import { uploadChatFiles } from "@/app/vendor/chat-upload";
 import { useAuth } from "@/app/utils/use-auth";
+import {
+  formatChatDateGroup,
+  formatChatMessageTime,
+  formatChatTimeOnly,
+  getStudentAvatarUrl,
+  isSameDay,
+} from "@/app/utils/student-helpers";
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -57,6 +71,7 @@ const { TextArea } = Input;
 type ChatComponentProps = {
   student_id: string;
   student_name?: string;
+  consultant_name?: string | null;
   initialConversationId?: string;
 };
 
@@ -92,11 +107,275 @@ const getRoleTagColor = (value?: string | null) => {
       return "gold";
     case "ADMISSION":
       return "blue";
+    case "CONSULTANT":
+      return "purple";
     case "STUDENT":
       return "green";
     default:
       return "default";
   }
+};
+
+const normalizeHandle = (value: string) => {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ".")
+    .replace(/[^a-z0-9._-]/g, "");
+};
+
+const getLegacyEmailHandle = (user: { name?: string | null; email?: string | null }) => {
+  const email = user.email ?? "";
+  return normalizeHandle(email.split("@")[0] ?? "");
+};
+
+const getUserHandle = (user: { name?: string | null; email?: string | null }) => {
+  const fromName = normalizeHandle(user.name ?? "");
+  if (fromName) return fromName;
+  return getLegacyEmailHandle(user);
+};
+
+const isMatchingConsultant = (
+  consultantUser: UserDataModel,
+  targetName?: string | null,
+) => {
+  if (!targetName) return false;
+  const cleanTarget = targetName.trim().toLowerCase();
+  const cleanUser = (consultantUser.name ?? "").trim().toLowerCase();
+  const cleanEmail = (consultantUser.email ?? "").trim().toLowerCase();
+
+  return (
+    cleanUser === cleanTarget ||
+    cleanTarget.includes(cleanUser) ||
+    cleanUser.includes(cleanTarget) ||
+    (Boolean(cleanEmail) && cleanTarget.includes(cleanEmail.split("@")[0]))
+  );
+};
+
+const getUserAvatarUrl = (user?: UserDataModel | null): string | undefined => {
+  if (!user) return undefined;
+  if (user.profile_picture_url && user.profile_picture_url.trim()) {
+    return user.profile_picture_url.trim();
+  }
+  return getStudentAvatarUrl(user);
+};
+
+const useMentionHelpers = (
+  usersData: UserDataModel[] | undefined,
+  currentUserId: string | undefined,
+  currentStudent?: { id: string; name?: string; role?: string } | null,
+  assignedConsultantName?: string | null,
+) => {
+  const mentionableUsers = useMemo(() => {
+    // 1. Ambil staf Director & Admission
+    const list = (usersData ?? []).filter((user) => {
+      const role = String(user.role ?? "").toUpperCase();
+      return role === "DIRECTOR" || role === "ADMISSION";
+    });
+
+    // 2. Ambil HANYA 1 konsultan yang bertanggung jawab mendampingi siswa ini (pantauan 1 konsultan)
+    // Konsultan lain yang tidak mengurus anak ini TIDAK BOLEH muncul
+    const consultants = (usersData ?? []).filter((user) => {
+      const role = String(user.role ?? "").toUpperCase();
+      return role === "CONSULTANT";
+    });
+
+    if (assignedConsultantName) {
+      const matched = consultants.filter((c) =>
+        isMatchingConsultant(c, assignedConsultantName),
+      );
+      if (matched.length > 0) {
+        list.push(...matched);
+      } else {
+        // Fallback pencarian bagian kata (misal: "Jani" dalam "Jani Antari")
+        const fallback = consultants.find(
+          (c) =>
+            assignedConsultantName
+              .toLowerCase()
+              .includes((c.name || "").toLowerCase()) ||
+            (c.name || "")
+              .toLowerCase()
+              .includes(assignedConsultantName.toLowerCase()),
+        );
+        if (fallback) list.push(fallback);
+      }
+    }
+
+    // 3. Masukkan HANYA 1 siswa yang bersangkutan dengan tiket/halaman ini
+    // Mencegah kebocoran data siswa lain ke dalam menu mention
+    if (
+      currentStudent?.id &&
+      !list.some((u) => String(u.id) === String(currentStudent.id))
+    ) {
+      list.push({
+        id: currentStudent.id,
+        name: currentStudent.name || "Student",
+        role: "STUDENT",
+      } as UserDataModel);
+    }
+
+    return list;
+  }, [usersData, currentStudent, assignedConsultantName]);
+
+  const mentionMap = useMemo(() => {
+    const map = new Map<string, UserDataModel>();
+    mentionableUsers.forEach((user) => {
+      const preferredHandle = getUserHandle(user);
+      const legacyHandle = getLegacyEmailHandle(user);
+      const rawName = normalizeHandle(user.name ?? "");
+      if (preferredHandle) map.set(preferredHandle, user);
+      if (legacyHandle) map.set(legacyHandle, user);
+      if (rawName) map.set(rawName, user);
+    });
+    return map;
+  }, [mentionableUsers]);
+
+  const mentionOptions = useMemo(() => {
+    const options = mentionableUsers
+      .filter((user) => String(user.id) !== String(currentUserId))
+      .map((user) => {
+        const handle = getUserHandle(user);
+        const initials = getInitials(user.name);
+        const roleLabel = formatRoleLabel(user.role);
+        const roleColor = getRoleTagColor(user.role);
+        const isPicConsultant =
+          roleLabel === "CONSULTANT" &&
+          Boolean(assignedConsultantName) &&
+          isMatchingConsultant(user, assignedConsultantName);
+
+        return {
+          key: String(user.id),
+          value: handle,
+          isPic: isPicConsultant,
+          label: (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                padding: "4px 8px",
+              }}
+            >
+              <Avatar
+                size={26}
+                src={getUserAvatarUrl(user)}
+                style={{
+                  background:
+                    roleLabel === "DIRECTOR"
+                      ? "#f59e0b"
+                      : roleLabel === "ADMISSION"
+                        ? "#2563eb"
+                        : roleLabel === "CONSULTANT"
+                          ? "#7c3aed"
+                          : "#10b981",
+                  fontSize: 11,
+                  fontWeight: 600,
+                  flexShrink: 0,
+                  border: "1px solid #e2e8f0",
+                }}
+              >
+                {initials}
+              </Avatar>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  minWidth: 0,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <Text strong style={{ fontSize: 13, lineHeight: 1.2 }}>
+                    {user.name}
+                  </Text>
+                  <Tag
+                    color={isPicConsultant ? "purple" : roleColor}
+                    style={{ margin: 0, fontSize: 10, padding: "0 4px" }}
+                  >
+                    {isPicConsultant ? "PIC KONSULTAN" : roleLabel}
+                  </Tag>
+                </div>
+                <Text type="secondary" style={{ fontSize: 11, marginTop: 2 }}>
+                  @{handle} {user.email ? `• ${user.email}` : ""}
+                </Text>
+              </div>
+            </div>
+          ),
+        };
+      });
+
+    // PIC Konsultan selalu di urutan paling atas
+    return options.sort((a, b) => (b.isPic ? 1 : 0) - (a.isPic ? 1 : 0));
+  }, [mentionableUsers, currentUserId, assignedConsultantName]);
+
+  const extractMentionUserIds = useCallback(
+    (text: string) => {
+      const matches = text.match(/@([a-zA-Z0-9._-]+)/g) ?? [];
+      const ids = new Set<string>();
+
+      matches.forEach((raw) => {
+        const handle = raw.slice(1).toLowerCase();
+        const user = mentionMap.get(handle);
+        if (user) {
+          ids.add(String(user.id));
+        }
+      });
+
+      return Array.from(ids);
+    },
+    [mentionMap],
+  );
+
+  const renderMessageText = useCallback(
+    (text?: string | null) => {
+      if (!text) return null;
+
+      const parts = text.split(/(@[a-zA-Z0-9._-]+)/g);
+
+      return parts.map((part, index) => {
+        if (part.startsWith("@")) {
+          const handle = part.slice(1).toLowerCase();
+          const user = mentionMap.get(handle);
+          const label = user
+            ? `${user.name} • ${formatRoleLabel(user.role)}`
+            : undefined;
+
+          const content = (
+            <span
+              style={{
+                color: "#1d4ed8",
+                fontWeight: 600,
+                background: "#dbeafe",
+                padding: "2px 6px",
+                borderRadius: 4,
+                margin: "0 2px",
+              }}
+            >
+              {part}
+            </span>
+          );
+
+          if (!label) {
+            return <span key={index}>{content}</span>;
+          }
+
+          return (
+            <Tooltip key={index} title={label}>
+              {content}
+            </Tooltip>
+          );
+        }
+
+        return <span key={index}>{part}</span>;
+      });
+    },
+    [mentionMap],
+  );
+
+  return {
+    mentionOptions,
+    extractMentionUserIds,
+    renderMessageText,
+  };
 };
 
 const normalizeTicketStatus = (value?: string | null) => {
@@ -109,8 +388,8 @@ const normalizeTicketStatus = (value?: string | null) => {
 
 const getTicketStatusLabel = (value?: string | null) => {
   return normalizeTicketStatus(value) === "completed"
-    ? "Completed"
-    : "On Going";
+    ? "Selesai"
+    : "Sedang Berjalan";
 };
 
 const getTicketStatusStyle = (value?: string | null): CSSProperties => {
@@ -120,57 +399,46 @@ const getTicketStatusStyle = (value?: string | null): CSSProperties => {
     display: "inline-flex",
     alignItems: "center",
     width: "fit-content",
-    borderRadius: 999,
-    padding: "4px 12px",
-    fontSize: 12,
+    borderRadius: 6,
+    padding: "2px 8px",
+    fontSize: 11,
     fontWeight: 600,
-    color: status === "completed" ? "#15803d" : "#2563eb",
+    color: status === "completed" ? "#15803d" : "#1d4ed8",
     background: status === "completed" ? "#dcfce7" : "#eff6ff",
+    border: status === "completed" ? "1px solid #bbf7d0" : "1px solid #bfdbfe",
   };
 };
 
 const formatRelativeTime = (value?: string) => {
-  if (!value) return "Updated recently";
+  if (!value) return "Baru saja";
 
   const date = new Date(value);
 
-  if (Number.isNaN(date.getTime())) return "Updated recently";
+  if (Number.isNaN(date.getTime())) return "Baru saja";
 
   const diffMs = Date.now() - date.getTime();
   const minutes = Math.floor(diffMs / 60000);
 
-  if (minutes < 1) return "Updated just now";
+  if (minutes < 1) return "Baru saja";
   if (minutes < 60) {
-    return `Updated ${minutes} minute${minutes > 1 ? "s" : ""} ago`;
+    return `${minutes} menit lalu`;
   }
 
   const hours = Math.floor(minutes / 60);
 
   if (hours < 24) {
-    return `Updated ${hours} hour${hours > 1 ? "s" : ""} ago`;
+    return `${hours} jam lalu`;
   }
 
   const days = Math.floor(hours / 24);
 
-  if (days === 1) return "Updated yesterday";
+  if (days === 1) return "Kemarin";
 
-  return `Updated ${days} days ago`;
+  return `${days} hari lalu`;
 };
 
 const formatMessageTime = (value?: string) => {
-  if (!value) return "";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "";
-
-  return `${date.toLocaleTimeString("en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-  })} · ${date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  })}`;
+  return formatChatMessageTime(value);
 };
 
 const extractConversationId = (payload: unknown): string | undefined => {
@@ -246,26 +514,27 @@ function TicketListItem({
       style={{
         width: "100%",
         textAlign: "left",
-        borderRadius: 16,
-        border: isActive ? "1px solid #3b82f6" : "1px solid #dbe4ee",
-        background: isActive ? "#eff6ff" : "#ffffff",
-        padding: 14,
+        borderRadius: 12,
+        border: isActive ? "1px solid #1b3d6d" : "1px solid #e2e8f0",
+        background: isActive ? "#f0f4f9" : "#ffffff",
+        padding: "12px 14px",
         cursor: "pointer",
-        boxShadow: isActive ? "0 12px 24px rgba(59, 130, 246, 0.14)" : "none",
+        transition: "all 0.2s ease",
+        boxShadow: isActive ? "0 4px 12px rgba(27, 61, 109, 0.08)" : "none",
       }}
     >
-      <Space direction="vertical" size={8} style={{ width: "100%" }}>
+      <Space direction="vertical" size={6} style={{ width: "100%" }}>
         <div
           style={{
             display: "flex",
             justifyContent: "space-between",
-            gap: 10,
+            gap: 8,
             alignItems: "center",
           }}
         >
           <TicketStatusPill status={ticket.status} />
 
-          <Text type="secondary" style={{ fontSize: 12 }}>
+          <Text type="secondary" style={{ fontSize: 11, fontFamily: "monospace" }}>
             {getTicketCode(ticket)}
           </Text>
         </div>
@@ -275,8 +544,9 @@ function TicketListItem({
             strong
             style={{
               display: "block",
-              fontSize: 18,
-              color: "#0f172a",
+              fontSize: 14,
+              color: isActive ? "#1b3d6d" : "#0f172a",
+              lineHeight: 1.3,
             }}
           >
             {ticket.name}
@@ -284,16 +554,17 @@ function TicketListItem({
 
           <Paragraph
             type="secondary"
-            style={{ margin: "8px 0 0", fontSize: 14 }}
+            ellipsis={{ rows: 2 }}
+            style={{ margin: "4px 0 0", fontSize: 12, lineHeight: 1.4 }}
           >
             {buildTicketSummary(ticket)}
           </Paragraph>
         </div>
 
-        <Space size={8} align="center">
-          <ClockCircleOutlined style={{ color: "#94a3b8" }} />
+        <Space size={6} align="center" style={{ marginTop: 2 }}>
+          <ClockCircleOutlined style={{ color: "#94a3b8", fontSize: 11 }} />
 
-          <Text type="secondary" style={{ fontSize: 13 }}>
+          <Text type="secondary" style={{ fontSize: 11 }}>
             {formatRelativeTime(ticket.updated_at)}
           </Text>
         </Space>
@@ -308,12 +579,16 @@ function MessageBubble({
   currentUserName,
   currentUserRole,
   studentName,
+  senderAvatarUrl,
+  renderText,
 }: {
   message: ChatMessage;
   isMine: boolean;
   currentUserName?: string | null;
   currentUserRole?: string | null;
   studentName?: string;
+  senderAvatarUrl?: string | null;
+  renderText?: (text?: string | null) => React.ReactNode;
 }) {
   const attachments = message.attachments ?? [];
   const bubbleBg = isMine ? "#dcf8c6" : "#ffffff";
@@ -331,6 +606,8 @@ function MessageBubble({
 
   const senderRoleLabel = formatRoleLabel(senderRole);
   const avatarBg = isMine ? "#f59e0b" : "#0f4c8a";
+  const avatarSrc =
+    message.sender_profile_picture || senderAvatarUrl || undefined;
 
   return (
     <div style={{ display: "flex", justifyContent: justify }}>
@@ -343,26 +620,30 @@ function MessageBubble({
         }}
       >
         <Avatar
-          size={30}
+          size={32}
+          src={avatarSrc}
           style={{
             background: avatarBg,
             fontSize: 12,
             fontWeight: 700,
+            flexShrink: 0,
+            border: "1px solid #e2e8f0",
           }}
         >
           {getInitials(senderName)}
         </Avatar>
 
         <div style={{ minWidth: 0 }}>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              gap: 16,
-              marginBottom: 6,
-            }}
-          >
-            <Space size={8} align="center" wrap>
+          {!isMine && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                marginBottom: 4,
+                paddingLeft: 2,
+              }}
+            >
               <Text strong style={{ fontSize: 12, color: "#334155" }}>
                 {senderName}
               </Text>
@@ -373,12 +654,8 @@ function MessageBubble({
               >
                 {senderRoleLabel}
               </Tag>
-            </Space>
-
-            <Text type="secondary" style={{ fontSize: 11 }}>
-              {formatMessageTime(message.created_at)}
-            </Text>
-          </div>
+            </div>
+          )}
 
           <div style={{ position: "relative" }}>
             <div
@@ -403,7 +680,7 @@ function MessageBubble({
                   whiteSpace: "pre-wrap",
                 }}
               >
-                {message.text}
+                {renderText ? renderText(message.text) : message.text}
               </Paragraph>
             ) : null}
 
@@ -448,6 +725,28 @@ function MessageBubble({
                 )}
               </div>
             ) : null}
+
+            {/* Jam di pojok kanan bawah bubble chat ala WhatsApp */}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                alignItems: "center",
+                marginTop: 4,
+                userSelect: "none",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 10.5,
+                  color: isMine ? "#166534" : "#94a3b8",
+                  lineHeight: 1,
+                  fontWeight: 500,
+                }}
+              >
+                {formatChatTimeOnly(message.created_at)}
+              </span>
+            </div>
             </div>
             <div
               style={{
@@ -514,6 +813,7 @@ function ChatComposer({
   selectedTicket,
   sendingMessage,
   uploadingAttachments,
+  mentionOptions,
   onTextChange,
   onSend,
   onUpload,
@@ -523,59 +823,38 @@ function ChatComposer({
   selectedTicket?: TicketMessageDataModel;
   sendingMessage: boolean;
   uploadingAttachments: boolean;
+  mentionOptions?: Array<{ key: string; value: string; label: React.ReactNode }>;
   onTextChange: (value: string) => void;
   onSend: () => void;
   onUpload: (file: File) => Promise<boolean>;
 }) {
+  const [isFocused, setIsFocused] = useState(false);
+
   return (
     <div
       style={{
         display: "flex",
-        alignItems: "stretch",
+        flexDirection: "column",
         width: "100%",
-        border: "1px solid #d9d9d9",
-        borderRadius: 18,
+        border: isFocused ? "1.5px solid #1b3d6d" : "1px solid #cbd5e1",
+        borderRadius: 14,
         overflow: "hidden",
         background: "#ffffff",
+        boxShadow: isFocused
+          ? "0 0 0 3px rgba(27, 61, 109, 0.08)"
+          : "0 1px 3px rgba(15, 23, 42, 0.04)",
+        transition: "border-color 0.2s, box-shadow 0.2s",
       }}
     >
-      <Upload
-        multiple
-        beforeUpload={onUpload}
-        showUploadList={false}
-        accept="image/*,.pdf,.doc,.docx"
-      >
-        <Button
-          type="text"
-          icon={<PaperClipOutlined />}
-          loading={uploadingAttachments}
-          style={{
-            width: 64,
-            height: "100%",
-            minHeight: 88,
-            border: "none",
-            borderRight: "1px solid #e5e7eb",
-            borderRadius: 0,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        />
-      </Upload>
-
-      <div
-        style={{
-          flex: 1,
-          minHeight: 88,
-          display: "flex",
-          alignItems: "stretch",
-        }}
-      >
-        <TextArea
-          placeholder="Tulis pesan atau unggah gambar..."
+      <div style={{ width: "100%", padding: "10px 14px 4px 14px" }}>
+        <Mentions
+          placeholder="Tulis pesan... Ketik @ untuk mention tim (Admission, Director, Consultant)"
           value={chatText}
-          onChange={(event) => onTextChange(event.target.value)}
-          autoSize={{ minRows: 2, maxRows: 4 }}
+          onChange={onTextChange}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
+          autoSize={{ minRows: 2, maxRows: 6 }}
+          options={mentionOptions}
           onPressEnter={(event) => {
             if (!event.shiftKey) {
               event.preventDefault();
@@ -584,34 +863,99 @@ function ChatComposer({
           }}
           variant="borderless"
           style={{
-            flex: 1,
-            height: "100%",
-            minHeight: 88,
-            padding: "16px 18px",
-            resize: "none",
+            width: "100%",
+            padding: 0,
             boxShadow: "none",
+            fontSize: 13.5,
+            lineHeight: 1.5,
           }}
         />
       </div>
 
-      <Button
-        type="primary"
-        onClick={onSend}
-        loading={sendingMessage}
-        disabled={
-          (!chatText.trim() && pendingAttachments.length === 0) ||
-          !selectedTicket
-        }
+      <div
         style={{
-          width: 108,
-          minHeight: 88,
-          height: "100%",
-          borderRadius: 0,
-          boxShadow: "none",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          padding: "6px 10px 8px 10px",
+          borderTop: "1px solid #f1f5f9",
+          background: "#fafafa",
+          gap: 8,
         }}
       >
-        Send
-      </Button>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <Upload
+            multiple
+            beforeUpload={onUpload}
+            showUploadList={false}
+            accept="image/*,.pdf,.doc,.docx"
+          >
+            <Tooltip title="Lampirkan berkas (gambar, PDF, DOCX)">
+              <Button
+                type="text"
+                shape="circle"
+                icon={<PaperClipOutlined style={{ fontSize: 16 }} />}
+                loading={uploadingAttachments}
+                style={{
+                  color: "#64748b",
+                  width: 32,
+                  height: 32,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              />
+            </Tooltip>
+          </Upload>
+
+          <Tooltip title="Tag / Mention Anggota Tim (@)">
+            <Button
+              type="text"
+              shape="circle"
+              icon={<TagOutlined style={{ fontSize: 15 }} />}
+              onClick={() => {
+                if (!chatText.endsWith("@")) {
+                  const newText = chatText ? `${chatText} @` : "@";
+                  onTextChange(newText);
+                }
+              }}
+              style={{
+                color: "#1b3d6d",
+                width: 32,
+                height: 32,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            />
+          </Tooltip>
+        </div>
+
+        <Button
+          type="primary"
+          icon={<SendOutlined style={{ fontSize: 13 }} />}
+          onClick={onSend}
+          loading={sendingMessage}
+          disabled={
+            (!chatText.trim() && pendingAttachments.length === 0) ||
+            !selectedTicket
+          }
+          style={{
+            borderRadius: 8,
+            height: 34,
+            padding: "0 14px",
+            background: "#1b3d6d",
+            borderColor: "#1b3d6d",
+            fontWeight: 600,
+            fontSize: 13,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+          }}
+        >
+          Kirim
+        </Button>
+      </div>
     </div>
   );
 }
@@ -631,7 +975,7 @@ function CreateTicketModal({
 }) {
   return (
     <Modal
-      title="Create New Ticket"
+      title="Buat Tiket Baru"
       open={open}
       onCancel={onCancel}
       footer={null}
@@ -640,13 +984,13 @@ function CreateTicketModal({
       <Form form={form} layout="vertical" onFinish={onFinish}>
         <Form.Item
           name="name"
-          label="Ticket Name"
-          rules={[{ required: true, message: "Ticket name is required" }]}
+          label="Nama / Subjek Tiket"
+          rules={[{ required: true, message: "Nama tiket wajib diisi" }]}
           style={ticketFormStyle}
         >
           <Input
             placeholder="Contoh: Follow up dokumen visa"
-            style={{ borderRadius: 12, height: 42 }}
+            style={{ borderRadius: 10, height: 40 }}
           />
         </Form.Item>
 
@@ -655,12 +999,26 @@ function CreateTicketModal({
             display: "flex",
             justifyContent: "flex-end",
             gap: 12,
+            marginTop: 20,
           }}
         >
-          <Button onClick={onCancel}>Cancel</Button>
+          <Button onClick={onCancel} style={{ borderRadius: 8, height: 38 }}>
+            Batal
+          </Button>
 
-          <Button type="primary" htmlType="submit" loading={loading}>
-            Create Ticket
+          <Button
+            type="primary"
+            htmlType="submit"
+            loading={loading}
+            style={{
+              borderRadius: 8,
+              height: 38,
+              fontWeight: 600,
+              background: "#1b3d6d",
+              borderColor: "#1b3d6d",
+            }}
+          >
+            Buat Tiket
           </Button>
         </div>
       </Form>
@@ -671,6 +1029,7 @@ function CreateTicketModal({
 export default function ChatComponent({
   student_id,
   student_name,
+  consultant_name,
   initialConversationId,
 }: ChatComponentProps) {
   const { user_id } = useAuth();
@@ -701,6 +1060,10 @@ export default function ChatComponent({
     useUpdateStatusTicketMessage({});
 
   const { data: currentUser } = useUser({ id: user_id });
+  const { data: studentUser } = useUser({ id: student_id });
+
+  const effectiveConsultantName =
+    consultant_name || studentUser?.name_consultant;
 
   const {
     onCreate: createConversation,
@@ -710,6 +1073,20 @@ export default function ChatComponent({
   const { data: allUsers = [] } = useUsers({
     enabled: Boolean(user_id),
   });
+
+  const { mentionOptions, extractMentionUserIds, renderMessageText } =
+    useMentionHelpers(
+      allUsers,
+      user_id ? String(user_id) : undefined,
+      student_id
+        ? {
+            id: String(student_id),
+            name: student_name || studentUser?.name || "Student",
+            role: "STUDENT",
+          }
+        : null,
+      effectiveConsultantName,
+    );
 
   const {
     data: tickets = [],
@@ -723,13 +1100,18 @@ export default function ChatComponent({
     withNotification: false,
   });
 
-  const admissionUsers = useMemo(() => {
-    return allUsers.filter(
-      (user) =>
-        Boolean(user.id) &&
-        String(user.role).trim().toUpperCase() === "ADMISSION",
-    );
-  }, [allUsers]);
+  const relevantStaffUsers = useMemo(() => {
+    return allUsers.filter((user) => {
+      if (!user.id) return false;
+      const role = String(user.role ?? "").trim().toUpperCase();
+      if (role === "ADMISSION" || role === "DIRECTOR") return true;
+      if (role === "CONSULTANT") {
+        if (!effectiveConsultantName) return true;
+        return isMatchingConsultant(user, effectiveConsultantName);
+      }
+      return false;
+    });
+  }, [allUsers, effectiveConsultantName]);
 
   const sortedTickets = useMemo(() => {
     return [...tickets].sort((a, b) => {
@@ -739,6 +1121,30 @@ export default function ChatComponent({
       return timeB - timeA;
     });
   }, [tickets]);
+
+  const { userAvatarMap, userAvatarByNameMap } = useMemo(() => {
+    const idMap = new Map<string, string>();
+    const nameMap = new Map<string, string>();
+
+    const registerUser = (u?: UserDataModel | null, fallbackName?: string) => {
+      if (!u && !fallbackName) return;
+      const url =
+        getUserAvatarUrl(u) ||
+        (fallbackName
+          ? getStudentAvatarUrl({ name: fallbackName } as UserDataModel)
+          : undefined);
+      if (!url) return;
+      if (u?.id) idMap.set(String(u.id), url);
+      const name = u?.name || fallbackName;
+      if (name) nameMap.set(name.trim().toLowerCase(), url);
+    };
+
+    registerUser(studentUser, student_name);
+    registerUser(currentUser);
+    allUsers.forEach((u) => registerUser(u));
+
+    return { userAvatarMap: idMap, userAvatarByNameMap: nameMap };
+  }, [allUsers, currentUser, studentUser, student_name]);
 
   useEffect(() => {
     if (!initialConversationId) return;
@@ -793,8 +1199,6 @@ export default function ChatComponent({
     ]);
   }, [fetchedMessages, localMessagesByConversation, selectedConversationId]);
 
-  const selectedPicName = currentUser?.name ?? "Admission Team";
-
   const selectedTicketStatus = normalizeTicketStatus(selectedTicket?.status);
   const nextTicketStatus =
     selectedTicketStatus === "completed" ? "ongoing" : "completed";
@@ -822,13 +1226,13 @@ export default function ChatComponent({
     const memberIds = Array.from(
       new Set([
         String(student_id),
-        ...admissionUsers.map((user) => String(user.id)),
+        ...relevantStaffUsers.map((user) => String(user.id)),
         String(user_id),
       ]),
     );
 
     return memberIds.filter(Boolean);
-  }, [admissionUsers, student_id, user_id]);
+  }, [relevantStaffUsers, student_id, user_id]);
 
   const createConversationForTicket = useCallback(
     async (ticket: TicketMessageDataModel) => {
@@ -1161,10 +1565,16 @@ export default function ChatComponent({
 
       const conversationId = await createConversationForTicket(selectedTicket);
 
+      const mentionUserIds = extractMentionUserIds(text);
+
       const message = await sendMessageViaApi(
         conversationId,
         text,
         attachments,
+        {
+          mention_user_ids:
+            mentionUserIds.length > 0 ? mentionUserIds : undefined,
+        },
       );
 
       setLocalMessagesByConversation((prev) => ({
@@ -1189,310 +1599,416 @@ export default function ChatComponent({
   }, [
     chatText,
     createConversationForTicket,
+    extractMentionUserIds,
     pendingAttachments,
     selectedTicket,
     sendMessageViaApi,
   ]);
 
   return (
-    <Card
-      styles={{ body: { padding: 16 } }}
-      style={{
-        borderRadius: 18,
-        borderColor: "#60a5fa",
-        boxShadow: "0 14px 36px rgba(15, 23, 42, 0.06)",
-      }}
-    >
-      <Space direction="vertical" size={16} style={{ width: "100%" }}>
-        <Row gutter={[16, 16]}>
-          <Col xs={24} lg={8} xl={7}>
-            <div
-              style={{
-                borderRadius: 18,
-                border: "1px solid #dbe4ee",
-                background: "#ffffff",
-                padding: 14,
-                height: "100%",
-              }}
-            >
-              <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "flex-start",
-                    gap: 12,
-                  }}
-                >
-                  <div>
-                    <Title level={4} style={{ margin: 0 }}>
-                      Subject
-                    </Title>
-
-                    <Text type="secondary">
-                      Pilih tiket untuk membuka percakapannya.
-                    </Text>
-                  </div>
-
-                  <Button
-                    type="primary"
-                    icon={<PlusOutlined />}
-                    onClick={handleOpenModal}
-                    style={{ borderRadius: 999 }}
-                  >
-                    New Ticket
-                  </Button>
-                </div>
-
-                <Space direction="vertical" size={10} style={{ width: "100%" }}>
-                  {sortedTickets.length ? (
-                    sortedTickets.map((ticket) => (
-                      <TicketListItem
-                        key={ticket.id}
-                        ticket={ticket}
-                        isActive={ticket.id === selectedTicket?.id}
-                        onClick={() => handleSelectTicket(ticket.id)}
-                        buildTicketSummary={buildTicketSummary}
-                      />
-                    ))
-                  ) : (
-                    <Card
-                      style={{
-                        borderRadius: 18,
-                        borderColor: "#e5e7eb",
-                        background: "#fafcff",
-                      }}
-                    >
-                      <Empty
-                        image={Empty.PRESENTED_IMAGE_SIMPLE}
-                        description="Belum ada ticket untuk student ini."
-                      />
-                    </Card>
-                  )}
-                </Space>
-              </Space>
+    <Space direction="vertical" size={16} style={{ width: "100%" }}>
+      {/* 1. Header Card Tab Percakapan */}
+      <Card
+        style={{
+          borderRadius: 16,
+          borderColor: "#e2e8f0",
+          background: "#ffffff",
+          boxShadow: "0 4px 20px rgba(15, 23, 42, 0.04)",
+        }}
+        styles={{ body: { padding: "18px 20px" } }}
+      >
+        <Flex justify="space-between" align="center" wrap="wrap" gap={12}>
+          <Flex align="center" gap={12} style={{ minWidth: 0, flex: "1 1 auto" }}>
+            <div className={styles.sectionHeaderIcon}>
+              <MessageOutlined />
             </div>
-          </Col>
+            <div style={{ minWidth: 0, flex: 1, overflow: "hidden" }}>
+              <div className={styles.sectionHeaderTitle}>
+                Consultation Chat
+              </div>
+              <div className={styles.sectionHeaderSubtitle}>
+                Komunikasi dan konsultasi pendaftaran siswa
+              </div>
+            </div>
+          </Flex>
 
-          <Col xs={24} lg={16} xl={17}>
-            <Space direction="vertical" size={16} style={{ width: "100%" }}>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={handleOpenModal}
+            style={{
+              borderRadius: 10,
+              height: 40,
+              fontWeight: 600,
+              background: "#1b3d6d",
+              borderColor: "#1b3d6d",
+            }}
+          >
+            Tiket Baru
+          </Button>
+        </Flex>
+      </Card>
+
+      {/* 2. Main Content Card (Two-column layout) */}
+      <Card
+        styles={{ body: { padding: 16 } }}
+        style={{
+          borderRadius: 16,
+          borderColor: "#e2e8f0",
+          boxShadow: "0 4px 20px rgba(15, 23, 42, 0.04)",
+        }}
+      >
+        <Space direction="vertical" size={16} style={{ width: "100%" }}>
+          <Row gutter={[16, 16]}>
+            {/* Left Column: Daftar Tiket */}
+            <Col xs={24} lg={8} xl={7}>
               <div
                 style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "flex-start",
-                  gap: 20,
-                  flexWrap: "wrap",
-                  width: "100%",
+                  borderRadius: 14,
+                  border: "1px solid #e2e8f0",
+                  background: "#f8fafc",
+                  padding: 16,
+                  height: "100%",
                 }}
               >
-                <div
-                  style={{
-                    flex: 1,
-                    minWidth: 280,
-                  }}
-                >
-                  <Space
-                    direction="vertical"
-                    size={10}
-                    style={{ width: "100%" }}
-                  >
-                    <TicketStatusPill status={selectedTicket?.status} />
-
-                    <Title level={2} style={{ margin: 0 }}>
-                      {selectedTicket?.name ?? "Pilih ticket"}
+                <Space direction="vertical" size={14} style={{ width: "100%" }}>
+                  <div>
+                    <Title level={4} style={{ margin: 0, fontSize: 16, color: "#0f172a", fontWeight: 700 }}>
+                      Daftar Tiket
                     </Title>
-
-                    <Text type="secondary" style={{ fontSize: 16 }}>
-                      {selectedTicket
-                        ? buildTicketSummary(selectedTicket)
-                        : "Belum ada ticket yang dipilih."}
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      Pilih tiket untuk membuka percakapan.
                     </Text>
-                  </Space>
-                </div>
-
-                {selectedTicket ? (
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "flex-end",
-                      gap: 12,
-                      minWidth: 280,
-                      maxWidth: 340,
-                      width: "100%",
-                    }}
-                  >
-                    <Button
-                      type="primary"
-                      loading={onUpdateLoading}
-                      onClick={() => void handleUpdateStatus(nextTicketStatus)}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        width: "fit-content",
-                        borderRadius: 999,
-                        padding: "4px 14px",
-                        fontSize: 12,
-                        fontWeight: 600,
-                        boxShadow: "none",
-                      }}
-                    >
-                      {selectedTicketStatus === "completed"
-                        ? "Tandai On Going"
-                        : "Tandai Completed"}
-                    </Button>
-
-                    <Popconfirm
-                      title="Hapus ticket ini?"
-                      description="Ticket dan seluruh conversation chat akan dihapus."
-                      okText="Hapus"
-                      cancelText="Batal"
-                      okButtonProps={{
-                        danger: true,
-                        loading: deletingTicket,
-                      }}
-                      onConfirm={() => void handleDeleteTicket()}
-                    >
-                      <Button
-                        danger
-                        icon={<DeleteOutlined />}
-                        loading={deletingTicket}
-                        disabled={
-                          !selectedTicket || selectedTicketStatus === "ongoing"
-                        }
-                        style={{
-                          borderRadius: 999,
-                        }}
-                      >
-                        Delete Ticket
-                      </Button>
-                    </Popconfirm>
-
-                    <Card
-                      style={{
-                        width: "100%",
-                        borderRadius: 18,
-                        borderColor: "#dbe5ff",
-                        background: "#f8fbff",
-                      }}
-                      styles={{ body: { padding: 18 } }}
-                    >
-                      <Space
-                        direction="vertical"
-                        size={8}
-                        style={{ width: "100%" }}
-                      >
-                        <Space size={8} align="center">
-                          <TagOutlined style={{ color: "#2563eb" }} />
-                          <Text strong>Ticket</Text>
-                        </Space>
-
-                        <Text type="secondary" style={{ fontSize: 14 }}>
-                          {getTicketCode(selectedTicket)}
-                        </Text>
-
-                        <Text strong style={{ fontSize: 16 }}>
-                          {selectedTicket.name}
-                        </Text>
-
-                        <Text type="secondary">PIC: {selectedPicName}</Text>
-                      </Space>
-                    </Card>
                   </div>
-                ) : null}
-              </div>
 
-              <Card
-                loading={fetchLoading || messagesLoading}
-                style={{
-                  borderRadius: 22,
-                  borderColor: "#dbe5ff",
-                  boxShadow: "0 18px 34px rgba(15, 23, 42, 0.04)",
-                }}
-                styles={{ body: { padding: 16 } }}
-              >
-                {selectedTicket ? (
-                  <Space
-                    direction="vertical"
-                    size={18}
-                    style={{ width: "100%" }}
-                  >
-                    {mergedMessages.length ? (
-                      mergedMessages.map((message) => (
-                        <MessageBubble
-                          key={message.id}
-                          message={message}
-                          isMine={String(message.sender_id) === String(user_id)}
-                          currentUserName={currentUser?.name}
-                          currentUserRole={currentUser?.role}
-                          studentName={student_name}
+                  <Space direction="vertical" size={10} style={{ width: "100%" }}>
+                    {sortedTickets.length ? (
+                      sortedTickets.map((ticket) => (
+                        <TicketListItem
+                          key={ticket.id}
+                          ticket={ticket}
+                          isActive={ticket.id === selectedTicket?.id}
+                          onClick={() => handleSelectTicket(ticket.id)}
+                          buildTicketSummary={buildTicketSummary}
                         />
                       ))
                     ) : (
                       <div
                         style={{
-                          minHeight: 320,
-                          display: "grid",
-                          placeItems: "center",
+                          padding: "36px 16px",
+                          textAlign: "center",
+                          background: "#ffffff",
+                          borderRadius: 12,
+                          border: "1px dashed #cbd5e1",
                         }}
                       >
                         <Empty
                           image={Empty.PRESENTED_IMAGE_SIMPLE}
                           description={
-                            selectedConversationId
-                              ? "Belum ada pesan pada percakapan ini."
-                              : "Ticket ini belum terhubung ke conversation chat."
+                            <div>
+                              <Typography.Text strong style={{ display: "block", color: "#334155", fontSize: 13 }}>
+                                Belum Ada Tiket
+                              </Typography.Text>
+                              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                Belum ada tiket percakapan untuk mahasiswa ini.
+                              </Typography.Text>
+                            </div>
                           }
                         />
                       </div>
                     )}
-
-                    <Divider style={{ margin: "4px 0" }} />
-
-                    <PendingAttachments
-                      attachments={pendingAttachments}
-                      onRemove={handleRemoveAttachment}
-                    />
-
-                    <ChatComposer
-                      chatText={chatText}
-                      pendingAttachments={pendingAttachments}
-                      selectedTicket={selectedTicket}
-                      sendingMessage={sendingMessage}
-                      uploadingAttachments={uploadingAttachments}
-                      onTextChange={setChatText}
-                      onSend={() => void handleSendMessage()}
-                      onUpload={handleAttachmentUpload}
-                    />
                   </Space>
-                ) : (
-                  <div
-                    style={{
-                      minHeight: 360,
-                      display: "grid",
-                      placeItems: "center",
-                    }}
-                  >
-                    <Empty
-                      image={Empty.PRESENTED_IMAGE_SIMPLE}
-                      description="Belum ada ticket untuk student ini."
-                    />
-                  </div>
-                )}
-              </Card>
-            </Space>
-          </Col>
-        </Row>
+                </Space>
+              </div>
+            </Col>
 
-        <CreateTicketModal
-          open={modalVisible}
-          form={form}
-          loading={onCreateLoading || creatingConversation}
-          onCancel={handleCloseModal}
-          onFinish={handleCreateTicket}
-        />
-      </Space>
-    </Card>
+            {/* Right Column: Active Conversation */}
+            <Col xs={24} lg={16} xl={17}>
+              <Space direction="vertical" size={14} style={{ width: "100%" }}>
+                {/* Header Percakapan */}
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "flex-start",
+                    gap: 16,
+                    flexWrap: "wrap",
+                    width: "100%",
+                    padding: "16px 20px",
+                    background: "#f8fafc",
+                    borderRadius: 14,
+                    border: "1px solid #e2e8f0",
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: 260 }}>
+                    <Space direction="vertical" size={6} style={{ width: "100%" }}>
+                      <Space size={8} align="center" wrap>
+                        <TicketStatusPill status={selectedTicket?.status} />
+                        {selectedTicket ? (
+                          <Text type="secondary" style={{ fontSize: 11, fontFamily: "monospace" }}>
+                            {getTicketCode(selectedTicket)}
+                          </Text>
+                        ) : null}
+                      </Space>
+
+                      <Title level={4} style={{ margin: 0, fontSize: 18, color: "#0f172a", fontWeight: 700 }}>
+                        {selectedTicket?.name ?? "Pilih Tiket Percakapan"}
+                      </Title>
+
+                      <Text type="secondary" style={{ fontSize: 13 }}>
+                        {selectedTicket
+                          ? buildTicketSummary(selectedTicket)
+                          : "Pilih salah satu tiket di sebelah kiri untuk melihat riwayat pesan dan mengirim tanggapan."}
+                      </Text>
+                    </Space>
+                  </div>
+
+                  {selectedTicket ? (
+                    <Space size={10} wrap align="center">
+                      <Button
+                        loading={onUpdateLoading}
+                        onClick={() => void handleUpdateStatus(nextTicketStatus)}
+                        style={{
+                          borderRadius: 8,
+                          height: 36,
+                          fontSize: 12.5,
+                          fontWeight: 600,
+                        }}
+                      >
+                        {selectedTicketStatus === "completed"
+                          ? "Tandai Sedang Berjalan"
+                          : "Tandai Selesai"}
+                      </Button>
+
+                      <Popconfirm
+                        title="Hapus tiket ini?"
+                        description="Tiket dan seluruh percakapan di dalamnya akan dihapus."
+                        okText="Hapus"
+                        cancelText="Batal"
+                        okButtonProps={{
+                          danger: true,
+                          loading: deletingTicket,
+                        }}
+                        onConfirm={() => void handleDeleteTicket()}
+                      >
+                        <Button
+                          danger
+                          icon={<DeleteOutlined />}
+                          loading={deletingTicket}
+                          disabled={
+                            !selectedTicket || selectedTicketStatus === "ongoing"
+                          }
+                          style={{
+                            borderRadius: 8,
+                            height: 36,
+                            fontSize: 12.5,
+                            fontWeight: 600,
+                          }}
+                        >
+                          Hapus Tiket
+                        </Button>
+                      </Popconfirm>
+                    </Space>
+                  ) : null}
+                </div>
+
+                {/* Box Pesan Percakapan */}
+                <Card
+                  loading={fetchLoading || messagesLoading}
+                  style={{
+                    borderRadius: 14,
+                    borderColor: "#e2e8f0",
+                    boxShadow: "0 1px 3px rgba(15, 23, 42, 0.04)",
+                    background: "#ffffff",
+                  }}
+                  styles={{ body: { padding: 16 } }}
+                >
+                  {selectedTicket ? (
+                    <Space
+                      direction="vertical"
+                      size={18}
+                      style={{ width: "100%" }}
+                    >
+                      {mergedMessages.length ? (
+                        mergedMessages.map((message, index) => {
+                          const isNewDateGroup =
+                            index === 0 ||
+                            !isSameDay(
+                              mergedMessages[index - 1]?.created_at,
+                              message.created_at,
+                            );
+
+                          const isMine =
+                            String(message.sender_id) === String(user_id);
+                          const senderIdKey = String(message.sender_id ?? "");
+                          const senderNameKey = (message.sender_name ?? "")
+                            .trim()
+                            .toLowerCase();
+
+                          const resolvedAvatar =
+                            userAvatarMap.get(senderIdKey) ||
+                            (senderNameKey
+                              ? userAvatarByNameMap.get(senderNameKey)
+                              : undefined) ||
+                            (isMine
+                              ? getUserAvatarUrl(currentUser)
+                              : undefined) ||
+                            (message.sender_role?.toUpperCase() === "STUDENT"
+                              ? getUserAvatarUrl(studentUser) ||
+                                getStudentAvatarUrl({
+                                  name: student_name,
+                                } as UserDataModel)
+                              : undefined);
+
+                          return (
+                            <div key={message.id} style={{ width: "100%" }}>
+                              {isNewDateGroup && (
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    justifyContent: "center",
+                                    margin: "8px 0 16px",
+                                  }}
+                                >
+                                  <span
+                                    style={{
+                                      background: "#f1f5f9",
+                                      color: "#64748b",
+                                      fontSize: 11.5,
+                                      fontWeight: 600,
+                                      padding: "4px 14px",
+                                      borderRadius: 14,
+                                      border: "1px solid #e2e8f0",
+                                      boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+                                      letterSpacing: "0.2px",
+                                      userSelect: "none",
+                                    }}
+                                  >
+                                    {formatChatDateGroup(message.created_at)}
+                                  </span>
+                                </div>
+                              )}
+
+                              <MessageBubble
+                                message={message}
+                                isMine={isMine}
+                                currentUserName={currentUser?.name}
+                                currentUserRole={currentUser?.role}
+                                studentName={student_name}
+                                senderAvatarUrl={resolvedAvatar}
+                                renderText={renderMessageText}
+                              />
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div
+                          style={{
+                            minHeight: 280,
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            textAlign: "center",
+                            padding: 24,
+                          }}
+                        >
+                          <div
+                            style={{
+                              width: 48,
+                              height: 48,
+                              borderRadius: "50%",
+                              background: "#f1f5f9",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              fontSize: 22,
+                              color: "#94a3b8",
+                              marginBottom: 12,
+                            }}
+                          >
+                            <MessageOutlined />
+                          </div>
+                          <Typography.Text strong style={{ fontSize: 14, color: "#334155", marginBottom: 4 }}>
+                            Belum Ada Pesan
+                          </Typography.Text>
+                          <Typography.Text type="secondary" style={{ fontSize: 12.5 }}>
+                            {selectedConversationId
+                              ? "Mulai percakapan dengan mengetik pesan di bawah ini."
+                              : "Tiket ini belum terhubung ke percakapan."}
+                          </Typography.Text>
+                        </div>
+                      )}
+
+                      <Divider style={{ margin: "4px 0" }} />
+
+                      <PendingAttachments
+                        attachments={pendingAttachments}
+                        onRemove={handleRemoveAttachment}
+                      />
+
+                      <ChatComposer
+                        chatText={chatText}
+                        pendingAttachments={pendingAttachments}
+                        selectedTicket={selectedTicket}
+                        sendingMessage={sendingMessage}
+                        uploadingAttachments={uploadingAttachments}
+                        mentionOptions={mentionOptions}
+                        onTextChange={setChatText}
+                        onSend={() => void handleSendMessage()}
+                        onUpload={handleAttachmentUpload}
+                      />
+                    </Space>
+                  ) : (
+                    <div
+                      style={{
+                        minHeight: 340,
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        textAlign: "center",
+                        padding: 32,
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: 52,
+                          height: 52,
+                          borderRadius: "50%",
+                          background: "#f1f5f9",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: 24,
+                          color: "#94a3b8",
+                          marginBottom: 12,
+                        }}
+                      >
+                        <MessageOutlined />
+                      </div>
+                      <Typography.Text strong style={{ fontSize: 15, color: "#1e293b", marginBottom: 4 }}>
+                        Belum Ada Tiket yang Dipilih
+                      </Typography.Text>
+                      <Typography.Text type="secondary" style={{ fontSize: 13, maxWidth: 360 }}>
+                        Pilih salah satu tiket di sebelah kiri untuk membuka riwayat obrolan atau buat tiket baru.
+                      </Typography.Text>
+                    </div>
+                  )}
+                </Card>
+              </Space>
+            </Col>
+          </Row>
+
+          <CreateTicketModal
+            open={modalVisible}
+            form={form}
+            loading={onCreateLoading || creatingConversation}
+            onCancel={handleCloseModal}
+            onFinish={handleCreateTicket}
+          />
+        </Space>
+      </Card>
+    </Space>
   );
 }

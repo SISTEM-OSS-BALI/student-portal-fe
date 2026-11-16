@@ -19,7 +19,7 @@ type FinalizePdfRequest = {
   source_file_type?: string;
   word_file_url?: string | null;
   word_file_path?: string | null;
-  word_file_name?: string | null;
+  word_file_name?: string | null; 
   word_file_type?: string | null;
 };
 

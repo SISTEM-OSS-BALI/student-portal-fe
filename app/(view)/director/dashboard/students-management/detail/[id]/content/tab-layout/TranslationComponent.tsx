@@ -6,6 +6,7 @@ import {
   Button,
   Card,
   Col,
+  Flex,
   Row,
   Space,
   Table,
@@ -23,6 +24,7 @@ import { useAnswerDocuments } from "@/app/hooks/use-answer-documents";
 import { useDocumentTranslations } from "@/app/hooks/use-document-translations";
 import { useDocuments } from "@/app/hooks/use-documents-management";
 import { buildFilePreviewUrl } from "@/app/utils/file-preview";
+import styles from "../detail.module.css";
 
 type TranslationComponentProps = {
   student_id: string;
@@ -175,8 +177,9 @@ export default function TranslationComponent({
                 : undefined
             }
             target={record.original_file_url ? "_blank" : undefined}
+            style={{ borderRadius: 8 }}
           >
-            Lihat Dokumen Asli
+            Lihat Asli
           </Button>
         ),
       },
@@ -198,8 +201,9 @@ export default function TranslationComponent({
                   : undefined
               }
               target={record.translated_file_url ? "_blank" : undefined}
+              style={{ borderRadius: 8 }}
             >
-              Lihat Hasil Translate
+              Lihat Terjemahan
             </Button>
           </Space>
         ),
@@ -209,61 +213,45 @@ export default function TranslationComponent({
   );
 
   return (
-    <Space direction="vertical" size={16} style={{ width: "100%" }}>
-      <Row gutter={[16, 16]}>
-        <Col xs={24} md={12}>
-          <Card
-            styles={{ body: { padding: 20 } }}
+    <div style={{ display: "flex", flexDirection: "column", gap: 16, width: "100%", maxWidth: "100%", minWidth: 0 }}>
+      {/* Standardized Section Header Card */}
+      <Card
+        className={styles.sectionHeaderCard}
+        styles={{ body: { padding: 0 } }}
+      >
+        <Flex justify="space-between" align="center" gap={12}>
+          <Flex align="center" gap={12} style={{ minWidth: 0, flex: "1 1 auto" }}>
+            <div className={styles.sectionHeaderIcon}>
+              <TranslationOutlined />
+            </div>
+            <div style={{ minWidth: 0, flex: 1, overflow: "hidden" }}>
+              <div className={styles.sectionHeaderTitle}>
+                Penerjemahan Tersumpah
+              </div>
+              <div className={styles.sectionHeaderSubtitle}>
+                Dokumen terjemahan resmi mahasiswa
+              </div>
+            </div>
+          </Flex>
+
+          <Tag
+            color="blue"
             style={{
-              borderRadius: 16,
-              borderColor: "#dbeafe",
-              boxShadow: "0 10px 24px rgba(37, 99, 235, 0.08)",
+              margin: 0,
+              borderRadius: 6,
+              fontSize: 11,
+              fontWeight: 600,
+              padding: "1px 8px",
+              border: "1px solid #bfdbfe",
+              background: "#eff6ff",
+              color: "#1d4ed8",
+              flexShrink: 0,
             }}
           >
-            <Space align="center" size={12}>
-              <Avatar
-                size={42}
-                icon={<TranslationOutlined />}
-                style={{ background: "#dbeafe", color: "#2563eb" }}
-              />
-              <Space direction="vertical" size={0}>
-                <Typography.Text type="secondary">
-                  Sudah di-translate
-                </Typography.Text>
-                <Typography.Title level={3} style={{ margin: 0 }}>
-                  {translatedCount}
-                </Typography.Title>
-              </Space>
-            </Space>
-          </Card>
-        </Col>
-        <Col xs={24} md={12}>
-          <Card
-            styles={{ body: { padding: 20 } }}
-            style={{
-              borderRadius: 16,
-              borderColor: "#e5e7eb",
-              boxShadow: "0 10px 24px rgba(15, 23, 42, 0.05)",
-            }}
-          >
-            <Space align="center" size={12}>
-              <Avatar
-                size={42}
-                icon={<CheckCircleFilled />}
-                style={{ background: "#f3f4f6", color: "#6b7280" }}
-              />
-              <Space direction="vertical" size={0}>
-                <Typography.Text type="secondary">
-                  Belum di-translate
-                </Typography.Text>
-                <Typography.Title level={3} style={{ margin: 0 }}>
-                  {notTranslatedCount}
-                </Typography.Title>
-              </Space>
-            </Space>
-          </Card>
-        </Col>
-      </Row>
+            {translatedCount} Selesai · {notTranslatedCount} Belum
+          </Tag>
+        </Flex>
+      </Card>
 
       <Card
         styles={{ body: { padding: 16 } }}
@@ -271,19 +259,12 @@ export default function TranslationComponent({
           borderRadius: 16,
           borderColor: "#e2e8f0",
           boxShadow: "0 10px 26px rgba(15, 23, 42, 0.05)",
+          width: "100%",
+          overflow: "hidden",
         }}
       >
-        <Space direction="vertical" size={16} style={{ width: "100%" }}>
-          <Space direction="vertical" size={2}>
-            <Typography.Title level={5} style={{ marginBottom: 0 }}>
-              Status Dokumen Translation
-            </Typography.Title>
-            <Typography.Text type="secondary">
-              Director dapat melihat dokumen asli, hasil translate, dan status
-              apakah dokumen tersebut sudah diterjemahkan atau belum.
-            </Typography.Text>
-          </Space>
-
+        {/* Desktop Table View */}
+        <div className={styles.desktopTableOnly}>
           <Table
             columns={columns}
             dataSource={rows}
@@ -294,8 +275,82 @@ export default function TranslationComponent({
             }}
             scroll={{ x: 760 }}
           />
-        </Space>
+        </div>
+
+        {/* Mobile Responsive Cards View */}
+        <div className={styles.mobileCardListOnly}>
+          {rows.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "16px 0", color: "#64748b" }}>
+              Tidak ada dokumen yang membutuhkan translation.
+            </div>
+          ) : (
+            rows.map((row) => (
+              <div
+                key={row.key}
+                style={{
+                  background: "#ffffff",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: 12,
+                  padding: "12px 14px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 8,
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                  <Typography.Text strong style={{ fontSize: 13.5, color: "#0f172a", flex: 1 }}>
+                    {row.label}
+                  </Typography.Text>
+                  <Tag
+                    color={getStatusColor(row.status)}
+                    style={{ margin: 0, fontSize: 10.5, borderRadius: 6, fontWeight: 600, padding: "1px 6px" }}
+                  >
+                    {getStatusLabel(row.status)}
+                  </Tag>
+                </div>
+
+                {row.updated_at && (
+                  <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+                    Diperbarui {formatDate(row.updated_at)}
+                  </Typography.Text>
+                )}
+
+                <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                  <Button
+                    size="small"
+                    icon={<EyeOutlined />}
+                    disabled={!row.original_file_url}
+                    href={
+                      row.original_file_url
+                        ? buildFilePreviewUrl(row.original_file_url, row.original_file_name ?? `${row.label}.pdf`)
+                        : undefined
+                    }
+                    target={row.original_file_url ? "_blank" : undefined}
+                    style={{ flex: 1, borderRadius: 6, height: 32, fontSize: 12 }}
+                  >
+                    Lihat Asli
+                  </Button>
+                  <Button
+                    size="small"
+                    type="primary"
+                    icon={<EyeOutlined />}
+                    disabled={!row.translated_file_url}
+                    href={
+                      row.translated_file_url
+                        ? buildFilePreviewUrl(row.translated_file_url, row.translated_file_name ?? `${row.label}-translation.pdf`)
+                        : undefined
+                    }
+                    target={row.translated_file_url ? "_blank" : undefined}
+                    style={{ flex: 1, borderRadius: 6, height: 32, fontSize: 12, background: "#1b3d6d", borderColor: "#1b3d6d" }}
+                  >
+                    Lihat Terjemahan
+                  </Button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
       </Card>
-    </Space>
+    </div>
   );
 }

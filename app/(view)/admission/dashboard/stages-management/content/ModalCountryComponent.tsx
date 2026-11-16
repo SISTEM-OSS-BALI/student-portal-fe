@@ -30,7 +30,7 @@ export default function ModalCountryComponent({
     <div>
       <Modal
         open={open}
-        title={selectedCountry ? "Edit Negara" : "Buat Negara"}
+        title={selectedCountry ? "Edit Destination Country" : "Add Destination Country"}
         onCancel={onCancelModal}
         destroyOnClose
         footer={null}

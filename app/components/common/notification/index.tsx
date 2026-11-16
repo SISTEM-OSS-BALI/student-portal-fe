@@ -6,12 +6,14 @@ type NotificationProps = {
   type: "success" | "error";
   entity: string;
   action: string;
+  message?: string;
+  description?: string;
 };
 
 export const useMainNotification = () => {
   const { notification } = App.useApp();
 
-  return ({ type, entity, action }: NotificationProps) => {
+  return ({ type, entity, action, message, description }: NotificationProps) => {
     const generalNotification = {
       success: {
         message: "Success!",
@@ -24,8 +26,8 @@ export const useMainNotification = () => {
     };
 
     notification[type]({
-      message: generalNotification[type].message,
-      description: generalNotification[type].description,
+      message: message ?? generalNotification[type].message,
+      description: description ?? generalNotification[type].description,
     });
   };
 };
