@@ -52,8 +52,13 @@ import api from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 import type { UploadedChatAttachment } from "@/app/vendor/chat-upload";
 import { uploadChatFiles } from "@/app/vendor/chat-upload";
-import { formatChatMessageTime } from "@/app/utils/student-helpers";
-import { useRouter } from "next/navigation";
+import {
+  formatChatDateGroup,
+  formatChatMessageTime,
+  formatChatTimeOnly,
+  isSameDay,
+} from "@/app/utils/student-helpers";
+import { useRouter, useSearchParams } from "next/navigation";
 
 interface OverviewComponentProps {
   detailStudent: UserDataModel;
@@ -86,6 +91,13 @@ const getUserHandle = (user: UserDataModel) => {
 const formatRoleLabel = (value?: string | null) => {
   const raw = String(value ?? "").trim();
   return raw ? raw.replace(/_/g, " ").toUpperCase() : "UNKNOWN";
+};
+
+const getInitials = (value?: string | null) => {
+  const text = (value ?? "").trim();
+  if (!text) return "US";
+  const parts = text.split(/\s+/).slice(0, 2);
+  return parts.map((item) => item[0]?.toUpperCase() ?? "").join("");
 };
 
 const getRoleTagColor = (value?: string | null) => {
@@ -356,6 +368,24 @@ export default function OverviewComponent({
     return getUserHandle(currentUser);
   }, [currentUser]);
 
+  const userMap = useMemo(() => {
+    const map = new Map<string, UserDataModel>();
+    (usersData ?? []).forEach((u) => {
+      if (u.id) map.set(String(u.id), u);
+    });
+    return map;
+  }, [usersData]);
+
+  const searchParams = useSearchParams();
+  const notesCardRef = useRef<HTMLDivElement | null>(null);
+  const chatScrollRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (searchParams?.get("focus") === "internal-notes" && notesCardRef.current) {
+      notesCardRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [searchParams]);
+
   const { onUpdate: onUpdateUser, onUpdateLoading: onUpdateUserLoading } =
     useUpdateUser();
   const [isEditCampusModalOpen, setIsEditCampusModalOpen] = useState(false);
@@ -484,6 +514,12 @@ export default function OverviewComponent({
     });
   }, [mergedChatMessages, currentUserId, currentUser?.role, studentId]);
 
+  useEffect(() => {
+    if (chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+    }
+  }, [internalChatMessages.length]);
+
   const handleIncomingMessage = useCallback(
     (message: ChatMessage) => {
       const key = message.conversation_id;
@@ -506,12 +542,13 @@ export default function OverviewComponent({
 
       if (mentioned && message.sender_id !== currentUserId) {
         notification.info({
-          message: "You were mentioned",
-          description: message.text?.slice(0, 120) ?? "You have a new mention.",
+          message: "Anda ditandai dalam Catatan Internal",
+          description: `${message.sender_name ?? "Seseorang"}: "${message.text?.slice(0, 100) ?? ""}"`,
         });
+        queryClient.invalidateQueries({ queryKey: ["chat-mentions"] });
       }
     },
-    [mergeChatMessages, currentUserHandle, currentUserId, notification],
+    [mergeChatMessages, currentUserHandle, currentUserId, notification, queryClient],
   );
 
   const { connected, lastError } = useChatSocket({
@@ -618,6 +655,19 @@ export default function OverviewComponent({
           [key]: mergeChatMessages(prev[key] ?? [], [message]),
         }));
       }
+
+      queryClient.invalidateQueries({
+        queryKey: ["chat-messages", conversation_id],
+      });
+      queryClient.invalidateQueries({ queryKey: ["chat-mentions"] });
+
+      notification.success({
+        message: "Catatan internal terkirim",
+        description:
+          mention_user_ids.length > 0
+            ? "Notifikasi mention telah dikirimkan ke pengguna terkait."
+            : "Catatan internal berhasil ditambahkan.",
+      });
     } catch {
       notification.error({
         message: "Gagal mengirim pesan",
@@ -635,6 +685,7 @@ export default function OverviewComponent({
     notification,
     sendMessageViaApi,
     mergeChatMessages,
+    queryClient,
   ]);
 
   const handleStartEditMessage = useCallback((message: ChatMessage) => {
@@ -674,6 +725,11 @@ export default function OverviewComponent({
 
       setEditingMessageId(null);
       setEditingText("");
+
+      queryClient.invalidateQueries({
+        queryKey: ["chat-messages", conversation_id],
+      });
+      queryClient.invalidateQueries({ queryKey: ["chat-mentions"] });
     } catch {
       notification.error({
         message: "Gagal menyimpan perubahan",
@@ -688,6 +744,8 @@ export default function OverviewComponent({
     extractMentionUserIds,
     mergeChatMessages,
     notification,
+    queryClient,
+    conversation_id,
   ]);
 
   useEffect(() => {
@@ -1138,6 +1196,8 @@ export default function OverviewComponent({
       </div>
 
       <Card
+        ref={notesCardRef}
+        id="internal-notes-section"
         styles={{ body: { padding: 20 } }}
         style={{
           borderRadius: 20,
@@ -1166,202 +1226,354 @@ export default function OverviewComponent({
           )}
 
           <div
+            ref={chatScrollRef}
             style={{
-              maxHeight: 340,
+              maxHeight: 380,
               overflowY: "auto",
               overflowX: "hidden",
-              padding: 8,
+              padding: "16px 14px",
               borderRadius: 16,
               border: "1px solid #e6edf5",
-              background: "rgba(255,255,255,0.78)",
+              background: "#f8fafc",
             }}
           >
             <List
               dataSource={internalChatMessages}
-              locale={{ emptyText: "Belum ada pesan" }}
-              renderItem={(message) => {
+              locale={{ emptyText: "Belum ada catatan internal" }}
+              renderItem={(message, index) => {
                 const isMine =
                   String(message.sender_id) === String(currentUserId);
-                const timeLabel = formatChatMessageTime(message.created_at);
                 const mentionIds = message.mention_user_ids ?? [];
                 const isMentioned =
                   (currentUserId && mentionIds.includes(currentUserId)) ||
                   (currentUserHandle &&
                     (message.text ?? "").includes(`@${currentUserHandle}`));
                 const attachments = message.attachments ?? [];
+                const senderUser = message.sender_id
+                  ? userMap.get(String(message.sender_id))
+                  : undefined;
+                const senderAvatarUrl =
+                  message.sender_profile_picture ||
+                  senderUser?.profile_picture_url ||
+                  (isMine ? currentUser?.profile_picture_url : undefined) ||
+                  undefined;
                 const senderName =
                   message.sender_name ??
+                  senderUser?.name ??
                   (isMine
-                    ? (currentUser?.name ?? "You")
-                    : (props.detailStudent?.name ?? "Student"));
+                    ? (currentUser?.name ?? "Admission")
+                    : (props.detailStudent?.name ?? "Staff"));
                 const senderRole =
                   message.sender_role ??
-                  (isMine ? (currentUser?.role ?? "ADMISSION") : "STUDENT");
+                  senderUser?.role ??
+                  (isMine ? (currentUser?.role ?? "ADMISSION") : "ADMISSION");
+
+                const showDateDivider =
+                  index === 0 ||
+                  !isSameDay(
+                    message.created_at,
+                    internalChatMessages[index - 1]?.created_at,
+                  );
+
+                const bubbleBg = isMine
+                  ? "#dcf8c6"
+                  : isMentioned
+                    ? "#fff4c7"
+                    : "#ffffff";
+                const borderColor = isMine
+                  ? "#b8e6a0"
+                  : isMentioned
+                    ? "#f3dc8d"
+                    : "#e5e7eb";
+                const avatarBg = isMine ? "#1b3d6d" : "#0f4c8a";
 
                 return (
-                  <List.Item style={{ paddingInline: 0, border: "none" }}>
-                    <Flex
-                      style={{ width: "100%" }}
-                      justify={isMine ? "flex-end" : "flex-start"}
-                    >
-                      <div style={{ maxWidth: "76%", position: "relative" }}>
-                        <Space
-                          direction="vertical"
-                          size={6}
-                          style={{
-                            width: "100%",
-                            background: isMine
-                              ? "#dcf8c6"
-                              : isMentioned
-                                ? "#fff4c7"
-                                : "#ffffff",
-                            border: isMine
-                              ? "1px solid #b8e6a0"
-                              : isMentioned
-                                ? "1px solid #f3dc8d"
-                                : "1px solid #e5e7eb",
-                            padding: "10px 14px",
-                            borderRadius: isMine
-                              ? "16px 6px 16px 16px"
-                              : "6px 16px 16px 16px",
-                            boxShadow: "0 2px 10px rgba(15, 23, 42, 0.06)",
-                          }}
-                        >
-                        <Flex
-                          align="center"
-                          justify="space-between"
-                          gap={10}
-                          wrap
-                        >
-                          <Space size={8} align="center" wrap>
-                            <Typography.Text strong style={{ fontSize: 12 }}>
-                              {senderName}
-                            </Typography.Text>
-
-                            <Tag
-                              color={getRoleTagColor(senderRole)}
-                              style={{ margin: 0, fontSize: 10 }}
-                            >
-                              {formatRoleLabel(senderRole)}
-                            </Tag>
-
-                            {isMentioned && !isMine && (
-                              <Tag color="gold" style={{ margin: 0 }}>
-                                Mentioned you
-                              </Tag>
-                            )}
-                          </Space>
-
-                          <Space size={6} align="center">
-                            <Typography.Text
-                              type="secondary"
-                              style={{ fontSize: 11, whiteSpace: "nowrap" }}
-                            >
-                              {timeLabel}
-                            </Typography.Text>
-                            {isMine && message.text && (
-                              <Button
-                                type="text"
-                                size="small"
-                                icon={<EditOutlined />}
-                                onClick={() => handleStartEditMessage(message)}
-                                style={{ height: 22, padding: "0 4px" }}
-                              />
-                            )}
-                          </Space>
-                        </Flex>
-
-                        {message.text && (
-                          <Typography.Text
-                            style={{ fontSize: 13, whiteSpace: "pre-wrap" }}
-                          >
-                            {renderMessageText(message.text)}
-                            {message.edited_at && (
-                              <Typography.Text
-                                type="secondary"
-                                style={{ fontSize: 11, fontStyle: "italic" }}
-                              >
-                                {" "}
-                                (diedit)
-                              </Typography.Text>
-                            )}
-                          </Typography.Text>
-                        )}
-
-                        {attachments.length > 0 && (
-                          <Space direction="vertical" size={6}>
-                            {attachments.map((attachment) => {
-                              const isImage =
-                                attachment.mime_type?.startsWith("image/") ??
-                                false;
-
-                              if (isImage) {
-                                return (
-                                  <Image
-                                    key={attachment.url}
-                                    src={attachment.url}
-                                    alt={attachment.name}
-                                    style={{
-                                      maxWidth: 220,
-                                      borderRadius: 8,
-                                      border: "1px solid #e2e8f0",
-                                    }}
-                                  />
-                                );
-                              }
-
-                              return (
-                                <a
-                                  key={attachment.url}
-                                  href={attachment.url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  style={{
-                                    fontSize: 12,
-                                    color: "#2563eb",
-                                    textDecoration: "underline",
-                                  }}
-                                >
-                                  {attachment.name || "Download file"}
-                                </a>
-                              );
-                            })}
-                          </Space>
-                        )}
-
-                        </Space>
+                  <List.Item
+                    key={message.id || index}
+                    style={{ paddingInline: 0, paddingBlock: 4, border: "none" }}
+                  >
+                    <div style={{ width: "100%" }}>
+                      {showDateDivider && (
                         <div
                           style={{
-                            position: "absolute",
-                            top: 10,
-                            ...(isMine ? { right: -6 } : { left: -6 }),
-                            width: 12,
-                            height: 12,
-                            background: isMine
-                              ? "#dcf8c6"
-                              : isMentioned
-                                ? "#fff4c7"
-                                : "#ffffff",
-                            borderBottom: isMine
-                              ? "1px solid #b8e6a0"
-                              : isMentioned
-                                ? "1px solid #f3dc8d"
-                                : "1px solid #e5e7eb",
-                            borderRight: isMine
-                              ? "1px solid #b8e6a0"
-                              : "none",
-                            borderLeft: !isMine
-                              ? isMentioned
-                                ? "1px solid #f3dc8d"
-                                : "1px solid #e5e7eb"
-                              : "none",
-                            transform: isMine
-                              ? "rotate(-35deg)"
-                              : "rotate(35deg)",
+                            display: "flex",
+                            justifyContent: "center",
+                            margin: "12px 0 16px",
                           }}
-                        />
-                      </div>
-                    </Flex>
+                        >
+                          <span
+                            style={{
+                              background: "#f1f5f9",
+                              color: "#64748b",
+                              fontSize: 11.5,
+                              fontWeight: 600,
+                              padding: "4px 14px",
+                              borderRadius: 14,
+                              border: "1px solid #e2e8f0",
+                              boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+                              letterSpacing: "0.2px",
+                              userSelect: "none",
+                            }}
+                          >
+                            {formatChatDateGroup(message.created_at)}
+                          </span>
+                        </div>
+                      )}
+
+                      <Flex
+                        style={{ width: "100%" }}
+                        justify={isMine ? "flex-end" : "flex-start"}
+                      >
+                        <Space
+                          align="end"
+                          size={10}
+                          style={{
+                            maxWidth: "85%",
+                            flexDirection: isMine ? "row-reverse" : "row",
+                          }}
+                        >
+                          <Avatar
+                            size={32}
+                            src={senderAvatarUrl}
+                            style={{
+                              background: avatarBg,
+                              fontSize: 12,
+                              fontWeight: 700,
+                              flexShrink: 0,
+                              border: "1px solid #e2e8f0",
+                            }}
+                          >
+                            {!senderAvatarUrl && getInitials(senderName)}
+                          </Avatar>
+
+                          <div style={{ minWidth: 0 }}>
+                            {!isMine ? (
+                              <div
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 6,
+                                  marginBottom: 4,
+                                  paddingLeft: 2,
+                                }}
+                              >
+                                <Typography.Text
+                                  strong
+                                  style={{ fontSize: 12, color: "#334155" }}
+                                >
+                                  {senderName}
+                                </Typography.Text>
+
+                                <Tag
+                                  color={getRoleTagColor(senderRole)}
+                                  style={{ margin: 0, fontSize: 10 }}
+                                >
+                                  {formatRoleLabel(senderRole)}
+                                </Tag>
+
+                                {isMentioned && (
+                                  <Tag
+                                    color="gold"
+                                    style={{ margin: 0, fontSize: 10 }}
+                                  >
+                                    Mentioned you
+                                  </Tag>
+                                )}
+                              </div>
+                            ) : (
+                              <div
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "flex-end",
+                                  alignItems: "center",
+                                  gap: 6,
+                                  marginBottom: 4,
+                                  paddingRight: 2,
+                                }}
+                              >
+                                <Typography.Text
+                                  strong
+                                  style={{ fontSize: 12, color: "#334155" }}
+                                >
+                                  {senderName}
+                                </Typography.Text>
+                                <Tag
+                                  color={getRoleTagColor(senderRole)}
+                                  style={{ margin: 0, fontSize: 10 }}
+                                >
+                                  {formatRoleLabel(senderRole)}
+                                </Tag>
+                              </div>
+                            )}
+
+                            <div style={{ position: "relative" }}>
+                              <div
+                                style={{
+                                  borderRadius: isMine
+                                    ? "16px 6px 16px 16px"
+                                    : "6px 16px 16px 16px",
+                                  border: `1px solid ${borderColor}`,
+                                  background: bubbleBg,
+                                  color: "#334155",
+                                  padding: "10px 14px",
+                                  boxShadow:
+                                    "0 2px 10px rgba(15, 23, 42, 0.06)",
+                                  minWidth: 120,
+                                }}
+                              >
+                                {message.text && (
+                                  <Typography.Paragraph
+                                    style={{
+                                      margin: 0,
+                                      color: "#334155",
+                                      lineHeight: 1.6,
+                                      fontSize: 13,
+                                      whiteSpace: "pre-wrap",
+                                    }}
+                                  >
+                                    {renderMessageText(message.text)}
+                                    {message.edited_at && (
+                                      <Typography.Text
+                                        type="secondary"
+                                        style={{
+                                          fontSize: 11,
+                                          fontStyle: "italic",
+                                          marginLeft: 4,
+                                        }}
+                                      >
+                                        (diedit)
+                                      </Typography.Text>
+                                    )}
+                                  </Typography.Paragraph>
+                                )}
+
+                                {attachments.length > 0 && (
+                                  <Space
+                                    direction="vertical"
+                                    size={6}
+                                    style={{
+                                      marginTop: message.text ? 8 : 0,
+                                    }}
+                                  >
+                                    {attachments.map((attachment) => {
+                                      const isImage =
+                                        attachment.mime_type?.startsWith(
+                                          "image/",
+                                        ) ?? false;
+
+                                      if (isImage) {
+                                        return (
+                                          <Image
+                                            key={attachment.url}
+                                            src={attachment.url}
+                                            alt={attachment.name}
+                                            style={{
+                                              maxWidth: 220,
+                                              borderRadius: 8,
+                                              border: "1px solid #e2e8f0",
+                                            }}
+                                          />
+                                        );
+                                      }
+
+                                      return (
+                                        <a
+                                          key={attachment.url}
+                                          href={attachment.url}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          style={{
+                                            fontSize: 12,
+                                            color: "#2563eb",
+                                            display: "inline-flex",
+                                            gap: 6,
+                                            alignItems: "center",
+                                          }}
+                                        >
+                                          <PaperClipOutlined />
+                                          {attachment.name || "Download file"}
+                                        </a>
+                                      );
+                                    })}
+                                  </Space>
+                                )}
+
+                                {/* Jam di pojok kanan bawah bubble chat ala WhatsApp */}
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    justifyContent: "flex-end",
+                                    alignItems: "center",
+                                    gap: 4,
+                                    marginTop: 4,
+                                    userSelect: "none",
+                                  }}
+                                >
+                                  <span
+                                    style={{
+                                      fontSize: 10.5,
+                                      color: isMine ? "#166534" : "#94a3b8",
+                                      lineHeight: 1,
+                                      fontWeight: 500,
+                                    }}
+                                  >
+                                    {formatChatTimeOnly(message.created_at)}
+                                  </span>
+                                  {isMine && message.text && (
+                                    <Button
+                                      type="text"
+                                      size="small"
+                                      icon={
+                                        <EditOutlined
+                                          style={{
+                                            fontSize: 11,
+                                            color: isMine
+                                              ? "#166534"
+                                              : "#64748b",
+                                          }}
+                                        />
+                                      }
+                                      onClick={() =>
+                                        handleStartEditMessage(message)
+                                      }
+                                      style={{
+                                        height: 18,
+                                        width: 18,
+                                        padding: 0,
+                                        minWidth: 18,
+                                      }}
+                                      title="Edit catatan"
+                                    />
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Bubble Tail */}
+                              <div
+                                style={{
+                                  position: "absolute",
+                                  top: 10,
+                                  ...(isMine ? { right: -6 } : { left: -6 }),
+                                  width: 12,
+                                  height: 12,
+                                  background: bubbleBg,
+                                  borderBottom: `1px solid ${borderColor}`,
+                                  borderRight: isMine
+                                    ? `1px solid ${borderColor}`
+                                    : "none",
+                                  borderLeft: !isMine
+                                    ? `1px solid ${borderColor}`
+                                    : "none",
+                                  transform: isMine
+                                    ? "rotate(-35deg)"
+                                    : "rotate(35deg)",
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </Space>
+                      </Flex>
+                    </div>
                   </List.Item>
                 );
               }}

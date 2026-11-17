@@ -810,4 +810,18 @@ export function isWorkflowVisaGrantChecked(
   return Boolean(checkedMap[String(item.id)]);
 }
 
+/**
+ * Memeriksa apakah pesan chat masih dalam batas waktu yang diizinkan untuk diedit (default: maksimal 15 menit)
+ */
+export function isChatMessageEditable(
+  createdAt?: string | null,
+  maxMinutes = 15,
+): boolean {
+  if (!createdAt) return false;
+  const time = new Date(createdAt).getTime();
+  if (Number.isNaN(time)) return false;
+  const diffMs = Date.now() - time;
+  return diffMs >= 0 && diffMs <= maxMinutes * 60 * 1000;
+}
+
 

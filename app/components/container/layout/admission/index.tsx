@@ -208,11 +208,16 @@ export default function AdmissionLayout({
     const targetPath = resolveStudentDetailPath(item.context_user_id);
     const params = new URLSearchParams();
 
-    if (item.conversation_id) {
+    const isTicket = item.conversation_id
+      ? ticketConversationIds.has(item.conversation_id)
+      : false;
+
+    if (isTicket) {
       params.set("tab", "chat");
-      params.set("conversation_id", item.conversation_id);
+      params.set("conversation_id", item.conversation_id!);
     } else {
       params.set("tab", "overview");
+      params.set("focus", "internal-notes");
     }
 
     router.push(`${targetPath}?${params.toString()}`);

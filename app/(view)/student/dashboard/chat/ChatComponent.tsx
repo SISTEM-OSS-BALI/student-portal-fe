@@ -24,6 +24,7 @@ import type { TourProps } from "antd";
 import {
   ClockCircleOutlined,
   CloseOutlined,
+  EditOutlined,
   MessageOutlined,
   PaperClipOutlined,
   PlusOutlined,
@@ -32,6 +33,7 @@ import {
   PaperClipOutlined as AttachmentIcon,
 } from "@ant-design/icons";
 import api from "@/lib/api";
+import { useQueryClient } from "@tanstack/react-query";
 import { useTicketMessages } from "@/app/hooks/use-ticket-message";
 import {
   useChatMessages,
@@ -53,6 +55,7 @@ import {
   formatChatMessageTime,
   formatChatTimeOnly,
   getStudentAvatarUrl,
+  isChatMessageEditable,
   isSameDay,
 } from "@/app/utils/student-helpers";
 import type { UploadedChatAttachment } from "@/app/vendor/chat-upload";
@@ -188,12 +191,14 @@ function ChatBubbleItem({
   currentUserName,
   currentUserRole,
   senderAvatarUrl,
+  onStartEdit,
 }: {
   message: ChatMessage;
   isMine: boolean;
   currentUserName?: string;
   currentUserRole?: string;
   senderAvatarUrl?: string | null;
+  onStartEdit?: (message: ChatMessage) => void;
 }) {
   const senderName =
     message.sender_name ??
@@ -323,6 +328,18 @@ function ChatBubbleItem({
                 }}
               >
                 {message.text}
+                {message.edited_at && (
+                  <Text
+                    type="secondary"
+                    style={{
+                      fontSize: 11,
+                      fontStyle: "italic",
+                      marginLeft: 4,
+                    }}
+                  >
+                    (diedit)
+                  </Text>
+                )}
               </Text>
             ) : null}
 
@@ -387,6 +404,7 @@ function ChatBubbleItem({
                 display: "flex",
                 justifyContent: "flex-end",
                 alignItems: "center",
+                gap: 4,
                 marginTop: 4,
                 userSelect: "none",
               }}
@@ -401,6 +419,28 @@ function ChatBubbleItem({
               >
                 {time}
               </span>
+              {isMine && message.text && isChatMessageEditable(message.created_at, 15) && (
+                <Button
+                  type="text"
+                  size="small"
+                  icon={
+                    <EditOutlined
+                      style={{
+                        fontSize: 11,
+                        color: isMine ? "#166534" : "#64748b",
+                      }}
+                    />
+                  }
+                  onClick={() => onStartEdit?.(message)}
+                  style={{
+                    height: 18,
+                    width: 18,
+                    padding: 0,
+                    minWidth: 18,
+                  }}
+                  title="Edit pesan (maks. 15 menit)"
+                />
+              )}
             </div>
             </div>
             <div
@@ -432,6 +472,7 @@ export default function ChatComponent() {
     "student_tour_chat_done",
   );
 
+  const queryClient = useQueryClient();
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [chatText, setChatText] = useState("");
@@ -440,6 +481,9 @@ export default function ChatComponent() {
   const [pendingAttachments, setPendingAttachments] = useState<
     UploadedChatAttachment[]
   >([]);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState("");
+  const [savingEditMessage, setSavingEditMessage] = useState(false);
   const [localMessagesByConversation, setLocalMessagesByConversation] =
     useState<Record<string, ChatMessage[]>>({});
   const [conversationOverrides, setConversationOverrides] = useState<
@@ -605,7 +649,79 @@ export default function ChatComponent() {
     setSelectedTicketId(ticketId);
     setChatText("");
     setPendingAttachments([]);
+    setEditingMessageId(null);
+    setEditingText("");
   };
+
+  const handleStartEditMessage = useCallback((message: ChatMessage) => {
+    if (!isChatMessageEditable(message.created_at, 15)) {
+      notification.warning({
+        message: "Waktu edit telah habis",
+        description:
+          "Pesan pada chat student hanya dapat diedit maksimal 15 menit setelah dikirim.",
+      });
+      return;
+    }
+    setEditingMessageId(message.id);
+    setEditingText(message.text ?? "");
+  }, []);
+
+  const handleCancelEditMessage = useCallback(() => {
+    setEditingMessageId(null);
+    setEditingText("");
+  }, []);
+
+  const handleSaveEditMessage = useCallback(async () => {
+    if (!editingMessageId) return;
+    const targetMsg = mergedMessages.find((m) => m.id === editingMessageId);
+    if (targetMsg && !isChatMessageEditable(targetMsg.created_at, 15)) {
+      notification.error({
+        message: "Waktu edit telah habis",
+        description:
+          "Pesan pada chat student hanya dapat diedit maksimal 15 menit setelah dikirim.",
+      });
+      setEditingMessageId(null);
+      setEditingText("");
+      return;
+    }
+
+    const text = editingText.trim();
+    if (!text) return;
+
+    setSavingEditMessage(true);
+
+    try {
+      const result = await api.put(`/api/chats/messages/${editingMessageId}`, {
+        text,
+      });
+      const updated = (result.data?.result ?? result.data) as ChatMessage;
+      const key = updated.conversation_id;
+
+      if (key) {
+        setLocalMessagesByConversation((prev) => ({
+          ...prev,
+          [key]: mergeChatMessages([...(prev[key] ?? []), updated]),
+        }));
+        queryClient.invalidateQueries({
+          queryKey: ["chat-messages", key],
+        });
+      }
+
+      notification.success({
+        message: "Pesan berhasil diedit",
+      });
+      setEditingMessageId(null);
+      setEditingText("");
+    } catch (error) {
+      notification.error({
+        message: "Gagal menyimpan perubahan",
+        description:
+          error instanceof Error ? error.message : "Coba lagi beberapa saat.",
+      });
+    } finally {
+      setSavingEditMessage(false);
+    }
+  }, [editingMessageId, editingText, mergedMessages, queryClient]);
 
   const sendMessageViaApi = useCallback(
     async (
@@ -1192,6 +1308,7 @@ export default function ChatComponent() {
                               currentUserName={effectiveCurrentUser?.name ?? currentUser?.name}
                               currentUserRole={effectiveCurrentUser?.role ?? currentUser?.role}
                               senderAvatarUrl={senderAvatar}
+                              onStartEdit={handleStartEditMessage}
                             />
                           </div>
                         );
@@ -1250,87 +1367,163 @@ export default function ChatComponent() {
                     id="chat-input-area"
                     style={{
                       display: "flex",
-                      alignItems: "stretch",
+                      flexDirection: "column",
                       width: "100%",
-                      border: "1px solid #e2e8f0",
+                      border: editingMessageId
+                        ? "1.5px solid #16a34a"
+                        : "1px solid #e2e8f0",
                       borderRadius: 14,
                       overflow: "hidden",
                       background: "#ffffff",
+                      boxShadow: editingMessageId
+                        ? "0 0 0 3px rgba(22, 163, 74, 0.1)"
+                        : "none",
+                      transition: "border-color 0.2s, box-shadow 0.2s",
                     }}
                   >
-                    <Upload
-                      multiple
-                      beforeUpload={handleAttachmentUpload}
-                      showUploadList={false}
-                      accept="image/*,.pdf,.doc,.docx"
-                    >
-                      <Button
-                        type="text"
-                        icon={<PaperClipOutlined />}
-                        loading={uploadingAttachments}
+                    {editingMessageId && (
+                      <div
                         style={{
-                          width: 64,
-                          height: "100%",
-                          minHeight: 88,
-                          border: "none",
-                          borderRight: "1px solid #e5e7eb",
-                          borderRadius: 0,
                           display: "flex",
                           alignItems: "center",
-                          justifyContent: "center",
+                          justifyContent: "space-between",
+                          padding: "8px 14px",
+                          borderBottom: "1px solid #bbf7d0",
+                          background: "#f0fdf4",
                         }}
-                      />
-                    </Upload>
+                      >
+                        <Space size={8} align="center">
+                          <EditOutlined style={{ color: "#16a34a" }} />
+                          <Text style={{ color: "#166534", fontWeight: 600, fontSize: 13 }}>
+                            Edit pesan
+                          </Text>
+                        </Space>
+                        <Button
+                          type="text"
+                          size="small"
+                          icon={<CloseOutlined />}
+                          onClick={handleCancelEditMessage}
+                          title="Batal edit"
+                        />
+                      </div>
+                    )}
 
-                    <div
-                      style={{
-                        flex: 1,
-                        minHeight: 88,
-                        display: "flex",
-                        alignItems: "stretch",
-                      }}
-                    >
-                      <TextArea
-                        placeholder="Tulis pesan atau unggah gambar..."
-                        value={chatText}
-                        onChange={(event) => setChatText(event.target.value)}
-                        autoSize={{ minRows: 2, maxRows: 4 }}
-                        onPressEnter={(event) => {
-                          if (!event.shiftKey) {
-                            event.preventDefault();
+                    <div style={{ display: "flex", alignItems: "stretch", width: "100%" }}>
+                      <Upload
+                        multiple
+                        beforeUpload={handleAttachmentUpload}
+                        showUploadList={false}
+                        accept="image/*,.pdf,.doc,.docx"
+                        disabled={Boolean(editingMessageId)}
+                      >
+                        <Button
+                          type="text"
+                          icon={<PaperClipOutlined />}
+                          loading={uploadingAttachments}
+                          disabled={Boolean(editingMessageId)}
+                          style={{
+                            width: 64,
+                            height: "100%",
+                            minHeight: 88,
+                            border: "none",
+                            borderRight: "1px solid #e5e7eb",
+                            borderRadius: 0,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        />
+                      </Upload>
+
+                      <div
+                        style={{
+                          flex: 1,
+                          minHeight: 88,
+                          display: "flex",
+                          alignItems: "stretch",
+                        }}
+                      >
+                        <TextArea
+                          placeholder={
+                            editingMessageId
+                              ? "Edit teks pesan Anda..."
+                              : "Tulis pesan atau unggah gambar..."
+                          }
+                          value={editingMessageId ? editingText : chatText}
+                          onChange={(event) => {
+                            if (editingMessageId) {
+                              setEditingText(event.target.value);
+                            } else {
+                              setChatText(event.target.value);
+                            }
+                          }}
+                          autoSize={{ minRows: 2, maxRows: 4 }}
+                          onPressEnter={(event) => {
+                            if (!event.shiftKey) {
+                              event.preventDefault();
+                              if (editingMessageId) {
+                                void handleSaveEditMessage();
+                              } else {
+                                void handleSendMessage();
+                              }
+                            }
+                          }}
+                          variant="borderless"
+                          style={{
+                            flex: 1,
+                            height: "100%",
+                            minHeight: 88,
+                            padding: "16px 18px",
+                            resize: "none",
+                            boxShadow: "none",
+                          }}
+                        />
+                      </div>
+
+                      {editingMessageId && (
+                        <Button
+                          onClick={handleCancelEditMessage}
+                          style={{
+                            height: "100%",
+                            minHeight: 88,
+                            borderRadius: 0,
+                            border: "none",
+                            borderLeft: "1px solid #e5e7eb",
+                            padding: "0 16px",
+                          }}
+                        >
+                          Batal
+                        </Button>
+                      )}
+
+                      <Button
+                        type="primary"
+                        onClick={() => {
+                          if (editingMessageId) {
+                            void handleSaveEditMessage();
+                          } else {
                             void handleSendMessage();
                           }
                         }}
-                        variant="borderless"
+                        loading={editingMessageId ? savingEditMessage : sendingMessage}
+                        disabled={
+                          editingMessageId
+                            ? !editingText.trim()
+                            : (!chatText.trim() && pendingAttachments.length === 0) || !selectedTicket
+                        }
                         style={{
-                          flex: 1,
-                          height: "100%",
+                          width: 108,
                           minHeight: 88,
-                          padding: "16px 18px",
-                          resize: "none",
+                          height: "100%",
+                          borderRadius: 0,
                           boxShadow: "none",
+                          background: editingMessageId ? "#16a34a" : undefined,
+                          borderColor: editingMessageId ? "#16a34a" : undefined,
                         }}
-                      />
+                      >
+                        {editingMessageId ? "Simpan" : "Send"}
+                      </Button>
                     </div>
-
-                    <Button
-                      type="primary"
-                      onClick={() => void handleSendMessage()}
-                      loading={sendingMessage}
-                      disabled={
-                        (!chatText.trim() && pendingAttachments.length === 0) ||
-                        !selectedTicket
-                      }
-                      style={{
-                        width: 108,
-                        minHeight: 88,
-                        height: "100%",
-                        borderRadius: 0,
-                        boxShadow: "none",
-                      }}
-                    >
-                      Send
-                    </Button>
                   </div>
                 </Space>
               </Card>

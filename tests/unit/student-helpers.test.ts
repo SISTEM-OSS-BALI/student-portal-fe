@@ -8,6 +8,7 @@ import {
   formatChatMessageTime,
   formatChatTimeOnly,
   formatShortDate,
+  isChatMessageEditable,
   isSameDay,
   getCountryBadgeMeta,
   getCountryName,
@@ -711,6 +712,31 @@ describe("Unit Testing Modul student-helpers.ts (Multi-Task Comprehensive Suite)
 
       const past = new Date(2024, 0, 15);
       assert.strictEqual(formatChatDateGroup(past), "15 Januari 2024");
+    });
+
+    it("Task 14.7: isChatMessageEditable membatasi edit pesan maksimal 15 menit", () => {
+      const now = Date.now();
+
+      // Baru saja (1 menit lalu) -> boleh edit
+      const oneMinuteAgo = new Date(now - 60 * 1000).toISOString();
+      assert.strictEqual(isChatMessageEditable(oneMinuteAgo, 15), true);
+
+      // 14 menit lalu -> boleh edit
+      const fourteenMinutesAgo = new Date(now - 14 * 60 * 1000).toISOString();
+      assert.strictEqual(isChatMessageEditable(fourteenMinutesAgo, 15), true);
+
+      // 16 menit lalu -> tidak boleh edit
+      const sixteenMinutesAgo = new Date(now - 16 * 60 * 1000).toISOString();
+      assert.strictEqual(isChatMessageEditable(sixteenMinutesAgo, 15), false);
+
+      // 1 jam lalu -> tidak boleh edit
+      const oneHourAgo = new Date(now - 60 * 60 * 1000).toISOString();
+      assert.strictEqual(isChatMessageEditable(oneHourAgo, 15), false);
+
+      // Input null, undefined, invalid -> false
+      assert.strictEqual(isChatMessageEditable(null, 15), false);
+      assert.strictEqual(isChatMessageEditable(undefined, 15), false);
+      assert.strictEqual(isChatMessageEditable("invalid-date", 15), false);
     });
   });
 

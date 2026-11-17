@@ -28,6 +28,7 @@ import {
   ClockCircleOutlined,
   CloseOutlined,
   DeleteOutlined,
+  EditOutlined,
   MessageOutlined,
   PaperClipOutlined,
   PlusOutlined,
@@ -36,6 +37,7 @@ import {
 } from "@ant-design/icons";
 
 import api from "@/lib/api";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   useDeleteTicketMessageWithConversation,
   useTicketMessages,
@@ -62,6 +64,7 @@ import {
   formatChatMessageTime,
   formatChatTimeOnly,
   getStudentAvatarUrl,
+  isChatMessageEditable,
   isSameDay,
 } from "@/app/utils/student-helpers";
 
@@ -581,6 +584,7 @@ function MessageBubble({
   studentName,
   senderAvatarUrl,
   renderText,
+  onStartEdit,
 }: {
   message: ChatMessage;
   isMine: boolean;
@@ -589,6 +593,7 @@ function MessageBubble({
   studentName?: string;
   senderAvatarUrl?: string | null;
   renderText?: (text?: string | null) => React.ReactNode;
+  onStartEdit?: (message: ChatMessage) => void;
 }) {
   const attachments = message.attachments ?? [];
   const bubbleBg = isMine ? "#dcf8c6" : "#ffffff";
@@ -681,6 +686,18 @@ function MessageBubble({
                 }}
               >
                 {renderText ? renderText(message.text) : message.text}
+                {message.edited_at && (
+                  <Text
+                    type="secondary"
+                    style={{
+                      fontSize: 11,
+                      fontStyle: "italic",
+                      marginLeft: 4,
+                    }}
+                  >
+                    (diedit)
+                  </Text>
+                )}
               </Paragraph>
             ) : null}
 
@@ -732,6 +749,7 @@ function MessageBubble({
                 display: "flex",
                 justifyContent: "flex-end",
                 alignItems: "center",
+                gap: 4,
                 marginTop: 4,
                 userSelect: "none",
               }}
@@ -746,6 +764,28 @@ function MessageBubble({
               >
                 {formatChatTimeOnly(message.created_at)}
               </span>
+              {isMine && message.text && isChatMessageEditable(message.created_at, 15) && (
+                <Button
+                  type="text"
+                  size="small"
+                  icon={
+                    <EditOutlined
+                      style={{
+                        fontSize: 11,
+                        color: isMine ? "#166534" : "#64748b",
+                      }}
+                    />
+                  }
+                  onClick={() => onStartEdit?.(message)}
+                  style={{
+                    height: 18,
+                    width: 18,
+                    padding: 0,
+                    minWidth: 18,
+                  }}
+                  title="Edit pesan (maks. 15 menit)"
+                />
+              )}
             </div>
             </div>
             <div
@@ -817,6 +857,12 @@ function ChatComposer({
   onTextChange,
   onSend,
   onUpload,
+  editingMessageId,
+  editingText,
+  savingEditMessage,
+  onEditingTextChange,
+  onSaveEdit,
+  onCancelEdit,
 }: {
   chatText: string;
   pendingAttachments: UploadedChatAttachment[];
@@ -827,8 +873,15 @@ function ChatComposer({
   onTextChange: (value: string) => void;
   onSend: () => void;
   onUpload: (file: File) => Promise<boolean>;
+  editingMessageId?: string | null;
+  editingText?: string;
+  savingEditMessage?: boolean;
+  onEditingTextChange?: (value: string) => void;
+  onSaveEdit?: () => void;
+  onCancelEdit?: () => void;
 }) {
   const [isFocused, setIsFocused] = useState(false);
+  const isEditing = Boolean(editingMessageId);
 
   return (
     <div
@@ -836,21 +889,58 @@ function ChatComposer({
         display: "flex",
         flexDirection: "column",
         width: "100%",
-        border: isFocused ? "1.5px solid #1b3d6d" : "1px solid #cbd5e1",
+        border: isEditing
+          ? "1.5px solid #16a34a"
+          : isFocused
+            ? "1.5px solid #1b3d6d"
+            : "1px solid #cbd5e1",
         borderRadius: 14,
         overflow: "hidden",
         background: "#ffffff",
-        boxShadow: isFocused
-          ? "0 0 0 3px rgba(27, 61, 109, 0.08)"
-          : "0 1px 3px rgba(15, 23, 42, 0.04)",
+        boxShadow: isEditing
+          ? "0 0 0 3px rgba(22, 163, 74, 0.1)"
+          : isFocused
+            ? "0 0 0 3px rgba(27, 61, 109, 0.08)"
+            : "0 1px 3px rgba(15, 23, 42, 0.04)",
         transition: "border-color 0.2s, box-shadow 0.2s",
       }}
     >
+      {isEditing && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "8px 14px",
+            borderBottom: "1px solid #bbf7d0",
+            background: "#f0fdf4",
+          }}
+        >
+          <Space size={8} align="center">
+            <EditOutlined style={{ color: "#16a34a" }} />
+            <Text style={{ color: "#166534", fontWeight: 600, fontSize: 13 }}>
+              Edit pesan
+            </Text>
+          </Space>
+          <Button
+            type="text"
+            size="small"
+            icon={<CloseOutlined />}
+            onClick={onCancelEdit}
+            title="Batal edit"
+          />
+        </div>
+      )}
+
       <div style={{ width: "100%", padding: "10px 14px 4px 14px" }}>
         <Mentions
-          placeholder="Tulis pesan... Ketik @ untuk mention tim (Admission, Director, Consultant)"
-          value={chatText}
-          onChange={onTextChange}
+          placeholder={
+            isEditing
+              ? "Edit teks pesan Anda..."
+              : "Tulis pesan... Ketik @ untuk mention tim (Admission, Director, Consultant)"
+          }
+          value={isEditing ? (editingText ?? "") : chatText}
+          onChange={isEditing ? (onEditingTextChange ?? (() => {})) : onTextChange}
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
           autoSize={{ minRows: 2, maxRows: 6 }}
@@ -858,7 +948,11 @@ function ChatComposer({
           onPressEnter={(event) => {
             if (!event.shiftKey) {
               event.preventDefault();
-              onSend();
+              if (isEditing) {
+                onSaveEdit?.();
+              } else {
+                onSend();
+              }
             }
           }}
           variant="borderless"
@@ -889,15 +983,17 @@ function ChatComposer({
             beforeUpload={onUpload}
             showUploadList={false}
             accept="image/*,.pdf,.doc,.docx"
+            disabled={isEditing}
           >
-            <Tooltip title="Lampirkan berkas (gambar, PDF, DOCX)">
+            <Tooltip title={isEditing ? "Lampiran tidak dapat diubah saat edit teks" : "Lampirkan berkas (gambar, PDF, DOCX)"}>
               <Button
                 type="text"
                 shape="circle"
                 icon={<PaperClipOutlined style={{ fontSize: 16 }} />}
                 loading={uploadingAttachments}
+                disabled={isEditing}
                 style={{
-                  color: "#64748b",
+                  color: isEditing ? "#cbd5e1" : "#64748b",
                   width: 32,
                   height: 32,
                   display: "inline-flex",
@@ -908,53 +1004,72 @@ function ChatComposer({
             </Tooltip>
           </Upload>
 
-          <Tooltip title="Tag / Mention Anggota Tim (@)">
-            <Button
-              type="text"
-              shape="circle"
-              icon={<TagOutlined style={{ fontSize: 15 }} />}
-              onClick={() => {
-                if (!chatText.endsWith("@")) {
-                  const newText = chatText ? `${chatText} @` : "@";
-                  onTextChange(newText);
-                }
-              }}
-              style={{
-                color: "#1b3d6d",
-                width: 32,
-                height: 32,
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            />
-          </Tooltip>
+          {!isEditing && (
+            <Tooltip title="Tag / Mention Anggota Tim (@)">
+              <Button
+                type="text"
+                shape="circle"
+                icon={<TagOutlined style={{ fontSize: 15 }} />}
+                onClick={() => {
+                  if (!chatText.endsWith("@")) {
+                    const newText = chatText ? `${chatText} @` : "@";
+                    onTextChange(newText);
+                  }
+                }}
+                style={{
+                  color: "#1b3d6d",
+                  width: 32,
+                  height: 32,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              />
+            </Tooltip>
+          )}
         </div>
 
-        <Button
-          type="primary"
-          icon={<SendOutlined style={{ fontSize: 13 }} />}
-          onClick={onSend}
-          loading={sendingMessage}
-          disabled={
-            (!chatText.trim() && pendingAttachments.length === 0) ||
-            !selectedTicket
-          }
-          style={{
-            borderRadius: 8,
-            height: 34,
-            padding: "0 14px",
-            background: "#1b3d6d",
-            borderColor: "#1b3d6d",
-            fontWeight: 600,
-            fontSize: 13,
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 6,
-          }}
-        >
-          Kirim
-        </Button>
+        <Space size={8}>
+          {isEditing && (
+            <Button
+              onClick={onCancelEdit}
+              style={{
+                borderRadius: 8,
+                height: 34,
+                padding: "0 12px",
+                fontSize: 13,
+              }}
+            >
+              Batal
+            </Button>
+          )}
+
+          <Button
+            type="primary"
+            icon={isEditing ? undefined : <SendOutlined style={{ fontSize: 13 }} />}
+            onClick={isEditing ? onSaveEdit : onSend}
+            loading={isEditing ? savingEditMessage : sendingMessage}
+            disabled={
+              isEditing
+                ? !editingText?.trim()
+                : (!chatText.trim() && pendingAttachments.length === 0) || !selectedTicket
+            }
+            style={{
+              borderRadius: 8,
+              height: 34,
+              padding: "0 14px",
+              background: isEditing ? "#16a34a" : "#1b3d6d",
+              borderColor: isEditing ? "#16a34a" : "#1b3d6d",
+              fontWeight: 600,
+              fontSize: 13,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            {isEditing ? "Simpan" : "Kirim"}
+          </Button>
+        </Space>
       </div>
     </div>
   );
@@ -1033,6 +1148,7 @@ export default function ChatComponent({
   initialConversationId,
 }: ChatComponentProps) {
   const { user_id } = useAuth();
+  const queryClient = useQueryClient();
   const [form] = Form.useForm<TicketMessagePayloadCreateModel>();
 
   const [modalVisible, setModalVisible] = useState(false);
@@ -1043,6 +1159,9 @@ export default function ChatComponent({
   const [pendingAttachments, setPendingAttachments] = useState<
     UploadedChatAttachment[]
   >([]);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState("");
+  const [savingEditMessage, setSavingEditMessage] = useState(false);
   const [localMessagesByConversation, setLocalMessagesByConversation] =
     useState<Record<string, ChatMessage[]>>({});
   const [conversationOverrides, setConversationOverrides] = useState<
@@ -1220,7 +1339,82 @@ export default function ChatComponent({
     setSelectedTicketId(ticketId);
     setChatText("");
     setPendingAttachments([]);
+    setEditingMessageId(null);
+    setEditingText("");
   }, []);
+
+  const handleStartEditMessage = useCallback((message: ChatMessage) => {
+    if (!isChatMessageEditable(message.created_at, 15)) {
+      notification.warning({
+        message: "Waktu edit telah habis",
+        description:
+          "Pesan pada chat student hanya dapat diedit maksimal 15 menit setelah dikirim.",
+      });
+      return;
+    }
+    setEditingMessageId(message.id);
+    setEditingText(message.text ?? "");
+  }, []);
+
+  const handleCancelEditMessage = useCallback(() => {
+    setEditingMessageId(null);
+    setEditingText("");
+  }, []);
+
+  const handleSaveEditMessage = useCallback(async () => {
+    if (!editingMessageId) return;
+    const targetMsg = mergedMessages.find((m) => m.id === editingMessageId);
+    if (targetMsg && !isChatMessageEditable(targetMsg.created_at, 15)) {
+      notification.error({
+        message: "Waktu edit telah habis",
+        description:
+          "Pesan pada chat student hanya dapat diedit maksimal 15 menit setelah dikirim.",
+      });
+      setEditingMessageId(null);
+      setEditingText("");
+      return;
+    }
+
+    const text = editingText.trim();
+    if (!text) return;
+
+    const mention_user_ids = extractMentionUserIds(text);
+    setSavingEditMessage(true);
+
+    try {
+      const result = await api.put(`/api/chats/messages/${editingMessageId}`, {
+        text,
+        mention_user_ids,
+      });
+      const updated = (result.data?.result ?? result.data) as ChatMessage;
+      const key = updated.conversation_id;
+
+      if (key) {
+        setLocalMessagesByConversation((prev) => ({
+          ...prev,
+          [key]: mergeChatMessages([...(prev[key] ?? []), updated]),
+        }));
+        queryClient.invalidateQueries({
+          queryKey: ["chat-messages", key],
+        });
+        queryClient.invalidateQueries({ queryKey: ["chat-mentions"] });
+      }
+
+      notification.success({
+        message: "Pesan berhasil diedit",
+      });
+      setEditingMessageId(null);
+      setEditingText("");
+    } catch (error) {
+      notification.error({
+        message: "Gagal menyimpan perubahan",
+        description:
+          error instanceof Error ? error.message : "Coba lagi beberapa saat.",
+      });
+    } finally {
+      setSavingEditMessage(false);
+    }
+  }, [editingMessageId, editingText, extractMentionUserIds, mergedMessages, queryClient]);
 
   const buildConversationMembers = useCallback(() => {
     const memberIds = Array.from(
@@ -1897,6 +2091,7 @@ export default function ChatComponent({
                                 studentName={student_name}
                                 senderAvatarUrl={resolvedAvatar}
                                 renderText={renderMessageText}
+                                onStartEdit={handleStartEditMessage}
                               />
                             </div>
                           );
@@ -1957,6 +2152,12 @@ export default function ChatComponent({
                         onTextChange={setChatText}
                         onSend={() => void handleSendMessage()}
                         onUpload={handleAttachmentUpload}
+                        editingMessageId={editingMessageId}
+                        editingText={editingText}
+                        savingEditMessage={savingEditMessage}
+                        onEditingTextChange={setEditingText}
+                        onSaveEdit={handleSaveEditMessage}
+                        onCancelEdit={handleCancelEditMessage}
                       />
                     </Space>
                   ) : (
