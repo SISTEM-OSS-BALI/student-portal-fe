@@ -13,6 +13,7 @@ import {
   Tag,
   Tooltip,
   Typography,
+  message,
 } from "antd";
 import {
   ArrowDownOutlined,
@@ -22,6 +23,7 @@ import {
   DeleteOutlined,
   EditOutlined,
   HolderOutlined,
+  OrderedListOutlined,
   SearchOutlined,
 } from "@ant-design/icons";
 import { useParams, useRouter } from "next/navigation";
@@ -450,6 +452,7 @@ export default function DetailQuestionComponent() {
     useState<QuestionDataModel | null>(null);
   const [formKey, setFormKey] = useState(0);
   const [isReordering, setIsReordering] = useState(false);
+  const [isNormalizing, setIsNormalizing] = useState(false);
   const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
   const [localQuestions, setLocalQuestions] = useState<QuestionDataModel[]>([]);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -585,10 +588,74 @@ export default function DetailQuestionComponent() {
       if (editingQuestion?.id === deleteTarget.id) {
         handleSelectNew();
       }
+
+      // Rapikan urutan pertanyaan yang tersisa agar nomor urut tetap sekuensial tanpa jeda
+      const remainingQuestions = (questions ?? [])
+        .filter((q) => String(q.id) !== String(deleteTarget.id))
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+      const reindexUpdates: Promise<unknown>[] = [];
+      remainingQuestions.forEach((q, idx) => {
+        const expectedOrder = idx + 1;
+        if (q.order !== expectedOrder) {
+          reindexUpdates.push(
+            api.put(`/api/questions/${q.id}`, { order: expectedOrder }),
+          );
+        }
+      });
+
+      if (reindexUpdates.length > 0) {
+        await Promise.all(reindexUpdates);
+      }
+
       setIsDeleteModalOpen(false);
       setDeleteTarget(null);
     } catch {
       // Handled by notification hook
+    } finally {
+      queryClient.invalidateQueries({ queryKey: ["questions"] });
+    }
+  };
+
+  const handleNormalizeOrders = async () => {
+    if (!questions || questions.length === 0) return;
+    setIsNormalizing(true);
+    try {
+      const sorted = [...questions].sort(
+        (a, b) => (a.order ?? 0) - (b.order ?? 0),
+      );
+      const updates: Promise<unknown>[] = [];
+      const normalized = sorted.map((q, idx) => {
+        const nextOrder = idx + 1;
+        if (q.order !== nextOrder) {
+          updates.push(api.put(`/api/questions/${q.id}`, { order: nextOrder }));
+        }
+        return { ...q, order: nextOrder };
+      });
+
+      if (updates.length > 0) {
+        await Promise.all(updates);
+        message.success("Urutan seluruh pertanyaan berhasil dirapikan!");
+      } else {
+        message.info("Urutan pertanyaan sudah rapi dan berurutan.");
+      }
+
+      setLocalQuestions(normalized);
+      queryClient.setQueriesData({ queryKey: ["questions"] }, (old: unknown) => {
+        if (!Array.isArray(old)) return old;
+        const idToOrder = new Map(normalized.map((q) => [String(q.id), q.order]));
+        return old
+          .map((q: QuestionDataModel) => {
+            const nextOrder = idToOrder.get(String(q.id));
+            return nextOrder !== undefined ? { ...q, order: nextOrder } : q;
+          })
+          .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      });
+    } catch {
+      message.error("Gagal merapikan urutan pertanyaan");
+    } finally {
+      queryClient.invalidateQueries({ queryKey: ["questions"] });
+      setIsNormalizing(false);
     }
   };
 
@@ -728,39 +795,68 @@ export default function DetailQuestionComponent() {
   const handleSubmit = async (data: QuestionPayloadCreateModel) => {
     const resolvedBaseId =
       data.base_id ?? (base_id ? String(base_id) : undefined);
-    const targetOrder = Number(data.order ?? 1);
+    const targetOrder = Math.max(1, Number(data.order ?? 1));
 
     const currentQuestions = [...(questions ?? [])].sort(
       (a, b) => (a.order ?? 0) - (b.order ?? 0),
     );
 
     if (editingQuestion) {
-      // Periksa apakah nomor urutan bertabrakan dengan pertanyaan lain
-      const otherQuestions = currentQuestions.filter(
-        (q) => String(q.id) !== String(editingQuestion.id),
-      );
-      const isCollision = otherQuestions.some(
-        (q) => Number(q.order) === targetOrder,
+      // 1. Dapatkan index posisi saat ini dari pertanyaan yang diedit
+      const oldIndex = currentQuestions.findIndex(
+        (q) => String(q.id) === String(editingQuestion.id),
       );
 
-      if (isCollision) {
-        // Otomatis geser pertanyaan yang posisinya bersinggungan agar tetap terurut
-        const shiftUpdates: Promise<unknown>[] = [];
-        otherQuestions.forEach((q) => {
-          if ((q.order ?? 0) >= targetOrder) {
+      // 2. Dapatkan target index baru (dibatasi 0 sampai currentQuestions.length - 1)
+      const targetIndex = Math.max(
+        0,
+        Math.min(targetOrder - 1, currentQuestions.length - 1),
+      );
+
+      let reordered: QuestionDataModel[];
+      if (oldIndex !== -1 && oldIndex !== targetIndex) {
+        // Pindahkan elemen di array menggunakan arrayMove dan beri nomor urut berurutan (1, 2, 3...)
+        reordered = arrayMove(currentQuestions, oldIndex, targetIndex).map(
+          (item, idx) => ({
+            ...item,
+            order: idx + 1,
+          }),
+        );
+      } else {
+        // Jika index tidak berubah tetapi mungkin ada gap di nomor urut pada database, rapikan ulang sekuensial
+        reordered = currentQuestions.map((item, idx) => ({
+          ...item,
+          order: idx + 1,
+        }));
+      }
+
+      // 3. Simpan pembaruan urutan untuk semua pertanyaan lain yang posisinya bergeser
+      const shiftUpdates: Promise<unknown>[] = [];
+      reordered.forEach((q) => {
+        if (String(q.id) !== String(editingQuestion.id)) {
+          const original = currentQuestions.find(
+            (orig) => String(orig.id) === String(q.id),
+          );
+          if (original && original.order !== q.order) {
             shiftUpdates.push(
-              api.put(`/api/questions/${q.id}`, { order: (q.order ?? 0) + 1 }),
+              api.put(`/api/questions/${q.id}`, { order: q.order }),
             );
           }
-        });
-        if (shiftUpdates.length > 0) {
-          await Promise.all(shiftUpdates);
         }
+      });
+
+      if (shiftUpdates.length > 0) {
+        await Promise.all(shiftUpdates);
       }
+
+      // 4. Nomor urut final untuk pertanyaan yang sedang diedit
+      const finalEditingOrder =
+        reordered.find((q) => String(q.id) === String(editingQuestion.id))
+          ?.order ?? targetOrder;
 
       const payload: QuestionPayloadUpdateModel = {
         ...data,
-        order: targetOrder,
+        order: finalEditingOrder,
         base_id: resolvedBaseId,
       };
       const res = await onUpdateQuestion({ id: editingQuestion.id, payload });
@@ -768,30 +864,35 @@ export default function DetailQuestionComponent() {
       return res;
     }
 
-    // Untuk pertanyaan baru:
-    const isCollision = currentQuestions.some(
-      (q) => Number(q.order) === targetOrder,
-    );
-    if (isCollision) {
-      const shiftUpdates: Promise<unknown>[] = [];
-      currentQuestions.forEach((q) => {
-        if ((q.order ?? 0) >= targetOrder) {
-          shiftUpdates.push(
-            api.put(`/api/questions/${q.id}`, { order: (q.order ?? 0) + 1 }),
-          );
-        }
-      });
-      if (shiftUpdates.length > 0) {
-        await Promise.all(shiftUpdates);
-      }
-    }
-
+    // Untuk penambahan pertanyaan baru:
     if (!resolvedBaseId) {
       throw new Error("base_id is required");
     }
+
+    // Sisipkan di posisi targetOrder (0-based insert index)
+    const insertIdx = Math.max(
+      0,
+      Math.min(targetOrder - 1, currentQuestions.length),
+    );
+
+    // Geser semua pertanyaan yang berada di posisi targetOrder ke atas (+1)
+    const shiftUpdates: Promise<unknown>[] = [];
+    currentQuestions.slice(insertIdx).forEach((q, offset) => {
+      const newOrder = insertIdx + 1 + offset + 1;
+      if (q.order !== newOrder) {
+        shiftUpdates.push(
+          api.put(`/api/questions/${q.id}`, { order: newOrder }),
+        );
+      }
+    });
+
+    if (shiftUpdates.length > 0) {
+      await Promise.all(shiftUpdates);
+    }
+
     const payload: QuestionPayloadCreateModel = {
       ...data,
-      order: targetOrder,
+      order: insertIdx + 1,
       base_id: resolvedBaseId,
     };
     const res = await onCreateQuestion(payload);
@@ -835,23 +936,39 @@ export default function DetailQuestionComponent() {
         listTitle="Daftar Pertanyaan"
         listCount={filteredQuestions.length}
         listExtra={
-          <Button
-            type="primary"
-            icon={isReordering ? <CheckOutlined /> : <EditOutlined />}
-            onClick={() => setIsReordering((prev) => !prev)}
-            style={{
-              background: "#1b3d6d",
-              borderColor: "#1b3d6d",
-              color: "#ffffff",
-              borderRadius: 8,
-              fontWeight: 600,
-              fontSize: 12.5,
-              height: 32,
-              boxShadow: "0 1px 2px rgba(27, 61, 109, 0.15)",
-            }}
-          >
-            {isReordering ? "Selesai" : "Edit"}
-          </Button>
+          <Space size={8}>
+            <Button
+              icon={<OrderedListOutlined />}
+              onClick={() => void handleNormalizeOrders()}
+              loading={isNormalizing}
+              style={{
+                borderRadius: 8,
+                fontWeight: 600,
+                fontSize: 12.5,
+                height: 32,
+              }}
+              title="Rapikan urutan seluruh pertanyaan agar nomor urut berurutan tanpa jeda atau loncatan"
+            >
+              Rapikan Urutan
+            </Button>
+            <Button
+              type="primary"
+              icon={isReordering ? <CheckOutlined /> : <EditOutlined />}
+              onClick={() => setIsReordering((prev) => !prev)}
+              style={{
+                background: "#1b3d6d",
+                borderColor: "#1b3d6d",
+                color: "#ffffff",
+                borderRadius: 8,
+                fontWeight: 600,
+                fontSize: 12.5,
+                height: 32,
+                boxShadow: "0 1px 2px rgba(27, 61, 109, 0.15)",
+              }}
+            >
+              {isReordering ? "Selesai" : "Edit"}
+            </Button>
+          </Space>
         }
         listFilter={
           <div className={splitMasterDetailStyles.filterRow}>
