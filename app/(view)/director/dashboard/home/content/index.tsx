@@ -255,44 +255,183 @@ function CountryBarChart({
 export default function DirectorDashboardHomeContent() {
   const router = useRouter();
   const [timeRange, setTimeRange] = useState<string>("all");
-  const [selectedMonth, setSelectedMonth] = useState<Date>(() => new Date());
+  const [selectedDate, setSelectedDate] = useState<Date>(() => new Date());
   const [countryFilter, setCountryFilter] = useState<string>("all");
   const [stepFilter, setStepFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [lastUpdateFilter, setLastUpdateFilter] = useState<string>("all");
   const [leadSourceFilter, setLeadSourceFilter] = useState<string>("all");
 
+  const selectedYear = selectedDate.getFullYear();
+  const selectedMonth = selectedDate.getMonth();
+  const selectedQuarter = Math.floor(selectedMonth / 3);
+
+  // Generate 5 years for dropdown
+  const yearOptions = useMemo(() => {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const opts: { label: string; value: string; year: number }[] = [];
+    for (let i = 0; i < 5; i++) {
+      const y = currentYear - i;
+      opts.push({ label: `Tahun ${y}`, value: `${y}`, year: y });
+    }
+    return opts;
+  }, []);
+
   // Generate 12 months for dropdown (current month down to 11 months ago)
   const monthOptions = useMemo(() => {
-    const opts: { label: string; value: string }[] = [];
+    const opts: { label: string; value: string; year: number; month: number }[] = [];
     const now = new Date();
     for (let i = 0; i < 12; i++) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const label = d.toLocaleDateString("id-ID", { month: "long", year: "numeric" });
       const value = `${d.getFullYear()}-${d.getMonth()}`;
-      opts.push({ label, value });
+      opts.push({ label, value, year: d.getFullYear(), month: d.getMonth() });
     }
     return opts;
   }, []);
 
-  const isLatestMonth = useMemo(() => {
+  // Generate 8 quarters for dropdown
+  const quarterOptions = useMemo(() => {
     const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentQuarter = Math.floor(now.getMonth() / 3);
+    const quarterLabels = [
+      "Q1 (Jan - Mar)",
+      "Q2 (Apr - Jun)",
+      "Q3 (Jul - Sep)",
+      "Q4 (Okt - Des)",
+    ];
+    const opts: { label: string; value: string; year: number; quarter: number }[] = [];
+    for (let i = 0; i < 8; i++) {
+      const totalQ = currentYear * 4 + currentQuarter - i;
+      const y = Math.floor(totalQ / 4);
+      const q = ((totalQ % 4) + 4) % 4;
+      opts.push({
+        label: `${quarterLabels[q]} ${y}`,
+        value: `${y}-${q}`,
+        year: y,
+        quarter: q,
+      });
+    }
+    return opts;
+  }, []);
+
+  const isLatestPeriod = useMemo(() => {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+    const currentQuarter = Math.floor(currentMonth / 3);
+
+    const sYear = selectedDate.getFullYear();
+    const sMonth = selectedDate.getMonth();
+    const sQuarter = Math.floor(sMonth / 3);
+
+    if (timeRange === "year") {
+      return sYear >= currentYear;
+    }
+    if (timeRange === "quarter") {
+      return (
+        sYear > currentYear ||
+        (sYear === currentYear && sQuarter >= currentQuarter)
+      );
+    }
     return (
-      selectedMonth.getFullYear() === now.getFullYear() &&
-      selectedMonth.getMonth() === now.getMonth()
+      sYear > currentYear ||
+      (sYear === currentYear && sMonth >= currentMonth)
     );
-  }, [selectedMonth]);
+  }, [timeRange, selectedDate]);
 
-  const handlePrevMonth = () => {
-    setSelectedMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
-    setTimeRange("month");
+  const handlePrevPeriod = () => {
+    if (timeRange === "year") {
+      setSelectedDate((prev) => new Date(prev.getFullYear() - 1, 0, 1));
+    } else if (timeRange === "quarter") {
+      const curQuarter = Math.floor(selectedDate.getMonth() / 3);
+      setSelectedDate(new Date(selectedDate.getFullYear(), (curQuarter - 1) * 3, 1));
+    } else {
+      setSelectedDate((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+    }
   };
 
-  const handleNextMonth = () => {
-    if (isLatestMonth) return;
-    setSelectedMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
-    setTimeRange("month");
+  const handleNextPeriod = () => {
+    if (isLatestPeriod) return;
+    if (timeRange === "year") {
+      setSelectedDate((prev) => new Date(prev.getFullYear() + 1, 0, 1));
+    } else if (timeRange === "quarter") {
+      const curQuarter = Math.floor(selectedDate.getMonth() / 3);
+      setSelectedDate(new Date(selectedDate.getFullYear(), (curQuarter + 1) * 3, 1));
+    } else {
+      setSelectedDate((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+    }
   };
+
+  const currentPeriodLabel = useMemo(() => {
+    if (timeRange === "all") {
+      return "Semua Data";
+    }
+    if (timeRange === "year") {
+      return `${selectedYear}`;
+    }
+    if (timeRange === "quarter") {
+      return `Q${selectedQuarter + 1} ${selectedYear}`;
+    }
+    return selectedDate.toLocaleDateString("id-ID", {
+      month: "short",
+      year: "numeric",
+    });
+  }, [timeRange, selectedYear, selectedQuarter, selectedDate]);
+
+  const dropdownMenuItems = useMemo(() => {
+    if (timeRange === "year") {
+      return yearOptions.map((opt) => ({
+        key: opt.value,
+        label: opt.label,
+        onClick: () => {
+          setSelectedDate(new Date(opt.year, 0, 1));
+        },
+      }));
+    }
+    if (timeRange === "quarter") {
+      return quarterOptions.map((opt) => ({
+        key: opt.value,
+        label: opt.label,
+        onClick: () => {
+          setSelectedDate(new Date(opt.year, opt.quarter * 3, 1));
+        },
+      }));
+    }
+    return monthOptions.map((opt) => ({
+      key: opt.value,
+      label: opt.label,
+      onClick: () => {
+        setSelectedDate(new Date(opt.year, opt.month, 1));
+      },
+    }));
+  }, [timeRange, yearOptions, quarterOptions, monthOptions]);
+
+  const selectedDropdownKey = useMemo(() => {
+    if (timeRange === "year") {
+      return `${selectedYear}`;
+    }
+    if (timeRange === "quarter") {
+      return `${selectedYear}-${selectedQuarter}`;
+    }
+    return `${selectedYear}-${selectedMonth}`;
+  }, [timeRange, selectedYear, selectedMonth, selectedQuarter]);
+
+  const prevTitle =
+    timeRange === "year"
+      ? "Tahun sebelumnya"
+      : timeRange === "quarter"
+        ? "Kuartal sebelumnya"
+        : "Bulan sebelumnya";
+
+  const nextTitle =
+    timeRange === "year"
+      ? "Tahun berikutnya"
+      : timeRange === "quarter"
+        ? "Kuartal berikutnya"
+        : "Bulan berikutnya";
 
   const { data: students = [], fetchLoading: studentsLoading } = useUserRoleStudents();
   const { data: answerApprovals = [], fetchLoading: approvalsLoading } = useAnswerApprovals();
@@ -323,37 +462,31 @@ export default function DirectorDashboardHomeContent() {
   );
 
   const displayedActiveStudents = useMemo(() => {
-    if (timeRange === "month") {
-      const targetYear = selectedMonth.getFullYear();
-      const targetMonth = selectedMonth.getMonth();
-      return activeStudents.filter((s) => {
-        const dateStr = s.joined_at || s.created_at;
-        if (!dateStr) return false;
-        const d = new Date(dateStr);
+    if (timeRange === "all") {
+      return activeStudents;
+    }
+    const targetYear = selectedYear;
+    const targetMonth = selectedMonth;
+    const targetQuarter = selectedQuarter;
+
+    return activeStudents.filter((s) => {
+      const dateStr = s.joined_at || s.created_at;
+      if (!dateStr) return false;
+      const d = new Date(dateStr);
+      if (Number.isNaN(d.getTime())) return false;
+
+      if (timeRange === "year") {
+        return d.getFullYear() === targetYear;
+      }
+      if (timeRange === "quarter") {
         return (
-          !Number.isNaN(d.getTime()) &&
           d.getFullYear() === targetYear &&
-          d.getMonth() === targetMonth
+          Math.floor(d.getMonth() / 3) === targetQuarter
         );
-      });
-    }
-    if (timeRange === "quarter") {
-      const now = new Date();
-      const currentYear = now.getFullYear();
-      const currentQuarter = Math.floor(now.getMonth() / 3);
-      return activeStudents.filter((s) => {
-        const dateStr = s.joined_at || s.created_at;
-        if (!dateStr) return false;
-        const d = new Date(dateStr);
-        return (
-          !Number.isNaN(d.getTime()) &&
-          d.getFullYear() === currentYear &&
-          Math.floor(d.getMonth() / 3) === currentQuarter
-        );
-      });
-    }
-    return activeStudents;
-  }, [activeStudents, timeRange, selectedMonth]);
+      }
+      return d.getFullYear() === targetYear && d.getMonth() === targetMonth;
+    });
+  }, [activeStudents, timeRange, selectedYear, selectedMonth, selectedQuarter]);
 
   // KPI: Pipeline stats
   const pipelineStats = useMemo(() => {
@@ -391,19 +524,75 @@ export default function DirectorDashboardHomeContent() {
   }, [answerApprovals, sponsorApprovals, statementApprovals]);
 
   // Subtitles with professional, consistent UX writing (fixed length to prevent layout shifts)
-  const trendSubtitle = "Aktivitas pendaftaran dan kelolosan visa";
+  const trendSubtitle = useMemo(() => {
+    if (timeRange === "all") {
+      return "Aktivitas pendaftaran dan kelolosan visa";
+    }
+    if (timeRange === "year") {
+      return `Aktivitas pendaftaran dan kelolosan visa tahun ${selectedYear}`;
+    }
+    if (timeRange === "quarter") {
+      return `Aktivitas pendaftaran dan kelolosan visa Q${selectedQuarter + 1} ${selectedYear}`;
+    }
+    const monthName = selectedDate.toLocaleDateString("id-ID", {
+      month: "long",
+      year: "numeric",
+    });
+    return `Aktivitas pendaftaran dan kelolosan visa bulan ${monthName}`;
+  }, [timeRange, selectedYear, selectedQuarter, selectedDate]);
   const countrySubtitle = "Sebaran siswa berdasarkan destinasi studi";
 
   // Monthly trend chart data — dihitung dari pendaftaran dan visa_granted_at nyata secara dinamis per periode
   const monthlyTrendData = useMemo(() => {
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth();
+    const targetYear = selectedYear;
+    const targetMonth = selectedMonth;
+    const targetQuarter = selectedQuarter;
+
+    if (timeRange === "all") {
+      // 6 bulan terakhir sampai saat ini
+      const months: { month: string; year: number; monthIndex: number }[] = [];
+      const now = new Date();
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        months.push({
+          month: d.toLocaleDateString("id-ID", { month: "short" }),
+          year: d.getFullYear(),
+          monthIndex: d.getMonth(),
+        });
+      }
+
+      const regMap = new Map<string, number>();
+      const grantMap = new Map<string, number>();
+
+      activeStudents.forEach((s) => {
+        const dateStr = s.joined_at || s.created_at;
+        if (dateStr) {
+          const d = new Date(dateStr);
+          if (!Number.isNaN(d.getTime())) {
+            const key = `${d.getFullYear()}-${d.getMonth()}`;
+            regMap.set(key, (regMap.get(key) ?? 0) + 1);
+          }
+        }
+        if (s.visa_granted_at) {
+          const d = new Date(s.visa_granted_at);
+          if (!Number.isNaN(d.getTime())) {
+            const key = `${d.getFullYear()}-${d.getMonth()}`;
+            grantMap.set(key, (grantMap.get(key) ?? 0) + 1);
+          }
+        }
+      });
+
+      return months.map(({ month, year, monthIndex }) => {
+        const key = `${year}-${monthIndex}`;
+        return {
+          month,
+          registered: regMap.get(key) ?? 0,
+          granted: grantMap.get(key) ?? 0,
+        };
+      });
+    }
 
     if (timeRange === "month") {
-      const targetYear = selectedMonth.getFullYear();
-      const targetMonth = selectedMonth.getMonth();
-
       // 4 minggu dalam bulan yang dipilih
       const weeks = [
         { label: "Mgg 1", start: 1, end: 7 },
@@ -456,17 +645,16 @@ export default function DirectorDashboardHomeContent() {
     }
 
     if (timeRange === "quarter") {
-      // 3 bulan dalam kuartal berjalan
-      const currentQuarter = Math.floor(currentMonth / 3);
-      const startQuarterMonth = currentQuarter * 3;
+      // 3 bulan dalam kuartal yang dipilih
+      const startQuarterMonth = targetQuarter * 3;
       const quarterMonths: { month: string; year: number; monthIndex: number }[] = [];
 
       for (let i = 0; i < 3; i++) {
         const mIdx = startQuarterMonth + i;
-        const d = new Date(currentYear, mIdx, 1);
+        const d = new Date(targetYear, mIdx, 1);
         quarterMonths.push({
           month: d.toLocaleDateString("id-ID", { month: "short" }),
-          year: currentYear,
+          year: targetYear,
           monthIndex: mIdx,
         });
       }
@@ -480,8 +668,8 @@ export default function DirectorDashboardHomeContent() {
           const d = new Date(dateStr);
           if (
             !Number.isNaN(d.getTime()) &&
-            d.getFullYear() === currentYear &&
-            Math.floor(d.getMonth() / 3) === currentQuarter
+            d.getFullYear() === targetYear &&
+            Math.floor(d.getMonth() / 3) === targetQuarter
           ) {
             regMap.set(d.getMonth(), (regMap.get(d.getMonth()) ?? 0) + 1);
           }
@@ -491,8 +679,8 @@ export default function DirectorDashboardHomeContent() {
           const d = new Date(s.visa_granted_at);
           if (
             !Number.isNaN(d.getTime()) &&
-            d.getFullYear() === currentYear &&
-            Math.floor(d.getMonth() / 3) === currentQuarter
+            d.getFullYear() === targetYear &&
+            Math.floor(d.getMonth() / 3) === targetQuarter
           ) {
             grantMap.set(d.getMonth(), (grantMap.get(d.getMonth()) ?? 0) + 1);
           }
@@ -506,47 +694,46 @@ export default function DirectorDashboardHomeContent() {
       }));
     }
 
-    // Default: 'all' -> 6 bulan terakhir
-    const months: { month: string; year: number; monthIndex: number }[] = [];
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      months.push({
-        month: d.toLocaleDateString("id-ID", { month: "short" }),
-        year: d.getFullYear(),
-        monthIndex: d.getMonth(),
-      });
-    }
-
-    const regMap = new Map<string, number>();
-    const grantMap = new Map<string, number>();
+    // Default & "year": 12 bulan penuh dalam tahun yang dipilih
+    const monthsShort = [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "Mei",
+      "Jun",
+      "Jul",
+      "Agu",
+      "Sep",
+      "Okt",
+      "Nov",
+      "Des",
+    ];
+    const regCounts = new Array(12).fill(0);
+    const grantCounts = new Array(12).fill(0);
 
     activeStudents.forEach((s) => {
       const dateStr = s.joined_at || s.created_at;
       if (dateStr) {
         const d = new Date(dateStr);
-        if (!Number.isNaN(d.getTime())) {
-          const key = `${d.getFullYear()}-${d.getMonth()}`;
-          regMap.set(key, (regMap.get(key) ?? 0) + 1);
+        if (!Number.isNaN(d.getTime()) && d.getFullYear() === targetYear) {
+          regCounts[d.getMonth()] += 1;
         }
       }
       if (s.visa_granted_at) {
         const d = new Date(s.visa_granted_at);
-        if (!Number.isNaN(d.getTime())) {
-          const key = `${d.getFullYear()}-${d.getMonth()}`;
-          grantMap.set(key, (grantMap.get(key) ?? 0) + 1);
+        if (!Number.isNaN(d.getTime()) && d.getFullYear() === targetYear) {
+          grantCounts[d.getMonth()] += 1;
         }
       }
     });
 
-    return months.map(({ month, year, monthIndex }) => {
-      const key = `${year}-${monthIndex}`;
-      return {
-        month,
-        registered: regMap.get(key) ?? 0,
-        granted: grantMap.get(key) ?? 0,
-      };
-    });
-  }, [activeStudents, timeRange, selectedMonth]);
+    return monthsShort.map((month, idx) => ({
+      month,
+      registered: regCounts[idx],
+      granted: grantCounts[idx],
+    }));
+  }, [activeStudents, timeRange, selectedYear, selectedMonth, selectedQuarter]);
 
   // KPI: Rata-rata durasi lodgement (hari dari created_at ke status terakhir diperbarui)
   const lodgementStats = useMemo(() => {
@@ -700,6 +887,7 @@ export default function DirectorDashboardHomeContent() {
           onChange={(val) => setTimeRange(String(val))}
           options={[
             { label: "All", value: "all" },
+            { label: "Yearly", value: "year" },
             { label: "Monthly", value: "month" },
             { label: "Quartal", value: "quarter" },
           ]}
@@ -821,8 +1009,9 @@ export default function DirectorDashboardHomeContent() {
               >
                 <button
                   type="button"
-                  onClick={handlePrevMonth}
-                  title="Bulan sebelumnya"
+                  onClick={handlePrevPeriod}
+                  disabled={timeRange === "all"}
+                  title={timeRange === "all" ? "Semua data aktif" : prevTitle}
                   style={{
                     width: 24,
                     height: 24,
@@ -832,42 +1021,37 @@ export default function DirectorDashboardHomeContent() {
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    cursor: "pointer",
-                    color: "#64748b",
+                    cursor: timeRange === "all" ? "not-allowed" : "pointer",
+                    color: timeRange === "all" ? "#cbd5e1" : "#64748b",
                     transition: "all 0.15s ease",
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.background = "#f1f5f9";
-                    e.currentTarget.style.color = "#0f172a";
+                    if (timeRange !== "all") {
+                      e.currentTarget.style.background = "#f1f5f9";
+                      e.currentTarget.style.color = "#0f172a";
+                    }
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.background = "transparent";
-                    e.currentTarget.style.color = "#64748b";
+                    e.currentTarget.style.color =
+                      timeRange === "all" ? "#cbd5e1" : "#64748b";
                   }}
                 >
                   <LeftOutlined style={{ fontSize: 10 }} />
                 </button>
 
                 <Dropdown
+                  disabled={timeRange === "all"}
                   menu={{
-                    items: monthOptions.map((opt) => ({
-                      key: opt.value,
-                      label: opt.label,
-                      onClick: () => {
-                        const [y, m] = opt.value.split("-").map(Number);
-                        setSelectedMonth(new Date(y, m, 1));
-                        setTimeRange("month");
-                      },
-                    })),
-                    selectedKeys: [
-                      `${selectedMonth.getFullYear()}-${selectedMonth.getMonth()}`,
-                    ],
+                    items: dropdownMenuItems,
+                    selectedKeys: [selectedDropdownKey],
                   }}
                   trigger={["click"]}
                   placement="bottomCenter"
                 >
                   <button
                     type="button"
+                    disabled={timeRange === "all"}
                     style={{
                       border: "none",
                       background: "transparent",
@@ -876,35 +1060,34 @@ export default function DirectorDashboardHomeContent() {
                       borderRadius: 5,
                       fontSize: 12,
                       fontWeight: 600,
-                      color: "#1e293b",
-                      cursor: "pointer",
+                      color: timeRange === "all" ? "#94a3b8" : "#1e293b",
+                      cursor: timeRange === "all" ? "default" : "pointer",
                       display: "inline-flex",
                       alignItems: "center",
                       gap: 4,
                       transition: "all 0.15s ease",
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.background = "#f1f5f9";
+                      if (timeRange !== "all") {
+                        e.currentTarget.style.background = "#f1f5f9";
+                      }
                     }}
                     onMouseLeave={(e) => {
                       e.currentTarget.style.background = "transparent";
                     }}
                   >
-                    <span>
-                      {selectedMonth.toLocaleDateString("id-ID", {
-                        month: "short",
-                        year: "numeric",
-                      })}
-                    </span>
-                    <DownOutlined style={{ fontSize: 8, color: "#94a3b8" }} />
+                    <span>{currentPeriodLabel}</span>
+                    {timeRange !== "all" && (
+                      <DownOutlined style={{ fontSize: 8, color: "#94a3b8" }} />
+                    )}
                   </button>
                 </Dropdown>
 
                 <button
                   type="button"
-                  onClick={handleNextMonth}
-                  disabled={isLatestMonth}
-                  title="Bulan berikutnya"
+                  onClick={handleNextPeriod}
+                  disabled={timeRange === "all" || isLatestPeriod}
+                  title={timeRange === "all" ? "Semua data aktif" : nextTitle}
                   style={{
                     width: 24,
                     height: 24,
@@ -914,21 +1097,28 @@ export default function DirectorDashboardHomeContent() {
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    cursor: isLatestMonth ? "not-allowed" : "pointer",
-                    color: isLatestMonth ? "#cbd5e1" : "#64748b",
+                    cursor:
+                      timeRange === "all" || isLatestPeriod
+                        ? "not-allowed"
+                        : "pointer",
+                    color:
+                      timeRange === "all" || isLatestPeriod
+                        ? "#cbd5e1"
+                        : "#64748b",
                     transition: "all 0.15s ease",
                   }}
                   onMouseEnter={(e) => {
-                    if (!isLatestMonth) {
+                    if (timeRange !== "all" && !isLatestPeriod) {
                       e.currentTarget.style.background = "#f1f5f9";
                       e.currentTarget.style.color = "#0f172a";
                     }
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.background = "transparent";
-                    e.currentTarget.style.color = isLatestMonth
-                      ? "#cbd5e1"
-                      : "#64748b";
+                    e.currentTarget.style.color =
+                      timeRange === "all" || isLatestPeriod
+                        ? "#cbd5e1"
+                        : "#64748b";
                   }}
                 >
                   <RightOutlined style={{ fontSize: 10 }} />

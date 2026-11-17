@@ -448,6 +448,7 @@ export default function DetailQuestionComponent() {
   const base_id = Array.isArray(params?.id) ? params?.id[0] : params?.id;
   const [editingQuestion, setEditingQuestion] =
     useState<QuestionDataModel | null>(null);
+  const [formKey, setFormKey] = useState(0);
   const [isReordering, setIsReordering] = useState(false);
   const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
   const [localQuestions, setLocalQuestions] = useState<QuestionDataModel[]>([]);
@@ -561,6 +562,7 @@ export default function DetailQuestionComponent() {
 
   const handleSelectNew = () => {
     setEditingQuestion(null);
+    setFormKey((prev) => prev + 1);
   };
 
   const handleSelectQuestion = (item: QuestionDataModel) => {
@@ -581,7 +583,7 @@ export default function DetailQuestionComponent() {
     try {
       await onDeleteQuestion(deleteTarget.id);
       if (editingQuestion?.id === deleteTarget.id) {
-        setEditingQuestion(null);
+        handleSelectNew();
       }
       setIsDeleteModalOpen(false);
       setDeleteTarget(null);
@@ -797,10 +799,8 @@ export default function DetailQuestionComponent() {
     return res;
   };
 
-  const handleSaved = (saved?: QuestionDataModel) => {
-    if (saved) {
-      setEditingQuestion(saved);
-    }
+  const handleSaved = (_saved?: QuestionDataModel) => {
+    handleSelectNew();
   };
 
   return (
@@ -1028,7 +1028,11 @@ export default function DetailQuestionComponent() {
         onCancelEdit={handleSelectNew}
         formContent={
           <FormQuestionManagement
-            key={editingQuestion?.id ?? "new-question-form"}
+            key={
+              editingQuestion
+                ? `edit-${editingQuestion.id}`
+                : `new-${formKey}`
+            }
             onSubmit={handleSubmit}
             onSaved={handleSaved}
             onCancel={handleSelectNew}
