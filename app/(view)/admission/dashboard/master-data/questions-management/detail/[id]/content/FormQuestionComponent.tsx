@@ -9,16 +9,14 @@ import {
   Switch,
   Space,
   Divider,
-  Alert,
   Modal,
-  Tooltip,
 } from "antd";
 import type {
   QuestionDataModel,
   QuestionPayloadCreateModel,
   QuestionOptionItemDataModel,
 } from "@/app/models/question";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import api from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -221,6 +219,7 @@ export default function FormQuestionManagement(
       placeholder: placeholderValue,
       min_length: values.min_length,
       max_length: values.max_length,
+      col_span: values.col_span ?? (values.input_type === "TEXTAREA" ? 24 : 12),
       active: values.active,
     };
 
@@ -460,6 +459,9 @@ export default function FormQuestionManagement(
             : "DEFAULT",
         min_length: props.initialValues?.min_length ?? undefined,
         max_length: props.initialValues?.max_length ?? undefined,
+        col_span:
+          props.initialValues?.col_span ??
+          (props.initialValues?.input_type === "TEXTAREA" ? 24 : 12),
         active: props.initialValues?.active ?? true,
         options:
           props.initialOptions?.map((opt, idx) => ({
@@ -567,7 +569,21 @@ export default function FormQuestionManagement(
           name="order"
           rules={[{ required: true, message: "Field is required" }]}
         >
-          <InputNumber min={1} style={{ width: 160 }} />
+          <InputNumber min={1} style={{ width: 140 }} />
+        </Form.Item>
+
+        <Form.Item
+          label="Lebar Kolom (Grid Span)"
+          tooltip="Atur lebar tampilan kolom pada formulir: Separuh Lebar (50% / 2 kolom) atau Lebar Penuh (100% / 1 kolom)."
+          name="col_span"
+        >
+          <Select
+            style={{ width: 220 }}
+            options={[
+              { value: 12, label: "Separuh Lebar (50% - 2 Kolom)" },
+              { value: 24, label: "Lebar Penuh (100% - 1 Kolom)" },
+            ]}
+          />
         </Form.Item>
 
         {supportsMinMaxLength ? (
@@ -729,7 +745,7 @@ export default function FormQuestionManagement(
                     }
                     style={{ flex: 1, height: 38, borderRadius: 8 }}
                   >
-                    Tambah Satu Opsi (+ Add Option)
+                    Tambah Satu Opsi
                   </Button>
                   <Button
                     icon={<UnorderedListOutlined />}

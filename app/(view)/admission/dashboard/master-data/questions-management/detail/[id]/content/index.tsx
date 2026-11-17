@@ -1047,6 +1047,9 @@ export default function DetailQuestionComponent() {
                     placeholder: editingQuestion.placeholder ?? undefined,
                     min_length: editingQuestion.min_length ?? undefined,
                     max_length: editingQuestion.max_length ?? undefined,
+                    col_span:
+                      editingQuestion.col_span ??
+                      (editingQuestion.input_type === "TEXTAREA" ? 24 : 12),
                     active: editingQuestion.active,
                     options: editingQuestion.options,
                   }
@@ -1054,6 +1057,7 @@ export default function DetailQuestionComponent() {
                     base_id: base_id ? String(base_id) : undefined,
                     required: true,
                     active: true,
+                    col_span: 12,
                     order: (questions.length || 0) + 1,
                   }
             }

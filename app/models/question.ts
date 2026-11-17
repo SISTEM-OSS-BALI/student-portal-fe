@@ -60,6 +60,7 @@ export interface QuestionDataModel {
   placeholder?: string | null;
   min_length?: number | null;
   max_length?: number | null;
+  col_span?: number | null;
   active: boolean;
   option_ids?: string[];
   options?: QuestionOptionItemDataModel[];
@@ -77,6 +78,7 @@ export interface QuestionPayloadCreateModel {
   placeholder?: string | null;
   min_length?: number | null;
   max_length?: number | null;
+  col_span?: number | null;
   active?: boolean;
 }
 
@@ -90,6 +92,7 @@ export interface QuestionPayloadUpdateModel {
   placeholder?: string | null;
   min_length?: number | null;
   max_length?: number | null;
+  col_span?: number | null;
   active?: boolean;
 }
 

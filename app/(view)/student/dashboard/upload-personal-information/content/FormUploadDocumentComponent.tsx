@@ -1810,7 +1810,14 @@ export default function FormUploadDocumentComponent() {
                     );
                   }
 
-                  const isFullWidth = question.input_type === "TEXTAREA";
+                  const questionColSpan =
+                    question.col_span === 24
+                      ? 24
+                      : question.col_span === 12
+                      ? 12
+                      : question.input_type === "TEXTAREA"
+                      ? 24
+                      : 12;
                   const isQ19 = String(question.id) === "q_pd_19";
 
                   const questionLabelNode = isQ19 ? (
@@ -1851,7 +1858,7 @@ export default function FormUploadDocumentComponent() {
                   );
 
                   return (
-                    <Col key={question.id} xs={isShortPair ? 12 : 24} md={isFullWidth ? 24 : 12}>
+                    <Col key={question.id} xs={isShortPair ? 12 : 24} md={questionColSpan}>
                       <Form.Item
                         label={questionLabelNode}
                         tooltip={question.help_text ? { title: cleanHelpText(question.help_text) } : undefined}

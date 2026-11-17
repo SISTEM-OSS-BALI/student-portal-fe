@@ -45,7 +45,7 @@
 .heroLeft {
   display: flex;
   align-items: flex-end;
-  gap: 22px;
+  gap: 24px;
   flex-wrap: wrap;
 }
 
@@ -90,8 +90,9 @@
 .heroInfo {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding-bottom: 2px;
+  gap: 10px;
+  padding-top: 14px;
+  padding-bottom: 4px;
 }
 
 .userNameRow {
@@ -106,7 +107,7 @@
   font-weight: 700;
   color: #0f172a;
   margin: 0;
-  line-height: 1.2;
+  line-height: 1.25;
 }
 
 .roleBadge {
@@ -128,6 +129,7 @@
   flex-wrap: wrap;
   font-size: 13.5px;
   color: #64748b;
+  margin-top: 2px;
 }
 
 .metaItem {
