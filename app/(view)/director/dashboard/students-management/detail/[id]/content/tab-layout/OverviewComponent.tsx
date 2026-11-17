@@ -46,9 +46,11 @@ import {
 import api from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 import {
+  filterInternalNotesMentionableUsers,
   formatChatDateGroup,
   formatChatMessageTime,
   formatChatTimeOnly,
+  isMatchingConsultant,
   isSameDay,
 } from "@/app/utils/student-helpers";
 import type { UploadedChatAttachment } from "@/app/vendor/chat-upload";
@@ -123,10 +125,11 @@ const extractConversationId = (data: unknown): string | undefined => {
 const useMentionHelpers = (
   usersData: UserDataModel[] | undefined,
   currentUserId: string | undefined,
+  assignedConsultantName?: string | null,
 ) => {
   const mentionableUsers = useMemo(
-    () => (usersData ?? []).filter((user) => isMentionableRole(user.role)),
-    [usersData],
+    () => filterInternalNotesMentionableUsers(usersData, assignedConsultantName),
+    [usersData, assignedConsultantName],
   );
 
   const mentionMap = useMemo(() => {
@@ -134,11 +137,26 @@ const useMentionHelpers = (
     mentionableUsers.forEach((user) => {
       const preferredHandle = getUserHandle(user);
       const legacyHandle = getLegacyEmailHandle(user);
+      const rawName = normalizeHandle(user.name ?? "");
       if (preferredHandle) map.set(preferredHandle, user);
       if (legacyHandle) map.set(legacyHandle, user);
+      if (rawName) map.set(rawName, user);
     });
     return map;
   }, [mentionableUsers]);
+
+  const allUsersMap = useMemo(() => {
+    const map = new Map<string, UserDataModel>();
+    (usersData ?? []).forEach((user) => {
+      const preferredHandle = getUserHandle(user);
+      const legacyHandle = getLegacyEmailHandle(user);
+      const rawName = normalizeHandle(user.name ?? "");
+      if (preferredHandle) map.set(preferredHandle, user);
+      if (legacyHandle) map.set(legacyHandle, user);
+      if (rawName) map.set(rawName, user);
+    });
+    return map;
+  }, [usersData]);
 
   const mentionOptions = useMemo(() => {
     return mentionableUsers
@@ -199,7 +217,11 @@ const useMentionHelpers = (
         .join("")
         .toUpperCase();
       const roleLabel = (user.role ?? "staff").toUpperCase();
-      const roleColor = getRoleTagColor(roleLabel);
+      const isPicConsultant =
+        roleLabel === "CONSULTANT" &&
+        Boolean(assignedConsultantName) &&
+        isMatchingConsultant(user, assignedConsultantName);
+      const roleColor = isPicConsultant ? "purple" : getRoleTagColor(roleLabel);
 
       return (
         <Mentions.Option key={handle} value={handle}>
@@ -217,7 +239,12 @@ const useMentionHelpers = (
             <Avatar
               size={32}
               style={{
-                background: "linear-gradient(135deg, #2563eb, #0ea5e9)",
+                background:
+                  roleLabel === "DIRECTOR"
+                    ? "linear-gradient(135deg, #d97706, #f59e0b)"
+                    : roleLabel === "CONSULTANT"
+                      ? "linear-gradient(135deg, #7c3aed, #a855f7)"
+                      : "linear-gradient(135deg, #2563eb, #0ea5e9)",
                 border: "2px solid #e2e8f0",
               }}
             >
@@ -232,7 +259,7 @@ const useMentionHelpers = (
                   color={roleColor}
                   style={{ marginInline: 0, fontSize: 10 }}
                 >
-                  {roleLabel}
+                  {isPicConsultant ? "PIC KONSULTAN" : roleLabel}
                 </Tag>
               </div>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -253,7 +280,7 @@ const useMentionHelpers = (
         </Mentions.Option>
       );
     });
-  }, [mentionOptions, mentionMap]);
+  }, [mentionOptions, mentionMap, assignedConsultantName]);
 
   const extractMentionUserIds = useCallback(
     (text: string) => {
@@ -276,7 +303,7 @@ const useMentionHelpers = (
       return parts.map((part, index) => {
         if (part.startsWith("@")) {
           const handle = part.slice(1);
-          const user = mentionMap.get(handle);
+          const user = mentionMap.get(handle) ?? allUsersMap.get(handle);
           const label = user
             ? `${user.name} • ${(user.role ?? "").toUpperCase()}`
             : undefined;
@@ -369,8 +396,12 @@ export default function OverviewComponent({
     enabled: Boolean(studentId),
   });
 
+  const assignedConsultantName =
+    props.detailStudent?.name_consultant ||
+    detailStudentData?.name_consultant;
+
   const { mentionOptionNodes, extractMentionUserIds, renderMessageText } =
-    useMentionHelpers(usersData, currentUserId);
+    useMentionHelpers(usersData, currentUserId, assignedConsultantName);
 
   const currentUser = useMemo(() => {
     if (!currentUserId) return undefined;

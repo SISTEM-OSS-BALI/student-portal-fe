@@ -824,4 +824,73 @@ export function isChatMessageEditable(
   return diffMs >= 0 && diffMs <= maxMinutes * 60 * 1000;
 }
 
+/**
+ * Memeriksa apakah seorang konsultan cocok dengan nama konsultan penanggung jawab (assigned consultant).
+ * Mendukung pencarian nama lengkap, nama panggilan, case-insensitive, dan prefix email.
+ */
+export function isMatchingConsultant(
+  consultantUser?: { name?: string | null; email?: string | null } | null,
+  targetName?: string | null,
+): boolean {
+  if (!consultantUser || !targetName) return false;
+  const cleanTarget = targetName.trim().toLowerCase();
+  if (!cleanTarget) return false;
+
+  const cleanUser = (consultantUser.name ?? "").trim().toLowerCase();
+  const cleanEmail = (consultantUser.email ?? "").trim().toLowerCase();
+
+  return (
+    cleanUser === cleanTarget ||
+    cleanTarget.includes(cleanUser) ||
+    cleanUser.includes(cleanTarget) ||
+    (Boolean(cleanEmail) && cleanTarget.includes(cleanEmail.split("@")[0]))
+  );
+}
+
+/**
+ * Menyaring pengguna yang berhak di-mention pada catatan internal:
+ * 1. Staf Director & Admission selalu disertakan.
+ * 2. Konsultan HANYA disertakan jika memang menangani siswa bersangkutan (assignedConsultantName).
+ * 3. Siswa dan role lainnya tidak dimasukkan ke dalam opsi mention catatan internal.
+ */
+export function filterInternalNotesMentionableUsers<
+  T extends { id?: string | number; name?: string | null; role?: string | null; email?: string | null },
+>(
+  users: T[] | undefined,
+  assignedConsultantName?: string | null,
+): T[] {
+  if (!users) return [];
+
+  // 1. Staf Director & Admission
+  const staff = users.filter((user) => {
+    const role = String(user.role ?? "").trim().toUpperCase();
+    return role === "DIRECTOR" || role === "ADMISSION";
+  });
+
+  // 2. HANYA konsultan penanggung jawab siswa
+  const consultants = users.filter((user) => {
+    const role = String(user.role ?? "").trim().toUpperCase();
+    return role === "CONSULTANT";
+  });
+
+  if (assignedConsultantName && assignedConsultantName.trim()) {
+    const matched = consultants.filter((c) =>
+      isMatchingConsultant(c, assignedConsultantName),
+    );
+    if (matched.length > 0) {
+      staff.push(...matched);
+    } else {
+      const cleanTarget = assignedConsultantName.trim().toLowerCase();
+      const fallback = consultants.find(
+        (c) =>
+          cleanTarget.includes((c.name || "").trim().toLowerCase()) ||
+          (c.name || "").trim().toLowerCase().includes(cleanTarget),
+      );
+      if (fallback) staff.push(fallback);
+    }
+  }
+
+  return staff;
+}
+
 

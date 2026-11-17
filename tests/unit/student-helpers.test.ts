@@ -22,6 +22,8 @@ import {
   compareStudentsByNewest,
   computeWorkflowChecklistProgression,
   isWorkflowVisaGrantChecked,
+  isMatchingConsultant,
+  filterInternalNotesMentionableUsers,
   getVisaStatusBadgeMeta,
   normalizePipelineStatusOption,
   PIPELINE_STATUS_OPTIONS,
@@ -844,6 +846,61 @@ describe("Unit Testing Modul student-helpers.ts (Multi-Task Comprehensive Suite)
       assert.strictEqual(isWorkflowVisaGrantChecked([], { "c-3-1": true }), false);
       assert.strictEqual(isWorkflowVisaGrantChecked(null as any, { "c-3-1": true }), false);
       assert.strictEqual(isWorkflowVisaGrantChecked(mockWorkflow, {}), false);
+    });
+  });
+
+  // =========================================================================
+  // TASK 17: Penyaringan Konsultan dan Tag Mention Catatan Internal
+  // =========================================================================
+  describe("Task 17: Penyaringan Konsultan dan Tag Mention Catatan Internal", () => {
+    const mockUsers: UserDataModel[] = [
+      { id: "1", name: "Director Boss", role: "DIRECTOR", email: "director@oss.com" },
+      { id: "2", name: "Admission Kim", role: "ADMISSION", email: "admission@oss.com" },
+      { id: "3", name: "Jani Antari", role: "CONSULTANT", email: "jani@oss.com" },
+      { id: "4", name: "Nadia Saraswati", role: "CONSULTANT", email: "nadia@oss.com" },
+      { id: "5", name: "Ayu Pratiwi", role: "CONSULTANT", email: "ayu@oss.com" },
+      { id: "6", name: "Budi Santoso", role: "STUDENT", email: "budi@student.com" },
+    ];
+
+    it("Task 17.1: isMatchingConsultant mencocokkan nama konsultan persis atau sebagian", () => {
+      const consultant = { name: "Jani Antari", email: "jani@oss.com" };
+      assert.strictEqual(isMatchingConsultant(consultant, "Jani Antari"), true);
+      assert.strictEqual(isMatchingConsultant(consultant, "jani"), true);
+      assert.strictEqual(isMatchingConsultant(consultant, "JANI ANTARI"), true);
+      assert.strictEqual(isMatchingConsultant(consultant, "Nadia"), false);
+      assert.strictEqual(isMatchingConsultant(consultant, ""), false);
+      assert.strictEqual(isMatchingConsultant(consultant, null), false);
+      assert.strictEqual(isMatchingConsultant(null, "Jani"), false);
+    });
+
+    it("Task 17.2: filterInternalNotesMentionableUsers menyertakan Director, Admission, dan HANYA konsultan penanggung jawab", () => {
+      const result = filterInternalNotesMentionableUsers(mockUsers, "Jani Antari");
+      const names = result.map((u) => u.name);
+
+      assert.ok(names.includes("Director Boss"));
+      assert.ok(names.includes("Admission Kim"));
+      assert.ok(names.includes("Jani Antari"));
+      assert.ok(!names.includes("Nadia Saraswati"), "Konsultan Nadia tidak boleh muncul untuk murid Jani");
+      assert.ok(!names.includes("Ayu Pratiwi"), "Konsultan Ayu tidak boleh muncul untuk murid Jani");
+      assert.ok(!names.includes("Budi Santoso"), "Siswa tidak boleh muncul pada catatan internal");
+      assert.strictEqual(result.length, 3);
+    });
+
+    it("Task 17.3: filterInternalNotesMentionableUsers tanpa konsultan assigned tidak membocorkan konsultan mana pun", () => {
+      const result = filterInternalNotesMentionableUsers(mockUsers, null);
+      const names = result.map((u) => u.name);
+
+      assert.ok(names.includes("Director Boss"));
+      assert.ok(names.includes("Admission Kim"));
+      assert.ok(!names.includes("Jani Antari"));
+      assert.ok(!names.includes("Nadia Saraswati"));
+      assert.ok(!names.includes("Ayu Pratiwi"));
+      assert.strictEqual(result.length, 2);
+    });
+
+    it("Task 17.4: Menangani input users kosong atau undefined dengan aman", () => {
+      assert.deepStrictEqual(filterInternalNotesMentionableUsers(undefined, "Jani"), []);
+      assert.deepStrictEqual(filterInternalNotesMentionableUsers([], "Jani"), []);
     });
   });
 });
