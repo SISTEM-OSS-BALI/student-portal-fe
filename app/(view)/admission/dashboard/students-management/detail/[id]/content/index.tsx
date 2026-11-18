@@ -8,6 +8,7 @@ import {
   useUsers,
 } from "@/app/hooks/use-users";
 import { useStudentNotes } from "@/app/hooks/use-student-notes";
+import { isAssignableConsultantRole } from "@/app/utils/consultant-options";
 import { NoteStudentDataModel } from "@/app/models/notes-student";
 import type { UserDataModel } from "@/app/models/user";
 import {
@@ -240,9 +241,8 @@ export default function StudentDetailContentPage() {
   const { data: dbMasterSteps = [] } = useStepsManagement({});
   const { data: dbCountries = [] } = useCountriesManagement({});
   const activeConsultants = useMemo(() => {
-    return allUsers.filter(
-      (u) => (u.role ?? "").toUpperCase() === "CONSULTANT" && u.name,
-    );
+    // Consultant dan Director (Director yang juga memegang siswa).
+    return allUsers.filter((u) => isAssignableConsultantRole(u.role) && u.name);
   }, [allUsers]);
 
   const [consultantModalOpen, setConsultantModalOpen] = useState(false);
