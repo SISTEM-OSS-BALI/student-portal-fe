@@ -85,7 +85,14 @@ import {
   useUpdateUser,
   useUpdateVisaStatusUser,
   useUserRoleStudents,
+  useUsers,
 } from "@/app/hooks/use-users";
+import {
+  buildConsultantFilterOptions,
+  buildConsultantOptions,
+  consultantFilterLabel,
+  matchesConsultantFilter,
+} from "@/app/utils/consultant-options";
 import type {
   UserDataModel,
   UserPayloadCreateModel,
@@ -1333,6 +1340,8 @@ export default function StudentsManagementContent({
   const { data: rawStudentsRoleData } = useUserRoleStudents({
     consultant: isConsultant && loggedInConsultantName ? loggedInConsultantName : undefined,
   });
+  // Team Account: dasar pilihan dan pencocokan filter konsultan (konsultan yang login hanya melihat dirinya, jadi tidak perlu memuatnya).
+  const { data: teamUsers } = useUsers({ enabled: !isConsultant });
   const { data: stagesData = [] } = useStagesManagement({});
   const { data: visaTypesData = [] } = useVisaTypes({});
   const [viewMode, setViewMode] = useState<"board" | "table">("board");
@@ -1660,6 +1669,12 @@ export default function StudentsManagementContent({
     return Array.from(map.values());
   }, [studentsRoleData]);
 
+  const teamAccountNames = useMemo(
+    () => buildConsultantOptions(teamUsers).map((option) => option.value),
+    [teamUsers],
+  );
+
+  // Pilihan = Team Account (Consultant dan Director), satu per orang; nama lama di data siswa tidak lagi jadi pilihan sendiri.
   const consultantOptions = useMemo<SelectOption[]>(() => {
     if (isConsultant && loggedInConsultantName) {
       return [
@@ -1669,21 +1684,11 @@ export default function StudentsManagementContent({
         },
       ];
     }
-    const map = new Map<string, SelectOption>();
-
-    studentsRoleData.forEach((student) => {
-      const consultant = getConsultantName(student);
-
-      if (consultant) {
-        map.set(consultant, {
-          value: consultant,
-          label: consultant,
-        });
-      }
-    });
-
-    return Array.from(map.values());
-  }, [studentsRoleData, isConsultant, loggedInConsultantName]);
+    return buildConsultantFilterOptions(
+      teamUsers,
+      studentsRoleData.map(getConsultantName),
+    );
+  }, [studentsRoleData, teamUsers, isConsultant, loggedInConsultantName]);
 
   const referralOptions = useMemo<SelectOption[]>(() => {
     const options: SelectOption[] = [
@@ -1752,17 +1757,11 @@ export default function StudentsManagementContent({
         normalizeText(getDegreeLabel(student)) ===
           normalizeText(activeDegreeFilter);
 
-      const matchConsultant = (() => {
-        if (!activeConsultantFilter) return true;
-        const sConsultant = normalizeText(getConsultantName(student));
-        const target = normalizeText(activeConsultantFilter);
-        return (
-          sConsultant === target ||
-          sConsultant.split(/\s+/)[0] === target.split(/\s+/)[0] ||
-          sConsultant.includes(target) ||
-          target.includes(sConsultant)
-        );
-      })();
+      const matchConsultant = matchesConsultantFilter(
+        getConsultantName(student),
+        activeConsultantFilter,
+        teamAccountNames,
+      );
 
       const matchReferral = (() => {
         if (!activeReferralFilter) return true;
@@ -1804,6 +1803,7 @@ export default function StudentsManagementContent({
     activeVisaFilter,
     effectiveStudents,
     hasActiveFilter,
+    teamAccountNames,
   ]);
 
   const studentMap = useMemo(() => {
@@ -2230,7 +2230,7 @@ export default function StudentsManagementContent({
                     country: selectedCountry,
                     visa: selectedVisa,
                     degree: selectedDegree,
-                    consultant: selectedConsultant,
+                    consultant: consultantFilterLabel(selectedConsultant),
                     referral: selectedReferral,
                   })}
                 </Text>
