@@ -5,6 +5,7 @@ import { useVisaTypes } from "@/app/hooks/use-visa-type-management";
 import { useUsers } from "@/app/hooks/use-users";
 import { useCountriesManagement } from "@/app/hooks/use-country-management";
 import { useAuth } from "@/app/utils/use-auth";
+import { buildConsultantOptions } from "@/app/utils/consultant-options";
 import { StagesManagementDataModel } from "@/app/models/stages-management";
 import {
   UserDataModel,
@@ -47,23 +48,8 @@ export default function FormStudentComponent({
   const { role, user_name } = useAuth();
   const isConsultant = role === "CONSULTANT";
 
-  const consultantOptions = useMemo(() => {
-    const list: { label: string; value: string }[] = [];
-    const seen = new Set<string>();
-
-    // Hanya ambil dari akun yang saat ini terdaftar dan aktif dengan role CONSULTANT
-    (allUsers ?? [])
-      .filter((u) => (u.role ?? "").toUpperCase() === "CONSULTANT")
-      .forEach((u) => {
-        const name = (u.name ?? "").trim();
-        if (name && !seen.has(name.toLowerCase())) {
-          seen.add(name.toLowerCase());
-          list.push({ label: name, value: name });
-        }
-      });
-
-    return list.sort((a, b) => a.label.localeCompare(b.label));
-  }, [allUsers]);
+  // Akun tim yang terdaftar dengan role CONSULTANT atau DIRECTOR (Director yang juga memegang siswa).
+  const consultantOptions = useMemo(() => buildConsultantOptions(allUsers), [allUsers]);
 
   const [referralStatus, setReferralStatus] = useState<
     "idle" | "loading" | "found" | "not_found"

@@ -7,6 +7,7 @@ import { useGeneratedCvAiDocuments } from "@/app/hooks/use-generated-cv-ai-docum
 import { useGeneratedStatementLetterAiDocuments } from "@/app/hooks/use-generated-statement-letter-ai-documents";
 import { useGeneratedSponsorLetterAiDocuments } from "@/app/hooks/use-generated-sponsor-letter-ai-documents";
 import { useAuth } from "@/app/utils/use-auth";
+import { buildConsultantOptions } from "@/app/utils/consultant-options";
 import {
   useChatMessages,
   useGetOrCreateContextConversation,
@@ -361,22 +362,7 @@ export default function OverviewComponent({
   const [isEditCampusModalOpen, setIsEditCampusModalOpen] = useState(false);
   const [campusForm] = Form.useForm();
 
-  const consultantOptions = useMemo(() => {
-    const list: { label: string; value: string }[] = [];
-    const seen = new Set<string>();
-
-    (usersData ?? [])
-      .filter((u) => (u.role ?? "").toUpperCase() === "CONSULTANT")
-      .forEach((u) => {
-        const name = (u.name ?? "").trim();
-        if (name && !seen.has(name.toLowerCase())) {
-          seen.add(name.toLowerCase());
-          list.push({ label: name, value: name });
-        }
-      });
-
-    return list.sort((a, b) => a.label.localeCompare(b.label));
-  }, [usersData]);
+  const consultantOptions = useMemo(() => buildConsultantOptions(usersData), [usersData]);
 
   const handleOpenEditCampusModal = () => {
     campusForm.setFieldsValue({
