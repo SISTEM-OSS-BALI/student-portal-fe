@@ -50,7 +50,14 @@ import {
   useUpdateStudentStatusUser,
   useUpdateVisaStatusUser,
   useUserRoleStudents,
+  useUsers,
 } from "@/app/hooks/use-users";
+import {
+  buildConsultantFilterOptions,
+  buildConsultantOptions,
+  consultantFilterLabel,
+  matchesConsultantFilter,
+} from "@/app/utils/consultant-options";
 import type { UserDataModel } from "@/app/models/user";
 import {
   getStudentAvatarUrl,
@@ -1032,6 +1039,8 @@ export default function StudentsManagementContent({
   const { onUpdate: onUpdateVisaStatus } = useUpdateVisaStatusUser();
 
   const { data: rawStudentsRoleData } = useUserRoleStudents();
+  // Team Account: dasar pilihan dan pencocokan filter konsultan.
+  const { data: teamUsers } = useUsers({});
   const { data: visaTypesData = [] } = useVisaTypes({});
 
   const studentsRoleData = useMemo<UserDataModel[]>(() => {
@@ -1196,22 +1205,16 @@ export default function StudentsManagementContent({
     return Array.from(map.values());
   }, [studentsRoleData]);
 
-  const consultantOptions = useMemo<SelectOption[]>(() => {
-    const map = new Map<string, SelectOption>();
+  const teamAccountNames = useMemo(
+    () => buildConsultantOptions(teamUsers).map((option) => option.value),
+    [teamUsers],
+  );
 
-    studentsRoleData.forEach((student) => {
-      const consultant = getConsultantName(student);
-
-      if (consultant) {
-        map.set(consultant, {
-          value: consultant,
-          label: consultant,
-        });
-      }
-    });
-
-    return Array.from(map.values());
-  }, [studentsRoleData]);
+  // Pilihan = Team Account (Consultant dan Director), satu per orang; nama lama di data siswa tidak lagi jadi pilihan sendiri.
+  const consultantOptions = useMemo<SelectOption[]>(
+    () => buildConsultantFilterOptions(teamUsers, studentsRoleData.map(getConsultantName)),
+    [studentsRoleData, teamUsers],
+  );
 
   const effectiveStudents = useMemo<UserDataModel[]>(() => {
     return studentsRoleData
@@ -1257,17 +1260,11 @@ export default function StudentsManagementContent({
         normalizeText(getDegreeLabel(student)) ===
           normalizeText(activeDegreeFilter);
 
-      const matchConsultant = (() => {
-        if (!activeConsultantFilter) return true;
-        const sConsultant = normalizeText(getConsultantName(student));
-        const target = normalizeText(activeConsultantFilter);
-        return (
-          sConsultant === target ||
-          sConsultant.split(/\s+/)[0] === target.split(/\s+/)[0] ||
-          sConsultant.includes(target) ||
-          target.includes(sConsultant)
-        );
-      })();
+      const matchConsultant = matchesConsultantFilter(
+        getConsultantName(student),
+        activeConsultantFilter,
+        teamAccountNames,
+      );
 
       return (
         matchKeyword &&
@@ -1287,6 +1284,7 @@ export default function StudentsManagementContent({
     activeVisaFilter,
     activeDegreeFilter,
     activeConsultantFilter,
+    teamAccountNames,
   ]);
 
   const studentMap = useMemo(() => {
@@ -1640,7 +1638,7 @@ export default function StudentsManagementContent({
                     country: selectedCountry,
                     visa: selectedVisa,
                     degree: selectedDegree,
-                    consultant: selectedConsultant,
+                    consultant: consultantFilterLabel(selectedConsultant),
                   })}
                 </Text>
               </div>
