@@ -18,6 +18,8 @@ export default function ResetPasswordContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialEmail = searchParams.get("email") ?? "";
+  // Tautan aktivasi dari email Integration Hub membawa kode (otp) bersama email, supaya siswa cukup mengetik kata sandi baru.
+  const initialOtp = searchParams.get("otp") ?? "";
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (values: ResetPasswordForm) => {
@@ -65,7 +67,7 @@ export default function ResetPasswordContent() {
               <Form
                 layout="vertical"
                 onFinish={handleSubmit}
-                initialValues={{ email: initialEmail }}
+                initialValues={{ email: initialEmail, otp: initialOtp }}
               >
                 <Form.Item
                   name="email"
